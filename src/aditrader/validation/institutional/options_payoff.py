@@ -1,11 +1,14 @@
 """Theoretical payoff and Greek risk validation engine for multi-leg option strategies."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
+from aditrader.core.models.enums import OrderSide
+from aditrader.data.instruments.specs import resolve_contract_specs
 from aditrader.options.iv import black_scholes_price
 from aditrader.options.models import OptionLeg, OptionStrategy
 from aditrader.options.payoff import calculate_strategy_payoff
-from aditrader.strategy.builder.schema import StrategyDSL
+from aditrader.strategy.builder.schema import StrategyDSL, StrategyLegDefinition
 from aditrader.strategy.library.dna import profile_strategy_dna
 from aditrader.strategy.library.models import GammaRisk
 from aditrader.validation.models import (
@@ -28,6 +31,40 @@ class OptionsTheoreticalValidator:
     """
 
     @classmethod
+    def _verify_structural_wings(cls, legs: list[StrategyLegDefinition]) -> tuple[bool, str]:
+        """Algebraically verify that all short options are covered by protective long wings."""
+        short_calls = [
+            leg for leg in legs if leg.contract_type == "CE" and leg.side == OrderSide.SELL
+        ]
+        long_calls = [
+            leg for leg in legs if leg.contract_type == "CE" and leg.side == OrderSide.BUY
+        ]
+        short_puts = [
+            leg for leg in legs if leg.contract_type == "PE" and leg.side == OrderSide.SELL
+        ]
+        long_puts = [leg for leg in legs if leg.contract_type == "PE" and leg.side == OrderSide.BUY]
+
+        # 1. Check Short Calls
+        total_short_call_lots = sum(leg.lots for leg in short_calls)
+        total_long_call_lots = sum(leg.lots for leg in long_calls)
+        if total_short_call_lots > 0 and total_long_call_lots < total_short_call_lots:
+            return (
+                False,
+                f"Unhedged short calls: {total_short_call_lots} short lots vs {total_long_call_lots} long protective lots",
+            )
+
+        # 2. Check Short Puts
+        total_short_put_lots = sum(leg.lots for leg in short_puts)
+        total_long_put_lots = sum(leg.lots for leg in long_puts)
+        if total_short_put_lots > 0 and total_long_put_lots < total_short_put_lots:
+            return (
+                False,
+                f"Unhedged short puts: {total_short_put_lots} short lots vs {total_long_put_lots} long protective lots",
+            )
+
+        return True, "All short legs structurally hedged"
+
+    @classmethod
     def validate(
         cls,
         strategy: StrategyDSL,
@@ -36,6 +73,8 @@ class OptionsTheoreticalValidator:
         spot_price: float = 24000.0,
         volatility: float = 0.18,
         dte_days: float = 7.0,
+        evaluation_time: datetime | None = None,
+        hierarchy: Any | None = None,
     ) -> ValidationResult:
         """Validate options strategy structure against theoretical risk policies."""
         active_policy = policy or create_institutional_policy()
@@ -59,13 +98,16 @@ class OptionsTheoreticalValidator:
         # ----------------------------------------------------------------------
         # 2. Materialize Option Legs for Theoretical Payoff Analysis
         # ----------------------------------------------------------------------
-        step = 50.0 if "NIFTY" in strategy.underlying.upper() else 100.0
+        step, lot_size = resolve_contract_specs(
+            underlying=strategy.underlying,
+            spot_price=spot_price,
+            hierarchy=hierarchy,
+        )
         atm_strike = round(spot_price / step) * step
-        lot_size = 25 if "NIFTY" in strategy.underlying.upper() else 15
 
         concrete_legs: list[OptionLeg] = []
         t_years = max(1e-4, dte_days / 365.0)
-        now_dt = datetime.now(UTC)
+        now_dt = evaluation_time if evaluation_time is not None else datetime.now(UTC)
         expiry_dt = now_dt + timedelta(days=dte_days)
 
         for leg in strategy.legs:
@@ -115,7 +157,8 @@ class OptionsTheoreticalValidator:
             volatility=volatility,
         )
 
-        is_defined_risk = summary.max_loss is not None
+        structurally_hedged, wing_reason = cls._verify_structural_wings(strategy.legs)
+        is_defined_risk = (summary.max_loss is not None) and structurally_hedged
 
         # ----------------------------------------------------------------------
         # 3. Gate: Defined Risk vs. Unbounded Loss Exposure
@@ -126,15 +169,18 @@ class OptionsTheoreticalValidator:
                 if active_policy.require_defined_risk_for_options
                 else GateSeverity.WARNING
             )
+            detail_msg = (
+                f"Strategy exhibits theoretical unbounded/undefined maximum loss: {wing_reason}."
+                if not structurally_hedged
+                else "Strategy exhibits theoretical unbounded/undefined maximum loss. "
+                "Short wings are exposed without protective long hedging."
+            )
             gate_results.append(
                 ValidationGateResult(
                     gate_name="DEFINED_RISK_ARCHITECTURE",
                     passed=not active_policy.require_defined_risk_for_options,
                     severity=severity,
-                    detail=(
-                        "Strategy exhibits theoretical unbounded/undefined maximum loss. "
-                        "Short wings are exposed without protective long hedging."
-                    ),
+                    detail=detail_msg,
                     observed_value=False,
                     threshold_value=True,
                 )

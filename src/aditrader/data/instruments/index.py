@@ -2,7 +2,7 @@
 
 from collections import defaultdict
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
 from aditrader.data.adapters.base import ContractMetadata
@@ -128,12 +128,25 @@ class InstrumentIndex:
         return self._by_symbol.get(symbol.strip().upper())
 
     def get_by_token(self, token: str, exchange: str | None = None) -> ContractMetadata | None:
-        """Retrieve contract by exchange token ID."""
+        """Retrieve contract by exchange token ID.
+
+        If exchange is omitted and the token collides across multiple exchanges,
+        raises ValueError to enforce unambiguous contract resolution.
+        """
         t_str = str(token).strip()
         if exchange:
             return self._by_token.get((exchange.strip().upper(), t_str))
         candidates = self._token_to_contracts.get(t_str, [])
-        return candidates[0] if candidates else None
+        if not candidates:
+            return None
+        if len(candidates) > 1:
+            unique_keys = {(c.exchange, c.trading_symbol) for c in candidates}
+            if len(unique_keys) > 1:
+                raise ValueError(
+                    f"Ambiguous token '{t_str}' resolved to multiple distinct contracts across exchanges: "
+                    f"{sorted(list(unique_keys))}. Explicit 'exchange' parameter is required."
+                )
+        return candidates[0]
 
     def get_underlyings(self) -> list[str]:
         """Return sorted list of all indexed underlying asset symbols."""
@@ -253,10 +266,13 @@ class InstrumentIndex:
         query: str,
         filters: InstrumentFilter | None = None,
         limit: int = 20,
+        evaluation_time: datetime | None = None,
     ) -> list[SearchResult]:
         """Execute deterministic scored search across indexed instruments."""
         parsed = parse_query(query)
         has_query = bool(parsed.raw_query)
+        eval_dt = normalize_to_ist(evaluation_time or datetime.now(UTC))
+        eval_ts = eval_dt.timestamp()
 
         # Candidate pool selection
         candidates: list[ContractMetadata]
@@ -298,7 +314,7 @@ class InstrumentIndex:
             )
 
         # Deterministic institutional tie-breaking
-        def rank_key(item: SearchResult) -> tuple[float, int, float, str]:
+        def rank_key(item: SearchResult) -> tuple[float, int, int, float, str]:
             # 1. Higher score first (-score)
             s_key = -item.score
 
@@ -311,15 +327,23 @@ class InstrumentIndex:
             else:
                 p_order = 0 if c_type == "EQ" else (1 if "FUT" in c_type else 2)
 
-            # 3. Expiry timestamp ascending
-            exp_ts = (
-                normalize_to_ist(item.contract.expiry_date).timestamp()
-                if item.contract.expiry_date
-                else 0.0
-            )
+            # 3. Expiry status and relative time ordering
+            if item.contract.expiry_date is None:
+                exp_status = 0
+                time_diff = 0.0
+            else:
+                c_exp_ts = normalize_to_ist(item.contract.expiry_date).timestamp()
+                if c_exp_ts >= eval_ts:
+                    # Active contract: near-month first
+                    exp_status = 0
+                    time_diff = c_exp_ts - eval_ts
+                else:
+                    # Expired contract: demoted after all active contracts
+                    exp_status = 1
+                    time_diff = eval_ts - c_exp_ts
 
             # 4. Symbol alphabetical
-            return (s_key, p_order, exp_ts, item.contract.symbol)
+            return (s_key, p_order, exp_status, time_diff, item.contract.symbol)
 
         results.sort(key=rank_key)
         return results[:limit]

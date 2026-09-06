@@ -166,8 +166,8 @@ def calculate_strategy_payoff(
 
     # Profit expands to infinity if right slope is positive (long call) or left slope is negative (long put)
     is_infinite_profit = right_slope > 0.05 or left_slope < -0.05
-    # Loss expands to infinity if right slope is negative (short call)
-    is_infinite_loss = right_slope < -0.05
+    # Loss expands to infinity if right slope is negative (short call) or left slope is positive (short put)
+    is_infinite_loss = right_slope < -0.05 or left_slope > 0.05
 
     max_profit: float | None = None if is_infinite_profit else round(max_pnl, 2)
     max_loss: float | None = None if is_infinite_loss else round(abs(min_pnl), 2)

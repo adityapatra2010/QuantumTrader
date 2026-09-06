@@ -142,9 +142,12 @@ class InstrumentSearchService:
         query: str,
         filters: InstrumentFilter | None = None,
         limit: int = 20,
+        evaluation_time: datetime | None = None,
     ) -> list[SearchResult]:
         """Execute deterministic scored search across indexed instruments."""
-        return self._index.search(query=query, filters=filters, limit=limit)
+        return self._index.search(
+            query=query, filters=filters, limit=limit, evaluation_time=evaluation_time
+        )
 
     def resolve_derivative(
         self,

@@ -9,6 +9,7 @@ from aditrader.data.instruments.models import (
     SearchResult,
 )
 from aditrader.data.instruments.service import InstrumentSearchService
+from aditrader.data.instruments.specs import is_futures_symbol, resolve_contract_specs
 
 __all__ = [
     "DerivativesHierarchy",
@@ -18,6 +19,8 @@ __all__ = [
     "MatchQuality",
     "SearchResult",
     "extract_underlying",
+    "is_futures_symbol",
     "parse_query",
+    "resolve_contract_specs",
     "score_contract",
 ]

@@ -3,6 +3,7 @@
 from typing import Any
 
 from aditrader.backtesting.runner import BacktestResult
+from aditrader.data.instruments.specs import is_futures_symbol
 from aditrader.strategy.builder.schema import StrategyDSL
 from aditrader.validation.ast.validator import ASTValidator
 from aditrader.validation.institutional.historical import HistoricalStatisticalValidator
@@ -73,6 +74,8 @@ class StrategyValidationService:
         dte_days: float = 7.0,
         oos_result: BacktestResult | None = None,
         walk_forward_results: list[BacktestResult] | None = None,
+        evaluation_time: Any | None = None,
+        hierarchy: Any | None = None,
     ) -> ValidationResult:
         """Execute appropriate validation pipeline matching strategy asset class.
 
@@ -84,6 +87,8 @@ class StrategyValidationService:
             dte_days: Days to expiry for theoretical option payoff analysis.
             oos_result: Optional Out-of-Sample BacktestResult for overfitting analysis.
             walk_forward_results: Optional list of window BacktestResults for parameter stability.
+            evaluation_time: Optional datetime for deterministic options payoff calculations.
+            hierarchy: Optional DerivativesHierarchy instance for exact strike steps and lot sizes.
 
         Returns:
             ValidationResult with explicit scope, metrics, and gate outcomes.
@@ -112,6 +117,8 @@ class StrategyValidationService:
                 policy=active_policy,
                 spot_price=spot_price,
                 dte_days=dte_days,
+                evaluation_time=evaluation_time,
+                hierarchy=hierarchy,
             )
         else:
             # Linear Equities / Futures Historical Statistical Path
@@ -120,7 +127,7 @@ class StrategyValidationService:
                     strategy_name=dsl.name,
                     schema_version=dsl.schema_version,
                     underlying=dsl.underlying,
-                    asset_class="FUTURES" if "FUT" in dsl.underlying.upper() else "EQUITY",
+                    asset_class="FUTURES" if is_futures_symbol(dsl.underlying) else "EQUITY",
                     validation_scope=ValidationScope.HISTORICAL,
                     status=ValidationStatus.NOT_RECOMMENDED,
                     validation_score=ast_result.validation_score,

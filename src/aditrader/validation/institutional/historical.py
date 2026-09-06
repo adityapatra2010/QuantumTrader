@@ -3,6 +3,7 @@
 from typing import Any, Literal
 
 from aditrader.backtesting.runner import BacktestResult
+from aditrader.data.instruments.specs import is_futures_symbol
 from aditrader.strategy.builder.schema import StrategyDSL
 from aditrader.validation.models import (
     GateSeverity,
@@ -147,21 +148,35 @@ class HistoricalStatisticalValidator:
                     )
                 )
             else:
+                severity = (
+                    GateSeverity.HARD_FLOOR
+                    if active_policy.require_positive_profit_factor
+                    else GateSeverity.WARNING
+                )
                 gate_results.append(
                     ValidationGateResult(
                         gate_name="PROFIT_FACTOR_TARGET",
-                        passed=False,
-                        severity=GateSeverity.HARD_FLOOR,
+                        passed=not active_policy.require_positive_profit_factor,
+                        severity=severity,
                         detail="Profit factor could not be calculated.",
                     )
                 )
         elif pf < 1.0:
+            severity = (
+                GateSeverity.HARD_FLOOR
+                if active_policy.require_positive_profit_factor
+                else GateSeverity.WARNING
+            )
             gate_results.append(
                 ValidationGateResult(
                     gate_name="PROFIT_FACTOR_FLOOR",
-                    passed=False,
-                    severity=GateSeverity.HARD_FLOOR,
-                    detail=f"Gross losses exceed gross profits (PF: {pf:.2f} < 1.0).",
+                    passed=not active_policy.require_positive_profit_factor,
+                    severity=severity,
+                    detail=(
+                        f"Gross losses exceed gross profits (PF: {pf:.2f} < 1.0)."
+                        if active_policy.require_positive_profit_factor
+                        else f"Gross losses exceed gross profits (PF: {pf:.2f} < 1.0), tolerated under {active_policy.policy_name} mode."
+                    ),
                     observed_value=pf,
                     threshold_value=1.0,
                 )
@@ -319,6 +334,40 @@ class HistoricalStatisticalValidator:
         # 6. Out-of-Sample (OOS) Robustness Gate (Optional)
         # ----------------------------------------------------------------------
         if oos_result is not None and active_policy.min_oos_sharpe_retention_ratio is not None:
+            # Enforce genuine temporal separation (Finding 8)
+            has_is_ts = bool(result.equity_timestamps)
+            has_oos_ts = bool(oos_result.equity_timestamps)
+            if has_is_ts and has_oos_ts:
+                is_max_ts = max(result.equity_timestamps)
+                oos_min_ts = min(oos_result.equity_timestamps)
+                if oos_min_ts < is_max_ts:
+                    gate_results.append(
+                        ValidationGateResult(
+                            gate_name="OOS_TEMPORAL_SEPARATION",
+                            passed=False,
+                            severity=GateSeverity.HARD_FLOOR,
+                            detail=(
+                                f"Data leakage detected! OOS start timestamp ({oos_min_ts.isoformat()}) "
+                                f"precedes IS end timestamp ({is_max_ts.isoformat()}). "
+                                "OOS dataset must be strictly disjoint and subsequent to in-sample dataset."
+                            ),
+                            observed_value=oos_min_ts.isoformat(),
+                            threshold_value=is_max_ts.isoformat(),
+                        )
+                    )
+                    warnings.append("OOS backtest period overlaps with in-sample training window.")
+                else:
+                    gate_results.append(
+                        ValidationGateResult(
+                            gate_name="OOS_TEMPORAL_SEPARATION",
+                            passed=True,
+                            severity=GateSeverity.HARD_FLOOR,
+                            detail="OOS period is strictly temporally separated from in-sample dataset.",
+                            observed_value=oos_min_ts.isoformat(),
+                            threshold_value=is_max_ts.isoformat(),
+                        )
+                    )
+
             is_sharpe = perf.sharpe_ratio or 0.0
             oos_sharpe = oos_result.performance.sharpe_ratio or 0.0
             retention = (oos_sharpe / is_sharpe) if is_sharpe > 0.0 else 0.0
@@ -421,7 +470,7 @@ class HistoricalStatisticalValidator:
             status = ValidationStatus.APPROVED
 
         asset_class: Literal["EQUITY", "FUTURES", "OPTIONS"] = (
-            "FUTURES" if ("FUT" in strategy.underlying.upper()) else "EQUITY"
+            "FUTURES" if is_futures_symbol(strategy.underlying) else "EQUITY"
         )
 
         return ValidationResult(

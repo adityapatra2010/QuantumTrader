@@ -45,11 +45,18 @@
 - Build `performance-metrics`: Calculate mathematical expectancy ($E$), Profit Factor ($PF$), Sharpe, Sortino, SQN, and Max Drawdown[cite: 1].
 - **Acceptance**: Backtester simulates 1,000 bars with transaction costs, logging metrics and rejecting orders that breach margin thresholds[cite: 1, 2].
 
-## Phase 6: Validation Engine (Policy-Based "Institutional Mode")
-- Build `validation/` rule modules: `expectancy.py`, `pop.py`, `drawdown.py`, `margin.py`, `gamma_risk.py`[cite: 1].
-- Implement policy-based validation profiles (`Institutional` as default, `Moderate`, `Beginner`)[cite: 1].
-- Programmatic Veto: Automatically reject strategies failing positive expectancy, drawdown tolerances, or minimum sample sizes[cite: 1].
-- **Acceptance**: Test suite verifies that negative expectancy strategies or unhedged short options near expiry are programmatically rejected[cite: 1].
+## Phase 6: Validation Engine & Instrument Search Subsystem (COMPLETE & SEALED ✅)
+- Built tri-path validation architecture adhering to ADR 010:
+  - `validation/ast/`: Static structural validation on JSON AST DSL prior to compilation.
+  - `validation/institutional/historical.py`: Historical statistical validation for linear assets (Equities & Futures); requires backtest results; enforces positive mathematical expectancy ($E > 0$), timeframe-aware sample size floors, max drawdown, and temporal OOS disjointness (`min(oos) >= max(is)`). Air-gapped rejection of option strategies.
+  - `validation/institutional/options_payoff.py`: Theoretical payoff curve and Greek risk validation for multi-leg option strategies; tagged `THEORETICAL_VALIDATION_ONLY`; slope boundary analysis, algebraic wing checks, unhedged tail risk veto, and deterministic evaluation timestamps.
+- Implemented policy-based profiles: `InstitutionalPolicy`, `ModeratePolicy`, `ResearchPolicy`.
+- High-Performance Instrument Search & Selection Subsystem: In-memory multi-index, hierarchical derivatives resolution, token lookups with cross-exchange disambiguation, deterministic multi-modal ranking, and zstd Parquet scrip caching.
+- Remediated all 10 original adversarial audit findings (naked short put slope boundaries, query tokenizer ticker boundary regex, dynamic contract specs, structured query exclusivity, active vs. expired partition ranking, research policy profit factor gating, explicit futures symbol pattern matching, genuine OOS temporal disjointness, deterministic options evaluation time, cross-exchange token collision protection).
+- Second-pass adversarial audit completed with zero Critical and zero High severity findings.
+- Documented non-blocking limitations: multi-expiry theoretical options (single-expiry modeling) and missing-contract-spec fallback (lot size 1 for unindexed derivatives).
+- Quality Verification: 233/233 unit/integration tests passing (100%), strict `mypy` clean across 120 files, `ruff` clean.
+- Next Milestone: Phase 7 (AI Subsystems & Advisory Pipeline).
 
 ## Phase 7: AI Subsystems & Advisory Pipeline
 - Abstract time-series models behind a vendor-agnostic `ForecastEngine` interface (Kronos, Chronos)[cite: 1, 2].

@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from pydantic import ValidationError
 
+from aditrader.data.instruments.specs import is_futures_symbol
 from aditrader.strategy.builder.schema import (
     ASTOperator,
     ConditionGroup,
@@ -420,8 +421,7 @@ class ASTValidator:
         """Categorize strategy asset class."""
         if dsl.legs:
             return "OPTIONS"
-        und = dsl.underlying.upper()
-        if und.endswith("-FUT") or "FUT" in und:
+        if is_futures_symbol(dsl.underlying):
             return "FUTURES"
         return "EQUITY"
 

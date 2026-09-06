@@ -85,41 +85,10 @@ def parse_query(query: str) -> ParsedQuery:
         except ValueError:
             pass
 
-        # Check for month or year expiry hints (e.g. DEC, 24DEC, 26-DEC)
-        if (
-            re.match(r"^(\d{1,2}[A-Z]{3}|\d{2}[A-Z]{3}\d{2,4}|[A-Z]{3})$", t_upper)
-            and t_upper
-            in (
-                "JAN",
-                "FEB",
-                "MAR",
-                "APR",
-                "MAY",
-                "JUN",
-                "JUL",
-                "AUG",
-                "SEP",
-                "OCT",
-                "NOV",
-                "DEC",
-            )
-            or any(
-                m in t_upper
-                for m in (
-                    "JAN",
-                    "FEB",
-                    "MAR",
-                    "APR",
-                    "MAY",
-                    "JUN",
-                    "JUL",
-                    "AUG",
-                    "SEP",
-                    "OCT",
-                    "NOV",
-                    "DEC",
-                )
-            )
+        # Check for month or year expiry hints (e.g. DEC, 24DEC, 26-DEC, 26DEC24)
+        if re.match(
+            r"^(\d{1,2}[-/]?)?(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)([-/]?\d{2,4})?$",
+            t_upper,
         ):
             expiry_hint = t_upper
             continue
@@ -193,28 +162,45 @@ def score_contract(
     if parsed.underlying and (
         parsed.underlying == underlying or sym_upper.startswith(parsed.underlying)
     ):
-        if parsed.is_future and contract.instrument_type in ("FUTIDX", "FUTSTK"):
-            score = 92.0
-            if parsed.expiry_hint and parsed.expiry_hint in trd_upper:
-                score += 3.0
-            return round(min(95.0, score), 1), MatchQuality.STRUCTURED_DERIVATIVE, "trading_symbol"
+        expiry_matched = (not parsed.expiry_hint) or (parsed.expiry_hint in trd_upper)
 
-        if (
-            parsed.strike is not None
-            and parsed.option_type is not None
-            and contract.strike_price == parsed.strike
-            and contract.option_type == parsed.option_type
-        ):
-            score = 93.0
-            if parsed.expiry_hint and parsed.expiry_hint in trd_upper:
-                score += 3.0
+        if parsed.is_future and contract.instrument_type in ("FUTIDX", "FUTSTK") and expiry_matched:
+            score = 92.0 + (3.0 if parsed.expiry_hint else 0.0)
             return round(min(96.0, score), 1), MatchQuality.STRUCTURED_DERIVATIVE, "trading_symbol"
 
-        if parsed.strike is not None and contract.strike_price == parsed.strike:
-            return 82.0, MatchQuality.STRUCTURED_DERIVATIVE, "trading_symbol"
+        # Explicit Strike AND Option Type specified
+        if parsed.strike is not None and parsed.option_type is not None:
+            if (
+                contract.strike_price == parsed.strike
+                and contract.option_type == parsed.option_type
+                and expiry_matched
+            ):
+                score = 93.0 + (3.0 if parsed.expiry_hint else 0.0)
+                return (
+                    round(min(96.0, score), 1),
+                    MatchQuality.STRUCTURED_DERIVATIVE,
+                    "trading_symbol",
+                )
 
-        if parsed.option_type is not None and contract.option_type == parsed.option_type:
-            return 76.0, MatchQuality.STRUCTURED_DERIVATIVE, "trading_symbol"
+        # Strike ONLY specified (Option type omitted)
+        elif parsed.strike is not None and parsed.option_type is None:
+            if contract.strike_price == parsed.strike and expiry_matched:
+                score = 82.0 + (3.0 if parsed.expiry_hint else 0.0)
+                return (
+                    round(min(85.0, score), 1),
+                    MatchQuality.STRUCTURED_DERIVATIVE,
+                    "trading_symbol",
+                )
+
+        # Option Type ONLY specified (Strike omitted)
+        elif (
+            parsed.option_type is not None
+            and parsed.strike is None
+            and contract.option_type == parsed.option_type
+            and expiry_matched
+        ):
+            score = 76.0 + (3.0 if parsed.expiry_hint else 0.0)
+            return round(min(80.0, score), 1), MatchQuality.STRUCTURED_DERIVATIVE, "trading_symbol"
 
     # 8. All Query Tokens present in trading symbol or symbol
     if len(parsed.tokens) > 1:
