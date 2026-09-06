@@ -1,24 +1,26 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-06 16:22 IST  
-**Current Phase**: Phase 0 — COMPLETE ✅ | Preparing Phase 1 (Core Domain Entities & Order State Machine)  
-**Last Verified By**: AGY CLI Phase 0 Test & Tooling Suite  
+**Last Updated**: 2026-09-06 16:32 IST  
+**Current Phase**: Phase 1 — COMPLETE ✅ | Preparing Phase 2 (Market Data Layer & Ingestion Pipeline)  
+**Last Verified By**: AGY CLI Phase 1 Test & Tooling Suite (Ruff, Mypy Strict, Pytest 27/27)  
 
 ---
 
 ## Repository State
 
 - **Branch**: `main`
-- **Working Tree**: Tooling, directory structure, Alembic baseline, and test harnesses initialized.
+- **Working Tree**: Core domain entities, order state machine, cost & slippage models, paper broker, and local SQLite/Alembic ledger persistence implemented and tested.
 
 ---
 
 ## Active Implementation Rules
 
-Until Phase 1 sign-off:
-- **Do not implement business logic** (no pricing, signals, or portfolio math).
-- **Do not create trading engines** (no paper broker, order matching, or execution state machines).
-- **Do not integrate external APIs** (no live broker sessions, network requests, or model loading).
+Until Phase 2 sign-off:
+- **Do not implement live broker API adapters or live order routing** (air-gapped paper trading only).
+- **Do not create options analytics or Greeks calculators** (Phase 3).
+- **Do not create strategy DSL compilers or AST evaluators** (Phase 4).
+- **Do not integrate AI forecasting or vision modules** (Phases 5 & 6).
+- **Do not construct Plotly Dash dashboards or interactive CLI handlers** (Phase 8).
 - **Do not modify architecture or contracts** without proposing an ADR update in `DECISIONS.md`.
 
 ---
@@ -26,19 +28,19 @@ Until Phase 1 sign-off:
 ## Architecture Status
 
 - **Documentation**: `██████████` 100%
-- **Implementation**: `█░░░░░░░░░` 10% (Phase 0 Complete)
+- **Implementation**: `██░░░░░░░░` 20% (Phases 0 and 1 Complete)
 
 ---
 
 ## Next Milestone
 
-### Phase 1: Core Domain Entities & Order State Machine
+### Phase 2: Market Data Layer & Ingestion Pipeline
 **Definition of Done**:
-- Immutable data contracts implemented: `Tick`, `Bar`, `Signal`, `Order`, `Trade`, `Position`, `AccountBalance`.
-- Formal Order State Machine built: `CREATED` $\to$ `SUBMITTED` $\to$ `FILLED` | `PARTIALLY_FILLED` | `CANCELLED` | `REJECTED`.
-- `core/PaperBroker` tracking capital balances, dynamic margin allocations, and realistic fills.
-- Realistic slippage algorithms, bid-ask spread simulation, and statutory Indian market taxes (STT, GST, Stamp Duty, Exchange Charges).
-- Deterministic unit tests verify that order states transition accurately and that commissions and margins are calculated correctly without network dependencies.
+- Ingestion feed implementations: Historical CSV replay and synthetic market data generator.
+- Abstract broker adapter interface: Read-only Kotak Neo market data feed integration.
+- NSE session calendar and market hours validation (09:15 to 15:30 IST, holidays, weekly/monthly expiries).
+- Local Parquet caching layer for tick and 1-minute bar historical data.
+- Unit and integration tests verify replay determinism, session filtering, and cache round-tripping without live broker connections.
 
 ---
 
@@ -55,6 +57,19 @@ Until Phase 1 sign-off:
 ---
 
 ## Completed
+
+### Phase 1: Core Domain Entities & Order State Machine
+**Status**: COMPLETE ✅
+- **Immutable Domain Entities**: `Tick`, `Bar`, `Signal`, `Order`, `Trade`, `Position`, `AccountBalance` implemented with frozen Pydantic models, runtime invariant validations, and price envelope checks.
+- **Formal Order State Machine**: `OrderStateMachine` implementing strictly allowed lifecycle transitions (`CREATED` $\to$ `SUBMITTED` $\to$ `FILLED` | `PARTIALLY_FILLED` | `CANCELLED` | `REJECTED`), blocking illegal backwards/terminal transitions with `InvalidOrderStateTransitionError`.
+- **Cost & Slippage Calculators**: `CostCalculator` calculating statutory Indian equity/derivative taxes (STT, Exchange turnover charges, GST, SEBI turnover fees, Stamp duty) and `SlippageModel` (linear basis points + half-spread modeling).
+- **Core PaperBroker Engine**: `PaperBroker` managing virtual cash balances, dynamic margin allocations with an 85% safety ceiling, position lot tracking, realized P&L, MTM unrealized P&L, limit order matching, and signal ingestion.
+- **Local Ledger Persistence**: SQLAlchemy ORM models (`OrderRecord`, `TradeRecord`, `PositionRecord`, `AccountBalanceRecord`) managed through `LedgerRepository` using SQLite in WAL mode (`PRAGMA journal_mode=WAL`).
+- **Database Migrations**: Alembic migration `0002_core_tables.py` creating persistent tables.
+- **Automated Verification**:
+  - `ruff check .` passing with 0 warnings/errors.
+  - `mypy src tests` passing in strict mode across 48 source files with 0 errors.
+  - `pytest` suite passing 27/27 unit tests (100% pass rate).
 
 ### Phase 0: Repository Baseline, Tooling & Infrastructure Strategy
 **Status**: COMPLETE ✅
@@ -90,19 +105,17 @@ Until Phase 1 sign-off:
 
 ## Current Work
 
-**Status**: READY FOR USER SIGN-OFF TO BEGIN PHASE 1
+**Status**: READY FOR USER SIGN-OFF TO BEGIN PHASE 2
 
 Pending Action Items:
-1. Commit Phase 0 baseline files to Git.
-2. Await user sign-off to proceed with Phase 1 (Core Domain Entities & Order State Machine).
+1. Stage and commit Phase 1 implementation to Git.
+2. Await user sign-off to proceed with Phase 2 (Market Data Layer & Ingestion Pipeline).
 
 ---
 
 ## Not Implemented Yet (Do NOT Hallucinate)
 
 The following components do **NOT** exist in code:
-- No domain models (`Tick`, `Bar`, `Signal`, `Order`, `Trade`, `Position`, `AccountBalance`)
-- No paper broker or order state machine (`core/PaperBroker`)
 - No market data adapters or WebSocket streamers (`data/adapters/`, `data/feeds/`)
 - No options analytics, Greeks, or payoff calculators (`options/`)
 - No strategy DSL compiler, AST evaluators, or strategy library (`strategy/`)
