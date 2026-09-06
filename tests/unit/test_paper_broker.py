@@ -187,3 +187,142 @@ def test_mark_to_market_unrealized_pnl(broker: PaperBroker) -> None:
     balance_loss = broker.get_account_balance()
     # Unrealized P&L should be ~ (90 - 100.05) * 50 = -502.50
     assert balance_loss.unrealized_pnl < -450.0
+
+
+def test_partial_fill_and_multiple_fills(broker: PaperBroker) -> None:
+    """Verify partial fills and multiple progressive fills on a single order."""
+    now = datetime.now(UTC)
+    symbol = "RELIANCE"
+
+    order = broker.create_order(
+        symbol=symbol,
+        side=OrderSide.BUY,
+        order_type=OrderType.LIMIT,
+        qty=100,
+        price=2500.0,
+        timestamp=now,
+    )
+    submitted = broker.submit_order(order, current_market_price=2600.0, timestamp=now)
+    assert submitted.status == OrderStatus.SUBMITTED
+
+    # 1. Partial fill: 40 shares @ 2500.0
+    partially_filled = broker.fill_order(
+        submitted.order_id, fill_qty=40, fill_price=2500.0, timestamp=now
+    )
+    assert partially_filled.status == OrderStatus.PARTIALLY_FILLED
+    assert partially_filled.filled_qty == 40
+    fill_price_1 = partially_filled.average_fill_price
+    assert fill_price_1 == pytest.approx(2501.25, abs=0.01)
+
+    pos = broker.get_positions()[0]
+    assert pos.qty == 40
+    assert pos.buy_avg_price == fill_price_1
+    assert pos.realized_pnl == 0.0
+
+    # 2. Second fill to complete order: 60 shares @ 2510.0
+    fully_filled = broker.fill_order(
+        submitted.order_id, fill_qty=60, fill_price=2510.0, timestamp=now
+    )
+    assert fully_filled.status == OrderStatus.FILLED
+    assert fully_filled.filled_qty == 100
+    fill_price_2 = broker.get_trades()[-1].fill_price
+    expected_avg = round(((40 * fill_price_1) + (60 * fill_price_2)) / 100, 2)
+    assert fully_filled.average_fill_price == pytest.approx(expected_avg, abs=0.01)
+
+    # Position now holds all 100 shares at weighted average price
+    pos2 = broker.get_positions()[0]
+    assert pos2.qty == 100
+    assert pos2.buy_avg_price == pytest.approx(expected_avg, abs=0.01)
+    assert pos2.realized_pnl == 0.0
+
+
+def test_partial_closing_and_realized_unrealized_separation(broker: PaperBroker) -> None:
+    """Verify partial position close, preserving entry price for remaining lots and P&L separation."""
+    now = datetime.now(UTC)
+    symbol = "INFY"
+
+    # 1. Buy 100 @ 1500.0
+    buy_order = broker.create_order(
+        symbol=symbol, side=OrderSide.BUY, order_type=OrderType.MARKET, qty=100, timestamp=now
+    )
+    filled_buy = broker.submit_order(buy_order, current_market_price=1500.0, timestamp=now)
+    buy_price = filled_buy.average_fill_price
+
+    # 2. Partially close position: Sell 40 @ 1600.0
+    sell_order_1 = broker.create_order(
+        symbol=symbol, side=OrderSide.SELL, order_type=OrderType.MARKET, qty=40, timestamp=now
+    )
+    filled_sell_1 = broker.submit_order(sell_order_1, current_market_price=1600.0, timestamp=now)
+    sell_price_1 = filled_sell_1.average_fill_price
+
+    pos = broker.get_positions()[0]
+    assert pos.qty == 60  # 60 remaining
+    assert pos.buy_avg_price == buy_price  # Entry price of remaining lots preserved!
+
+    expected_realized_1 = round((sell_price_1 - buy_price) * 40, 2)
+    assert pos.realized_pnl == pytest.approx(expected_realized_1, abs=0.1)
+
+    # Unrealized P&L is calculated on remaining 60 lots at latest sell price
+    expected_unrealized_1 = round((sell_price_1 - buy_price) * 60, 2)
+    assert pos.unrealized_pnl == pytest.approx(expected_unrealized_1, abs=0.1)
+
+    # 3. Market moves to 1650.0: tick updates MTM unrealized P&L, realized stays fixed
+    broker.on_tick(symbol, 1650.0, timestamp=now)
+    pos_mtm = broker.get_positions()[0]
+    assert pos_mtm.realized_pnl == pytest.approx(expected_realized_1, abs=0.1)
+    expected_unrealized_2 = round((1650.0 - buy_price) * 60, 2)
+    assert pos_mtm.unrealized_pnl == pytest.approx(expected_unrealized_2, abs=0.1)
+
+    # 4. Fully close remaining 60 @ 1700.0
+    sell_order_2 = broker.create_order(
+        symbol=symbol, side=OrderSide.SELL, order_type=OrderType.MARKET, qty=60, timestamp=now
+    )
+    filled_sell_2 = broker.submit_order(sell_order_2, current_market_price=1700.0, timestamp=now)
+    sell_price_2 = filled_sell_2.average_fill_price
+
+    pos_closed = broker.get_positions()[0]
+    assert pos_closed.qty == 0
+    assert pos_closed.unrealized_pnl == 0.0
+    expected_realized_total = expected_realized_1 + round((sell_price_2 - buy_price) * 60, 2)
+    assert pos_closed.realized_pnl == pytest.approx(expected_realized_total, abs=0.2)
+
+    # AccountBalance separation check
+    balance = broker.get_account_balance()
+    assert balance.unrealized_pnl == 0.0
+    assert balance.realized_pnl == pytest.approx(expected_realized_total, abs=0.2)
+
+
+def test_position_reversal_long_to_short(broker: PaperBroker) -> None:
+    """Verify reversing position from Net Long to Net Short in a single transaction."""
+    now = datetime.now(UTC)
+    symbol = "TCS"
+
+    # Buy 50 @ 3500.0
+    buy_order = broker.create_order(
+        symbol=symbol, side=OrderSide.BUY, order_type=OrderType.MARKET, qty=50, timestamp=now
+    )
+    filled_buy = broker.submit_order(buy_order, current_market_price=3500.0, timestamp=now)
+    buy_price = filled_buy.average_fill_price
+
+    # Sell 80 @ 3600.0 (closes 50 long, opens 30 short)
+    sell_order = broker.create_order(
+        symbol=symbol, side=OrderSide.SELL, order_type=OrderType.MARKET, qty=80, timestamp=now
+    )
+    filled_sell = broker.submit_order(sell_order, current_market_price=3600.0, timestamp=now)
+    sell_price = filled_sell.average_fill_price
+
+    pos = broker.get_positions()[0]
+    assert pos.qty == -30  # Net Short 30
+    assert pos.buy_avg_price == 0.0
+    assert pos.sell_avg_price == sell_price  # Entry price for short position
+
+    # Realized P&L from closing the 50 long
+    expected_realized = round((sell_price - buy_price) * 50, 2)
+    assert pos.realized_pnl == pytest.approx(expected_realized, abs=0.1)
+
+    # Tick at 3550.0 (favorable for short)
+    broker.on_tick(symbol, 3550.0, timestamp=now)
+    pos_mtm = broker.get_positions()[0]
+    expected_short_unrealized = round((sell_price - 3550.0) * 30, 2)
+    assert pos_mtm.unrealized_pnl == pytest.approx(expected_short_unrealized, abs=0.1)
+

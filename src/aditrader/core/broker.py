@@ -43,7 +43,6 @@ class PaperBroker:
 
     def get_account_balance(self) -> AccountBalance:
         """Compute current capital, margin allocations, and P&L state."""
-        realized_pnl = sum(t.fill_price for t in self._trades if False)  # placeholder
         realized_pnl = sum(pos.realized_pnl for pos in self._positions.values())
         unrealized_pnl = sum(pos.unrealized_pnl for pos in self._positions.values())
 
@@ -185,6 +184,32 @@ class PaperBroker:
         cancelled = OrderStateMachine.transition(order, OrderStatus.CANCELLED, timestamp=ts)
         self._orders[cancelled.order_id] = cancelled
         return cancelled
+
+    def fill_order(
+        self,
+        order_id: str,
+        fill_qty: int,
+        fill_price: float,
+        timestamp: datetime | None = None,
+    ) -> Order:
+        """
+        Execute an explicit full or partial fill for an open order.
+        """
+        ts = timestamp or self._now()
+        order = self._orders.get(order_id)
+        if not order:
+            raise KeyError(f"Order '{order_id}' not found")
+
+        if order.status not in (OrderStatus.SUBMITTED, OrderStatus.PARTIALLY_FILLED):
+            raise ValueError(f"Cannot fill order in status {order.status}")
+
+        remaining_qty = order.qty - order.filled_qty
+        if fill_qty <= 0 or fill_qty > remaining_qty:
+            raise ValueError(
+                f"Invalid fill quantity {fill_qty}: must be > 0 and <= remaining {remaining_qty}"
+            )
+
+        return self._execute_fill(order, fill_price, fill_qty, ts)
 
     # --------------------------------------------------------------------------
     # Market Data & Execution Matching
@@ -345,6 +370,10 @@ class PaperBroker:
             if new_qty > 0 and old_qty >= 0:
                 total_val = (old_qty * existing.buy_avg_price) + (trade.qty * trade.fill_price)
                 new_buy_avg = round(total_val / new_qty, 2)
+            elif old_qty < 0 and new_qty > 0:
+                # Reversal: position flipped from short to long
+                new_buy_avg = trade.fill_price
+                new_sell_avg = 0.0
             elif new_qty == 0:
                 new_buy_avg = 0.0
                 new_sell_avg = 0.0
@@ -354,6 +383,10 @@ class PaperBroker:
                     trade.qty * trade.fill_price
                 )
                 new_sell_avg = round(total_val / abs(new_qty), 2)
+            elif old_qty > 0 and new_qty < 0:
+                # Reversal: position flipped from long to short
+                new_sell_avg = trade.fill_price
+                new_buy_avg = 0.0
             elif new_qty == 0:
                 new_buy_avg = 0.0
                 new_sell_avg = 0.0
