@@ -10,6 +10,14 @@ from aditrader.data.feeds import (
     SyntheticDataFeed,
     TickAggregator,
 )
+from aditrader.data.instruments import (
+    DerivativesHierarchy,
+    InstrumentFilter,
+    InstrumentIndex,
+    InstrumentSearchService,
+    MatchQuality,
+    SearchResult,
+)
 from aditrader.data.session import (
     EXCHANGE_TIMEZONE,
     MarketClosedError,
@@ -29,11 +37,17 @@ __all__ = [
     "ContractMetadata",
     "DataFeed",
     "DataFeedStreamer",
+    "DerivativesHierarchy",
+    "InstrumentFilter",
+    "InstrumentIndex",
+    "InstrumentSearchService",
     "KotakNeoAdapter",
     "LocalDataCache",
     "MarketClosedError",
     "MarketSessionStatus",
+    "MatchQuality",
     "RingBuffer",
+    "SearchResult",
     "SyntheticDataFeed",
     "TickAggregator",
     "get_session_status",

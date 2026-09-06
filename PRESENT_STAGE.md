@@ -1,15 +1,15 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-06 18:30 IST  
-**Current Phase**: Phase 6 — COMPLETE & AUDITED ✅ | Preparing Instrument Search & Selection Subsystem  
-**Last Verified By**: AGY CLI Phase 6 Quality Verification Suite (Ruff, Mypy Strict, Pytest 185/185)  
+**Last Updated**: 2026-09-06 18:45 IST  
+**Current Phase**: Instrument Search & Selection Subsystem — COMPLETE & AUDITED ✅ | Preparing Phase 7 (AI Subsystems & Advisory Pipeline)  
+**Last Verified By**: AGY CLI Quality Verification Suite (Ruff, Mypy Strict, Pytest 202/202)  
 
 ---
 
 ## Repository State
 
 - **Branch**: `main`
-- **Working Tree**: Core domain entities, order state machine, paper broker with net equity accounting, local SQLite ledger persistence, market data feeds, Kotak Neo adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine with options air-gap guards and volume participation constraints, walk-forward analysis & OOS splitters, hardened pre-trade risk engine with lot-aware position limits and session-boundary resets, finite performance analytics with strict timeframe resolution, static AST structural validation, institutional historical statistical validation for linear assets, and theoretical payoff/Greek risk validation for multi-leg option strategies implemented and verified.
+- **Working Tree**: Core domain entities, order state machine, paper broker with net equity accounting, local SQLite ledger persistence, market data feeds, Kotak Neo adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine with options air-gap guards and volume participation constraints, walk-forward analysis & OOS splitters, hardened pre-trade risk engine with lot-aware position limits and session-boundary resets, finite performance analytics with strict timeframe resolution, static AST structural validation, institutional historical statistical validation for linear assets, theoretical payoff/Greek risk validation for multi-leg option strategies, and high-performance Instrument Search & Selection Subsystem with hierarchical derivatives resolution and Parquet scrip caching implemented and verified.
 
 ---
 
@@ -18,7 +18,7 @@
 - **Do not implement live broker order routing** (strictly air-gapped; read-only market data feeds only).
 - **Do not execute raw dynamic code** (`eval()`, `exec()`, or dynamic python code generation).
 - **Options backtesting remains air-gapped**: Never emit historical performance metrics for options; theoretical payoff modeling only.
-- **Do not integrate AI forecasting or vision modules** (Phases 7+).
+- **Do not integrate live AI forecasting or vision modules** until Phase 7 specifications are aligned.
 - **Do not construct Plotly Dash dashboards or interactive CLI handlers** (Phase 8).
 - **Do not modify architecture or contracts** without proposing an ADR update in `DECISIONS.md`.
 - **Maintain strict Python 3.11 target compatibility** across all typing, syntax, and libraries.
@@ -28,18 +28,18 @@
 ## Architecture Status
 
 - **Documentation**: `██████████` 100%
-- **Implementation**: `████████░░` 76% (Phases 0, 1, 2, 3, 4, 5, 5.5, 5.6, and 6 Complete)
+- **Implementation**: `████████░░` 80% (Phases 0, 1, 2, 3, 4, 5, 5.5, 5.6, 6, and Instrument Search Complete)
 
 ---
 
 ## Next Milestone
 
-### Instrument Search & Selection Subsystem
+### Phase 7: AI Subsystems & Advisory Pipeline
 **Definition of Done**:
-- Implement high-speed local contract discovery and search engine over broker scrip master and cache.
-- Hierarchical derivatives resolution: Underlying -> Contract Type -> Expiry Date -> Strike -> CE/PE.
-- Prefix, exact, and fuzzy symbol matching with deterministic institutional ranking.
-- Integration with Kotak Neo master data cache.
+- Abstract time-series foundation models behind a vendor-agnostic `ForecastEngine` interface (Kronos, Chronos).
+- Implement Gemini Vision chart screenshot parser outputting validated JSON technical patterns, support/resistance, and chart regimes.
+- Implement Strategy Suggestor with institutional 60% selling / 40% buying bias matching prevailing volatility regimes.
+- Research Dossier generator compiling unified quantitative report with sensitivity grids and diagnostic logs.
 
 ---
 
@@ -58,6 +58,17 @@
 ---
 
 ## Completed
+
+### Instrument Search & Selection Subsystem
+**Status**: COMPLETE & AUDITED ✅
+- **In-Memory Multi-Index Engine (`src/aditrader/data/instruments/index.py`)**: Built `InstrumentIndex` providing high-speed token, symbol, underlying, and hierarchical derivatives lookups over broker `ContractMetadata` records.
+- **Hierarchical Derivatives Resolution**: Full resolution mapping from root underlying to contract classification (`EQ`, `FUTIDX`, `FUTSTK`, `OPTIDX`, `OPTSTK`), expiry schedule, strike ladders, and call/put option pairs (`get_option_pair()`, `resolve_derivative()`, `get_derivatives_hierarchy()`).
+- **Deterministic Multi-Modal Scoring (`src/aditrader/data/instruments/matcher.py`)**: Implemented `score_contract()` and `parse_query()` recognizing structured queries (e.g., "NIFTY 24000 CE", "RELIANCE FUT", "26000") and ranking results via exact token (100.0), exact symbol (99.0), prefixes, token matching, and fuzzy subsequences with institutional tie-breaking (scores, cash equity priority for root symbols, expiry dates, symbol names).
+- **Persistent Scrip Caching (`src/aditrader/data/instruments/service.py`)**: `InstrumentSearchService` provides high-throughput Parquet serialization and deserialization with zstd compression, supporting warm local startup without repeated remote scrip master downloads.
+- **Automated Verification**:
+  - `ruff check .` and `ruff format --check .` passing with 0 warnings/errors (Python 3.11 target).
+  - `mypy src tests` passing in strict mode across 118 source files with 0 errors (Python 3.11 target).
+  - `pytest` suite passing 202/202 unit and integration tests (100% pass rate in 2.27s) with 87% overall coverage.
 
 ### Phase 6: Strategy Validation Engine & Institutional Policy Framework
 **Status**: COMPLETE & AUDITED ✅
