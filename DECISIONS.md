@@ -152,3 +152,35 @@ Adversarial red-team testing of Phase 5 revealed critical simulation realism vul
 - **Positive**: Eliminates phantom equity inflation; guarantees 100% mathematical consistency in equity tracking; prevents circuit breaker and margin limit evasion on position flips; ensures accurate risk-adjusted performance metrics across intraday timeframes.
 - **Negative**: Backtest results for high-frequency intraday strategies will reflect accurate (often lower) annualized Sharpe ratios compared to uncalibrated daily scaling.
 
+---
+
+## ADR 011: Research Integrity Hardening (Options Air-Gap, Volume Realism, Session Risk & Finite Metrics)
+
+### Context
+Hostile adversarial review (Phase 5.5.1) identified remaining structural simulation realism and statistical metric distortions:
+1. **Silent Options Proxy Execution**: Strategy DSL definitions containing multi-leg options could be passed to `BacktestRunner` and executed against underlying cash/futures OHLCV candles, generating deceptive results without error.
+2. **Infinite Liquidity Assumption**: Backtests assumed 100% order fill regardless of bar trading volume, allowing large positions to fill against illiquid candles.
+3. **Session Boundary Risk Blindness**: `RiskEngine`'s intraday drawdown circuit breaker evaluated all-time peak equity without resetting on session/date boundaries, causing multi-day backtests to remain locked out after an initial day's drawdown or misinterpreting intraday risk.
+4. **Terminal Position Accounting Distortions**: Open positions remaining at backtest terminus were either omitted from terminal equity or liquidated via fake injected trades that polluted trade counts, win rates, and expectancy.
+5. **Infinite Statistical Metrics**: Zero downside volatility (Sortino) and zero gross losses (Profit Factor) returned `float('inf')`, distorting optimizer objective functions and breaking serialization.
+6. **Quantity vs. Lot Conflation**: Derivative contracts (e.g., NIFTY 25 shares/lot, RELIANCE 250 shares/lot) were evaluated as raw unit counts against `max_concurrent_lots`, prematurely rejecting standard lot orders.
+
+### Decision
+1. **Strict Options Simulation Air-Gap Guard**:
+   In `BacktestRunner.run`, inspect `strategy.dsl.legs`. If non-empty (`len(strategy.dsl.legs) > 0`), immediately raise `UnsupportedStrategyError`. Proxy execution of multi-leg option strategies on spot candle data is strictly prohibited until dedicated option-chain simulation is ready.
+2. **Volume Participation & Liquidity Constraint**:
+   Add `max_volume_participation_pct` (float, e.g. 0.10) and `volume_limit_action` (`Literal["REJECT", "PARTIAL_FILL"]`) to `BacktestConfig`. When order quantity exceeds the allowed participation of the current bar volume, the engine deterministically rejects or clamps the order according to policy.
+3. **Intraday Session Boundary Reset**:
+   In `BacktestRunner.run`, track session date transitions. When a new date is encountered, invoke `risk_engine.on_session_start(bar.timestamp, current_equity)` to reset session peak equity and clear the intraday circuit breaker while preserving cumulative portfolio equity curve.
+4. **Terminal Open-Position Accounting**:
+   Add `terminal_positions`, `terminal_unrealized_pnl`, and `liquidated_ending_equity` to `BacktestResult`. Evaluate unrealized mark-to-market and compute hypothetical liquidation equity including full slippage and statutory costs. Never inject synthetic trades into roundtrip trade performance metrics.
+5. **Finite & Statistically Undefined Metric Representation**:
+   Return `None` (typed `float | None`) instead of `float('inf')` for undefined statistical states (zero downside variance in Sortino, zero losses in Profit Factor, zero return variance or $N < 2$ in Sharpe/SQN).
+6. **Derivative Contract Lot Semantics**:
+   Add `lot_sizes` registry and `resolve_lots(symbol, qty, default_lot_size)` to `RiskEngine`. Pre-trade Gate 4 evaluates integer lot counts (`ceil(qty / lot_size)`) rather than raw share quantities.
+
+### Consequences
+- **Positive**: Guarantees zero look-ahead and proxy leakage for options; enforces realistic liquidity limits; enables multi-day intraday risk management; prevents statistical metric crashes; preserves pristine roundtrip trade records.
+- **Negative**: Multi-leg option strategies cannot be executed by `BacktestRunner` (must await dedicated option-chain runner in future milestones); strategies with zero losses report `profit_factor = None` instead of `inf`.
+
+

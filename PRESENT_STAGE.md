@@ -1,15 +1,15 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-06 17:55 IST  
-**Current Phase**: Phase 5.5 — COMPLETE & AUDITED ✅ | Preparing Phase 6 (Validation Engine & Institutional Mode)  
-**Last Verified By**: AGY CLI Phase 5.5 Hardening Suite (Ruff, Mypy Strict, Pytest 136/136)  
+**Last Updated**: 2026-09-06 18:10 IST  
+**Current Phase**: Phase 5.6 — COMPLETE & AUDITED ✅ | Preparing Phase 6 (Validation Engine & Institutional Mode)  
+**Last Verified By**: AGY CLI Phase 5.6 Research Integrity Suite (Ruff, Mypy Strict, Pytest 150/150)  
 
 ---
 
 ## Repository State
 
 - **Branch**: `main`
-- **Working Tree**: Core domain entities, order state machine, paper broker with net equity accounting, local SQLite ledger persistence, market data feeds, Kotak Neo adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine, walk-forward analysis & OOS splitters, hardened pre-trade risk engine with reversal protection, timeframe-aware performance analytics, and options backtesting boundary placeholders implemented and verified.
+- **Working Tree**: Core domain entities, order state machine, paper broker with net equity accounting, local SQLite ledger persistence, market data feeds, Kotak Neo adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine with options air-gap guards and volume participation constraints, walk-forward analysis & OOS splitters, hardened pre-trade risk engine with lot-aware position limits and session-boundary resets, finite performance analytics with strict timeframe resolution, and options backtesting boundary placeholders implemented and verified.
 
 ---
 
@@ -29,7 +29,7 @@ Until Phase 6 sign-off:
 ## Architecture Status
 
 - **Documentation**: `██████████` 100%
-- **Implementation**: `██████░░░░` 62% (Phases 0, 1, 2, 3, 4, 5, and 5.5 Complete)
+- **Implementation**: `███████░░░` 68% (Phases 0, 1, 2, 3, 4, 5, 5.5, and 5.6 Complete)
 
 ---
 
@@ -57,10 +57,25 @@ Until Phase 6 sign-off:
 - SQLite WAL mode and in-memory ring buffer for low-latency concurrency (ADR 008).
 - Dynamic contract expiry discovery from broker scrip master (ADR 009).
 - Simulation integrity, portfolio net equity accounting & timeframe annualization (ADR 010).
+- Research integrity hardening: options air-gap, volume realism, session risk & finite metrics (ADR 011).
 
 ---
 
 ## Completed
+
+### Phase 5.6: Research Integrity Hardening & Adversarial Defenses
+**Status**: COMPLETE & AUDITED ✅
+- **Options Simulation Air-Gap (`backtesting.runner`, `backtesting.options`)**: `BacktestRunner` inspects `strategy.dsl.legs` and raises `UnsupportedStrategyError` when strategies define option legs. Eliminates deceptive proxy execution of multi-leg derivatives on spot/futures candle series. Regression-verified with Iron Condor and Long Straddle templates.
+- **Liquidity & Volume Participation Constraints (`backtesting.runner`)**: Added `max_volume_participation_pct` (e.g., 10% of candle volume) and `volume_limit_action` (`REJECT` vs. `PARTIAL_FILL`) to `BacktestConfig`. Prevents unrealistic fills during thin liquidity bars.
+- **Intraday Session Boundary & Circuit Breaker Reset (`core.risk.engine`, `backtesting.runner`)**: `BacktestRunner` tracks date transitions and executes `risk_engine.on_session_start(timestamp, current_equity)` to reset session starting/peak equity and clear intraday drawdown halts without erasing cumulative portfolio equity history.
+- **Terminal Open-Position Accounting (`backtesting.runner`)**: Added `terminal_positions`, mark-to-market `terminal_unrealized_pnl`, and conservative `liquidated_ending_equity` (evaluating full slippage and statutory exit charges) to `BacktestResult`. Avoids injecting artificial exit trades into roundtrip trade performance statistics.
+- **Finite Statistical Metrics & Timeframe Strictness (`backtesting.analytics.metrics`)**: Replaced `float('inf')` with `None` for zero downside volatility (Sortino), zero gross losses (Profit Factor), zero return variance or sample size $N < 2$ (Sharpe/SQN). Extended `resolve_periods_per_year` to support second-level intervals (`1s`, `30s`) and strict error checking mode (`strict=True`).
+- **Derivative Contract Lot Semantics (`core.risk.engine`)**: Enhanced `RiskEngine.validate_order` Gate 4 with `resolve_lots(symbol, qty, default_lot_size)`, accurately converting contract quantities into integer lot counts (e.g. NIFTY 25 shares/lot, RELIANCE 250 shares/lot) against `max_concurrent_lots`.
+- **Automated Verification**:
+  - `ruff check .` and `ruff format --check .` passing with 0 warnings/errors (Python 3.11 target).
+  - `mypy src tests` passing in strict mode across 102 source files with 0 errors (Python 3.11 target).
+  - `pytest` suite passing 150/150 unit and integration tests (100% pass rate in 2.17s) with 87% overall coverage.
+
 
 ### Phase 5.5: Simulation Integrity Hardening & Post-Red-Team Remediation
 **Status**: COMPLETE & AUDITED ✅

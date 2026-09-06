@@ -12,7 +12,12 @@ from aditrader.backtesting.analytics.metrics import (
     generate_performance_report,
 )
 from aditrader.backtesting.options import OptionsBacktestConfig, OptionsBacktestRunner
-from aditrader.backtesting.runner import BacktestConfig, BacktestResult, BacktestRunner
+from aditrader.backtesting.runner import (
+    BacktestConfig,
+    BacktestResult,
+    BacktestRunner,
+    UnsupportedStrategyError,
+)
 from aditrader.backtesting.splitters import (
     WalkForwardWindow,
     generate_walk_forward_windows,
@@ -28,6 +33,7 @@ __all__ = [
     "OptionsBacktestConfig",
     "OptionsBacktestRunner",
     "PerformanceReport",
+    "UnsupportedStrategyError",
     "WalkForwardWindow",
     "calculate_expectancy",
     "calculate_max_drawdown",

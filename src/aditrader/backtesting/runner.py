@@ -10,7 +10,8 @@ Per ARCHITECTURE.md and .agents/skills/backtesting-engine.md:
 """
 
 from collections import deque
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,9 +21,9 @@ from aditrader.backtesting.analytics.metrics import (
     resolve_periods_per_year,
 )
 from aditrader.core.broker import PaperBroker
-from aditrader.core.costs import SlippageModel
+from aditrader.core.costs import CostCalculator, SlippageModel
 from aditrader.core.models.enums import OrderSide, OrderStatus, OrderType, SignalDirection
-from aditrader.core.models.execution import Trade
+from aditrader.core.models.execution import Position, Trade
 from aditrader.core.models.market_data import Bar
 from aditrader.core.models.order import Order
 from aditrader.core.models.trade_signal import Signal
@@ -31,6 +32,10 @@ from aditrader.core.risk.models import RiskLimits
 from aditrader.core.state_machine import OrderStateMachine
 from aditrader.data.feeds.base import DataFeed
 from aditrader.strategy.compiler.engine import ExecutableStrategy
+
+
+class UnsupportedStrategyError(ValueError):
+    """Raised when a strategy definition cannot be deterministically simulated by the runner."""
 
 
 class BacktestConfig(BaseModel):
@@ -60,6 +65,16 @@ class BacktestConfig(BaseModel):
     risk_limits: RiskLimits | None = Field(
         default=None, description="Pre-trade institutional risk thresholds"
     )
+    max_volume_participation_pct: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Maximum fraction of candle volume an order can consume (e.g., 0.10 for 10%)",
+    )
+    volume_limit_action: Literal["REJECT", "PARTIAL_FILL"] = Field(
+        default="REJECT",
+        description="Deterministic policy when order quantity exceeds volume participation ceiling ('REJECT' or 'PARTIAL_FILL')",
+    )
 
 
 class BacktestResult(BaseModel):
@@ -78,6 +93,18 @@ class BacktestResult(BaseModel):
     )
     equity_timestamps: list[datetime] = Field(
         default_factory=list, description="Timestamps corresponding to equity curve"
+    )
+    terminal_positions: list[Position] = Field(
+        default_factory=list,
+        description="Active open positions remaining unclosed at the end of the simulation",
+    )
+    terminal_unrealized_pnl: float = Field(
+        default=0.0,
+        description="Mark-to-market unrealized PnL of remaining open positions at final bar",
+    )
+    liquidated_ending_equity: float | None = Field(
+        default=None,
+        description="Hypothetical ending equity if all terminal open positions were liquidated at final bar close with friction",
     )
     performance: PerformanceReport = Field(..., description="Institutional performance summary")
 
@@ -118,6 +145,16 @@ class BacktestRunner:
         if not bars:
             raise ValueError("Backtest data is empty. At least one bar is required.")
 
+        # Guard: Reject multi-leg option strategies from silent spot execution
+        if strategy.dsl.legs:
+            raise UnsupportedStrategyError(
+                f"Strategy '{strategy.dsl.name}' defines {len(strategy.dsl.legs)} option leg(s). "
+                "BacktestRunner only simulates underlying spot/futures candle execution. "
+                "Simulating multi-leg option strategies requires option-chain tick data and synthetic "
+                "IV surface modeling (OptionsBacktestRunner). Silent proxy execution of option legs "
+                "against underlying spot prices is strictly prohibited."
+            )
+
         # Initialize isolated execution subsystems
         broker = PaperBroker(
             initial_capital=self.config.initial_capital,
@@ -133,11 +170,21 @@ class BacktestRunner:
         equity_curve: list[float] = []
         equity_timestamps: list[datetime] = []
         pending_signal: Signal | None = None
+        current_session_date: date | None = None
 
         n_bars = len(bars)
         for i in range(n_bars):
             bar = bars[i]
             history = bars[: i + 1]
+
+            # ------------------------------------------------------------------
+            # 0. Intraday Session Transition Detection & Risk State Reset
+            # ------------------------------------------------------------------
+            bar_date = bar.timestamp.date()
+            if current_session_date is None or bar_date != current_session_date:
+                current_session_date = bar_date
+                pre_balance = broker.get_account_balance()
+                risk_engine.on_session_start(bar.timestamp, pre_balance.total_capital)
 
             # ------------------------------------------------------------------
             # 1. Fill Pending Signal from Bar T-1 at Bar T Open (Default Anti-Lookahead)
@@ -147,6 +194,7 @@ class BacktestRunner:
                     signal=pending_signal,
                     execution_price=bar.open,
                     timestamp=bar.timestamp,
+                    bar_volume=bar.volume,
                     broker=broker,
                     risk_engine=risk_engine,
                 )
@@ -174,6 +222,7 @@ class BacktestRunner:
                         signal=signal,
                         execution_price=bar.close,
                         timestamp=bar.timestamp,
+                        bar_volume=bar.volume,
                         broker=broker,
                         risk_engine=risk_engine,
                     )
@@ -189,7 +238,29 @@ class BacktestRunner:
             equity_timestamps.append(bar.timestamp)
 
         # ----------------------------------------------------------------------
-        # 5. Roundtrip PnL Matching & Performance Report Generation
+        # 5. Terminal Open Positions Accounting (Mark-to-Market & Liquidation)
+        # ----------------------------------------------------------------------
+        terminal_positions = [p for p in broker.get_positions() if p.qty != 0]
+        terminal_unrealized_pnl = snap_balance.unrealized_pnl
+        liquidated_ending_equity: float | None = None
+
+        if terminal_positions:
+            liq_friction = 0.0
+            last_close = bars[-1].close
+            for p in terminal_positions:
+                liq_side = OrderSide.SELL if p.qty > 0 else OrderSide.BUY
+                fill_p, slip = broker.slippage_model.calculate_fill_price(last_close, liq_side)
+                chgs = CostCalculator.calculate(
+                    side=liq_side,
+                    qty=abs(p.qty),
+                    price=fill_p,
+                    instrument=broker.default_instrument,
+                )
+                liq_friction += chgs.total_charges + slip
+            liquidated_ending_equity = round(snap_balance.total_capital - liq_friction, 2)
+
+        # ----------------------------------------------------------------------
+        # 6. Roundtrip PnL Matching & Performance Report Generation
         # ----------------------------------------------------------------------
         executed_trades = broker.get_trades()
         roundtrip_pnls = self._calculate_roundtrip_pnls(executed_trades)
@@ -219,6 +290,9 @@ class BacktestRunner:
             trades=executed_trades,
             equity_curve=equity_curve,
             equity_timestamps=equity_timestamps,
+            terminal_positions=terminal_positions,
+            terminal_unrealized_pnl=terminal_unrealized_pnl,
+            liquidated_ending_equity=liquidated_ending_equity,
             performance=performance,
         )
 
@@ -227,16 +301,48 @@ class BacktestRunner:
         signal: Signal,
         execution_price: float,
         timestamp: datetime,
+        bar_volume: int,
         broker: PaperBroker,
         risk_engine: RiskEngine,
     ) -> None:
-        """Route signal through pre-trade risk engine before broker execution."""
+        """Route signal through volume constraint and pre-trade risk engine before broker execution."""
         side = OrderSide.BUY if signal.direction == SignalDirection.BUY else OrderSide.SELL
+        requested_qty = self.config.trade_lots
+
+        # Volume / Liquidity Participation Constraint Gate
+        if self.config.max_volume_participation_pct is not None:
+            max_allowed_qty = int(bar_volume * self.config.max_volume_participation_pct)
+            if requested_qty > max_allowed_qty:
+                if self.config.volume_limit_action == "REJECT" or max_allowed_qty <= 0:
+                    tentative_order = broker.create_order(
+                        symbol=signal.symbol,
+                        side=side,
+                        order_type=OrderType.MARKET,
+                        qty=requested_qty,
+                        signal_id=f"SIG-{signal.timestamp.isoformat()}",
+                        timestamp=timestamp,
+                    )
+                    rejected_order = OrderStateMachine.transition(
+                        tentative_order,
+                        OrderStatus.REJECTED,
+                        timestamp=timestamp,
+                        rejection_reason=(
+                            f"Volume limit exceeded: order qty ({requested_qty}) exceeds "
+                            f"max participation ({max_allowed_qty} = "
+                            f"{self.config.max_volume_participation_pct * 100:.1f}% of bar volume {bar_volume})"
+                        ),
+                    )
+                    broker._orders[rejected_order.order_id] = rejected_order
+                    return
+                else:
+                    # PARTIAL_FILL
+                    requested_qty = max_allowed_qty
+
         tentative_order = broker.create_order(
             symbol=signal.symbol,
             side=side,
             order_type=OrderType.MARKET,
-            qty=self.config.trade_lots,
+            qty=requested_qty,
             signal_id=f"SIG-{signal.timestamp.isoformat()}",
             timestamp=timestamp,
         )

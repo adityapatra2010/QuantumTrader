@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from aditrader.backtesting.runner import BacktestConfig, BacktestRunner
-from aditrader.core.models.enums import OrderSide, OrderStatus, SignalDirection
+from aditrader.core.models.enums import OrderStatus, SignalDirection
 from aditrader.core.models.market_data import Bar
 from aditrader.core.models.trade_signal import Signal
 from aditrader.core.risk.models import RiskLimits
@@ -18,7 +18,6 @@ from aditrader.strategy.builder.schema import (
     ConditionGroup,
     ConditionNode,
     StrategyDSL,
-    StrategyLegDefinition,
 )
 from aditrader.strategy.compiler.engine import ExecutableStrategy, compile_strategy
 
@@ -52,14 +51,7 @@ def _build_test_strategy(underlying: str = "NIFTY") -> StrategyDSL:
                 )
             ],
         ),
-        legs=[
-            StrategyLegDefinition(
-                contract_type="CE",
-                side=OrderSide.BUY,
-                strike_offset=0,
-                lots=1,
-            )
-        ],
+        legs=[],
     )
 
 
@@ -262,14 +254,7 @@ def test_backtest_runner_expiry_naked_short_rejection() -> None:
                 )
             ],
         ),
-        legs=[
-            StrategyLegDefinition(
-                contract_type="CE",
-                side=OrderSide.SELL,
-                strike_offset=1,
-                lots=1,
-            )
-        ],
+        legs=[],
     )
     bars = _generate_bars()
 
@@ -315,7 +300,11 @@ def test_backtest_runner_timeframe_aware_metrics() -> None:
     runner_daily = BacktestRunner(BacktestConfig(periods_per_year=252, risk_free_rate=0.0))
     res_daily = runner_daily.run(compile_strategy(dsl), bars)
 
-    if res_daily.performance.sharpe_ratio != 0.0:
+    if (
+        res_daily.performance.sharpe_ratio is not None
+        and res_daily.performance.sharpe_ratio != 0.0
+        and res_auto.performance.sharpe_ratio is not None
+    ):
         ratio = res_auto.performance.sharpe_ratio / res_daily.performance.sharpe_ratio
         assert ratio == pytest.approx(math.sqrt(375), rel=1e-2)
 
@@ -337,3 +326,298 @@ def test_options_backtest_runner_boundary() -> None:
         NotImplementedError, match="OptionsBacktestRunner is an architectural placeholder"
     ):
         runner.run(strat, bars)
+
+
+def test_backtest_runner_refuses_options_iron_condor() -> None:
+    """Verify BacktestRunner refuses multi-leg option strategy (Iron Condor) with UnsupportedStrategyError."""
+    from aditrader.backtesting import UnsupportedStrategyError
+    from aditrader.strategy.library import create_nifty_iron_condor_dsl
+
+    dsl = create_nifty_iron_condor_dsl()
+    strat = compile_strategy(dsl)
+    bars = _generate_bars()
+    runner = BacktestRunner()
+
+    with pytest.raises(UnsupportedStrategyError, match="defines 4 option leg"):
+        runner.run(strat, bars)
+
+
+def test_backtest_runner_refuses_options_long_straddle() -> None:
+    """Verify BacktestRunner refuses multi-leg option strategy (Long Straddle) with UnsupportedStrategyError."""
+    from aditrader.backtesting import UnsupportedStrategyError
+    from aditrader.strategy.library import create_nifty_long_straddle_dsl
+
+    dsl = create_nifty_long_straddle_dsl()
+    strat = compile_strategy(dsl)
+    bars = _generate_bars()
+    runner = BacktestRunner()
+
+    with pytest.raises(UnsupportedStrategyError, match="defines 2 option leg"):
+        runner.run(strat, bars)
+
+
+def test_backtest_runner_volume_participation_normal_pass() -> None:
+    """Verify order within volume participation limit executes completely."""
+    dsl = _build_test_strategy()
+    strat = compile_strategy(dsl)
+    bars = _generate_bars()
+
+    cfg = BacktestConfig(
+        trade_lots=50,
+        max_volume_participation_pct=0.10,
+        volume_limit_action="REJECT",
+    )
+    runner = BacktestRunner(cfg)
+    result = runner.run(strat, bars)
+
+    assert any(o.status == OrderStatus.FILLED and o.filled_qty == 50 for o in result.orders)
+    assert len(result.trades) > 0
+
+
+def test_backtest_runner_volume_participation_rejection() -> None:
+    """Verify order exceeding volume participation limit is rejected under REJECT policy."""
+    dsl = _build_test_strategy()
+    strat = compile_strategy(dsl)
+    bars = _generate_bars()
+
+    cfg = BacktestConfig(
+        trade_lots=200,
+        max_volume_participation_pct=0.10,
+        volume_limit_action="REJECT",
+    )
+    runner = BacktestRunner(cfg)
+    result = runner.run(strat, bars)
+
+    assert any(
+        o.status == OrderStatus.REJECTED
+        and "Volume limit exceeded: order qty (200) exceeds max participation (100"
+        in (o.rejection_reason or "")
+        for o in result.orders
+    )
+    assert len(result.trades) == 0
+
+
+def test_backtest_runner_volume_participation_partial_fill() -> None:
+    """Verify order exceeding volume participation limit is capped to max volume under PARTIAL_FILL policy."""
+    dsl = _build_test_strategy()
+    strat = compile_strategy(dsl)
+    bars = _generate_bars()
+
+    cfg = BacktestConfig(
+        trade_lots=200,
+        max_volume_participation_pct=0.10,
+        volume_limit_action="PARTIAL_FILL",
+        risk_limits=RiskLimits(max_concurrent_lots=500),
+    )
+    runner = BacktestRunner(cfg)
+    result = runner.run(strat, bars)
+
+    assert any(o.status == OrderStatus.FILLED and o.filled_qty == 100 for o in result.orders)
+    assert len(result.trades) > 0
+    assert result.trades[0].qty == 100
+
+
+def test_backtest_runner_intraday_circuit_breaker_session_reset() -> None:
+    """Verify intraday circuit breaker trips on Day 1 loss and resets on Day 2 session start."""
+    from aditrader.core.risk.models import RiskRejectionReason
+
+    dsl = StrategyDSL(
+        schema_version="1.0",
+        name="Session Test Strategy",
+        underlying="NIFTY",
+        timeframe="1m",
+        entry_conditions=ConditionGroup(
+            operator=ASTOperator.AND,
+            conditions=[
+                ConditionNode(
+                    category=ConditionCategory.INDICATOR,
+                    field="close",
+                    operator=ASTOperator.GREATER_THAN,
+                    threshold=140.0,
+                )
+            ],
+        ),
+        legs=[],
+    )
+
+    class MultiSignalStrategy(ExecutableStrategy):
+        def on_bar(self, history: list[Bar], **kwargs: Any) -> Signal | None:
+            bar = history[-1]
+            if bar.close >= 140.0:
+                return Signal(
+                    timestamp=bar.timestamp,
+                    symbol=self.dsl.underlying,
+                    direction=SignalDirection.BUY,
+                    confidence=1.0,
+                    metadata={"timeframe": self.dsl.timeframe},
+                )
+            return None
+
+    day1 = datetime(2026, 3, 26, 9, 15, tzinfo=UTC)
+    day2 = datetime(2026, 3, 27, 9, 15, tzinfo=UTC)
+
+    bars = [
+        # Day 1
+        Bar(timestamp=day1, open=100.0, high=102.0, low=98.0, close=100.0, volume=1000, oi=0),
+        Bar(
+            timestamp=day1 + timedelta(minutes=1),
+            open=100.0,
+            high=200.0,
+            low=100.0,
+            close=200.0,
+            volume=1000,
+            oi=0,
+        ),
+        Bar(
+            timestamp=day1 + timedelta(minutes=2),
+            open=200.0,
+            high=200.0,
+            low=130.0,
+            close=130.0,
+            volume=1000,
+            oi=0,
+        ),
+        Bar(
+            timestamp=day1 + timedelta(minutes=3),
+            open=130.0,
+            high=200.0,
+            low=130.0,
+            close=200.0,
+            volume=1000,
+            oi=0,
+        ),
+        Bar(
+            timestamp=day1 + timedelta(minutes=4),
+            open=200.0,
+            high=200.0,
+            low=195.0,
+            close=200.0,
+            volume=1000,
+            oi=0,
+        ),
+        # Day 2: Session transition resets intraday circuit breaker
+        Bar(timestamp=day2, open=130.0, high=135.0, low=128.0, close=130.0, volume=1000, oi=0),
+        Bar(
+            timestamp=day2 + timedelta(minutes=1),
+            open=130.0,
+            high=200.0,
+            low=130.0,
+            close=200.0,
+            volume=1000,
+            oi=0,
+        ),
+        Bar(
+            timestamp=day2 + timedelta(minutes=2),
+            open=200.0,
+            high=205.0,
+            low=198.0,
+            close=200.0,
+            volume=1000,
+            oi=0,
+        ),
+    ]
+
+    cfg = BacktestConfig(
+        initial_capital=100_000.0,
+        trade_lots=100,
+        risk_limits=RiskLimits(portfolio_drawdown_limit_pct=0.05, max_concurrent_lots=500),
+    )
+    runner = BacktestRunner(cfg)
+    result = runner.run(MultiSignalStrategy(dsl), bars)
+
+    assert any(
+        o.status == OrderStatus.REJECTED
+        and RiskRejectionReason.CIRCUIT_BREAKER_ACTIVE.value in (o.rejection_reason or "")
+        for o in result.orders
+    )
+    day2_filled_orders = [
+        o
+        for o in result.orders
+        if o.created_at.date() == day2.date() and o.status == OrderStatus.FILLED
+    ]
+    assert len(day2_filled_orders) >= 1
+
+
+def test_backtest_runner_terminal_open_position_accounting() -> None:
+    """Verify terminal open position is reported with unrealized loss and liquidation friction without fake exit trades."""
+    dsl = StrategyDSL(
+        schema_version="1.0",
+        name="Hold Strategy",
+        underlying="NIFTY",
+        timeframe="1m",
+        entry_conditions=ConditionGroup(
+            operator=ASTOperator.AND,
+            conditions=[
+                ConditionNode(
+                    category=ConditionCategory.INDICATOR,
+                    field="close",
+                    operator=ASTOperator.GREATER_THAN,
+                    threshold=100.0,
+                )
+            ],
+        ),
+        exit_conditions=ConditionGroup(
+            operator=ASTOperator.AND,
+            conditions=[
+                ConditionNode(
+                    category=ConditionCategory.INDICATOR,
+                    field="close",
+                    operator=ASTOperator.GREATER_THAN,
+                    threshold=999999.0,
+                )
+            ],
+        ),
+        legs=[],
+    )
+
+    start_dt = datetime(2026, 3, 26, 9, 15, tzinfo=UTC)
+    bars = [
+        Bar(timestamp=start_dt, open=95.0, high=98.0, low=94.0, close=95.0, volume=1000, oi=0),
+        Bar(
+            timestamp=start_dt + timedelta(minutes=1),
+            open=95.0,
+            high=105.0,
+            low=95.0,
+            close=105.0,
+            volume=1000,
+            oi=0,
+        ),
+        Bar(
+            timestamp=start_dt + timedelta(minutes=2),
+            open=105.0,
+            high=106.0,
+            low=104.0,
+            close=105.0,
+            volume=1000,
+            oi=0,
+        ),
+        Bar(
+            timestamp=start_dt + timedelta(minutes=3),
+            open=105.0,
+            high=105.0,
+            low=79.0,
+            close=80.0,
+            volume=1000,
+            oi=0,
+        ),
+    ]
+
+    cfg = BacktestConfig(initial_capital=100_000.0, trade_lots=10)
+    runner = BacktestRunner(cfg)
+    result = runner.run(compile_strategy(dsl), bars)
+
+    # 1. Open position remains at simulation terminus
+    assert len(result.terminal_positions) == 1
+    assert result.terminal_positions[0].symbol == "NIFTY"
+    assert result.terminal_positions[0].qty == 10
+
+    # 2. Terminal unrealized PnL is negative (bought at ~105, final close is 80)
+    assert result.terminal_unrealized_pnl < -200.0
+
+    # 3. Liquidated ending equity reflects mark-to-market plus full exit charges & slippage friction
+    assert result.liquidated_ending_equity is not None
+    assert result.liquidated_ending_equity < result.equity_curve[-1]
+
+    # 4. No artificial closed trades injected into roundtrip trade performance
+    assert result.performance.total_trades == 0
+    assert result.performance.ending_equity == result.equity_curve[-1]

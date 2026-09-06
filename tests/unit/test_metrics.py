@@ -40,8 +40,8 @@ def test_calculate_profit_factor_benchmark() -> None:
     # Gross profit: 250, Gross loss: 100 -> PF = 2.5
     assert calculate_profit_factor(pnls) == pytest.approx(2.5)
 
-    # Zero losses -> infinite PF
-    assert math.isinf(calculate_profit_factor([100.0, 200.0]))
+    # Zero losses -> None (statistically undefined)
+    assert calculate_profit_factor([100.0, 200.0]) is None
 
     # Zero profits -> 0.0 PF
     assert calculate_profit_factor([-100.0, -50.0]) == 0.0
@@ -64,8 +64,8 @@ def test_calculate_sharpe_and_sortino_ratios() -> None:
     sharpe = calculate_sharpe_ratio(returns, risk_free_rate=0.0, periods_per_year=252)
     sortino = calculate_sortino_ratio(returns, risk_free_rate=0.0, periods_per_year=252)
 
-    assert sharpe > 0.0
-    assert sortino > 0.0
+    assert sharpe is not None and sharpe > 0.0
+    assert sortino is not None and sortino > 0.0
     # Because downside deviation is smaller than total volatility, Sortino > Sharpe
     assert sortino > sharpe
 
@@ -77,6 +77,7 @@ def test_calculate_sqn_benchmark() -> None:
 
     # Mean: 37.5, N: 4, Sample Variance: 10625.0, StdDev: 103.0776
     # SQN = sqrt(4) * (37.5 / 103.0776) = 0.7276
+    assert sqn is not None
     assert sqn == pytest.approx(0.7276, rel=1e-3)
 
 
@@ -118,22 +119,22 @@ def test_metrics_edge_cases_and_zero_trades() -> None:
     assert report.expectancy == 0.0
     assert report.max_drawdown_amount == 0.0
     assert report.max_drawdown_pct == 0.0
-    assert report.sharpe_ratio == 0.0
-    assert report.sortino_ratio == 0.0
-    assert report.sqn == 0.0
+    assert report.sharpe_ratio is None
+    assert report.sortino_ratio is None
+    assert report.sqn is None
 
     # Negative returns
     neg_returns = [-0.01, -0.02, -0.015, -0.005]
     sharpe_neg = calculate_sharpe_ratio(neg_returns, risk_free_rate=0.0)
     sortino_neg = calculate_sortino_ratio(neg_returns, risk_free_rate=0.0)
-    assert sharpe_neg < 0.0
-    assert sortino_neg < 0.0
+    assert sharpe_neg is not None and sharpe_neg < 0.0
+    assert sortino_neg is not None and sortino_neg < 0.0
 
     # Single trade SQN
-    assert calculate_sqn([100.0]) == 0.0
+    assert calculate_sqn([100.0]) is None
 
     # Zero variance SQN
-    assert calculate_sqn([100.0, 100.0, 100.0]) == 0.0
+    assert calculate_sqn([100.0, 100.0, 100.0]) is None
 
 
 def test_resolve_periods_per_year() -> None:
@@ -181,5 +182,44 @@ def test_timeframe_aware_sharpe_scaling() -> None:
     )
 
     # sqrt(18900) / sqrt(252) = sqrt(75) approx 8.66x
+    assert sharpe_5m_scale is not None and sharpe_daily_scale is not None
     ratio = sharpe_5m_scale / sharpe_daily_scale
     assert ratio == pytest.approx(math.sqrt(75), rel=1e-3)
+
+
+def test_finite_metrics_zero_downside_and_flat() -> None:
+    """Verify that zero downside deviation and zero variance return None rather than infinity."""
+    # 1. Zero downside deviation with positive excess returns -> Sortino should be None (not inf!)
+    positive_returns = [0.01, 0.02, 0.015, 0.03]
+    sortino = calculate_sortino_ratio(positive_returns, risk_free_rate=0.0)
+    assert sortino is None
+
+    # 2. Zero variance (all returns identical) -> Sharpe and Sortino should be None
+    flat_returns = [0.005, 0.005, 0.005, 0.005]
+    assert calculate_sharpe_ratio(flat_returns, risk_free_rate=0.0) is None
+    assert calculate_sortino_ratio(flat_returns, risk_free_rate=0.0) is None
+
+    # 3. Flat equity curve in report
+    report = generate_performance_report(
+        starting_equity=100_000.0,
+        equity_curve=[100_000.0, 100_000.0, 100_000.0],
+        trade_pnls=[],
+    )
+    assert report.sharpe_ratio is None
+    assert report.sortino_ratio is None
+    assert report.profit_factor == 0.0
+
+
+def test_strict_timeframe_resolution() -> None:
+    """Verify strict mode timeframe resolution and second intervals."""
+    # Second intervals
+    assert resolve_periods_per_year("1s") == 252 * (375 * 60)  # 5,670,000
+    assert resolve_periods_per_year("30s") == int(252 * (375 * 2))  # 189,000
+
+    # Strict mode valid
+    assert resolve_periods_per_year("1d", strict=True) == 252
+    assert resolve_periods_per_year("5m", strict=True) == 18_900
+
+    # Strict mode invalid raises ValueError
+    with pytest.raises(ValueError, match="Unsupported or unrecognized timeframe format"):
+        resolve_periods_per_year("invalid_tf", strict=True)

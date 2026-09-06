@@ -303,3 +303,61 @@ def test_risk_engine_position_reversal_lot_limit() -> None:
     )
     assert res_reversal.passed is False
     assert res_reversal.reason == RiskRejectionReason.POSITION_LIMIT_EXCEEDED
+
+
+def test_risk_engine_lot_semantics_equities_futures_options() -> None:
+    """Verify that RiskEngine Gate 4 evaluates contract lot counts rather than raw share quantities."""
+    limits = RiskLimits(max_concurrent_lots=10)
+    engine = RiskEngine(
+        limits=limits,
+        lot_sizes={
+            "NIFTY26MAR24000CE": 25,
+            "RELIANCE-FUT": 250,
+            "TCS": 1,
+        },
+    )
+    balance = AccountBalance(
+        total_capital=2_000_000.0,
+        available_margin=1_800_000.0,
+        used_margin=200_000.0,
+        unrealized_pnl=0.0,
+        realized_pnl=0.0,
+    )
+
+    # 1. Options order: NIFTY qty=50 with lot_size=25 -> 2 lots
+    # Raw qty (50) would exceed max_concurrent_lots (10), but 2 lots passes easily!
+    order_opt = _create_order(symbol="NIFTY26MAR24000CE", side=OrderSide.BUY, qty=50)
+    res_opt = engine.validate_order(order_opt, balance, {}, current_market_price=150.0)
+    assert res_opt.passed is True
+
+    # 2. Futures order: RELIANCE qty=500 with lot_size=250 -> 2 lots
+    # Raw qty (500) would vastly exceed limit, but 2 lots passes!
+    order_fut = _create_order(symbol="RELIANCE-FUT", side=OrderSide.BUY, qty=500)
+    res_fut = engine.validate_order(order_fut, balance, {}, current_market_price=2500.0)
+    assert res_fut.passed is True
+
+    # 3. Simulate holding both positions: 2 lots + 2 lots = 4 lots active
+    positions = {
+        "NIFTY26MAR24000CE": Position(
+            symbol="NIFTY26MAR24000CE", qty=50, buy_avg_price=150.0, updated_at=_NOW
+        ),
+        "RELIANCE-FUT": Position(
+            symbol="RELIANCE-FUT", qty=500, buy_avg_price=2500.0, updated_at=_NOW
+        ),
+    }
+
+    # 4. Equities order: TCS qty=20 with lot_size=1 -> 20 lots.
+    # Total projected lots = 4 (existing) + 20 (new) = 24 lots > 10 allowable -> REJECTED!
+    order_eq = _create_order(symbol="TCS", side=OrderSide.BUY, qty=20)
+    res_eq = engine.validate_order(order_eq, balance, positions, current_market_price=3500.0)
+    assert res_eq.passed is False
+    assert res_eq.reason == RiskRejectionReason.POSITION_LIMIT_EXCEEDED
+    assert "Order lots (20) brings total lots (24)" in (res_eq.detail or "")
+
+    # 5. Dynamic lot_size override parameter: INFOSYS with lot_size=100, qty=200 -> 2 lots
+    # Total projected = 4 + 2 = 6 <= 10 -> PASSES
+    order_override = _create_order(symbol="INFOSYS", side=OrderSide.BUY, qty=200)
+    res_override = engine.validate_order(
+        order_override, balance, positions, current_market_price=1600.0, lot_size=100
+    )
+    assert res_override.passed is True

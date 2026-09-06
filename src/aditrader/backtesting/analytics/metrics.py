@@ -41,8 +41,9 @@ class PerformanceReport(BaseModel):
 
     gross_profit: float = Field(..., ge=0.0, description="Sum of all positive trade PnLs")
     gross_loss: float = Field(..., ge=0.0, description="Sum of all negative trade PnLs (absolute)")
-    profit_factor: float = Field(..., ge=0.0, description="Gross profit divided by gross loss")
-
+    profit_factor: float | None = Field(
+        default=None, description="Gross Profits / Gross Losses (None if undefined / zero losses)"
+    )
     expectancy: float = Field(..., description="Mathematical expectancy per trade in INR")
     max_drawdown_amount: float = Field(
         ..., ge=0.0, description="Maximum peak-to-trough decline in INR"
@@ -51,13 +52,15 @@ class PerformanceReport(BaseModel):
         ..., ge=0.0, le=1.0, description="Maximum peak-to-trough decline fraction"
     )
 
-    sharpe_ratio: float = Field(
-        ..., description="Annualized risk-adjusted excess return over volatility"
+    sharpe_ratio: float | None = Field(
+        default=None,
+        description="Annualized risk-adjusted excess return over volatility (None if undefined)",
     )
-    sortino_ratio: float = Field(
-        ..., description="Annualized risk-adjusted excess return over downside volatility"
+    sortino_ratio: float | None = Field(
+        default=None,
+        description="Annualized risk-adjusted excess return over downside volatility (None if undefined)",
     )
-    sqn: float = Field(..., description="System Quality Number (Van Tharp)")
+    sqn: float | None = Field(default=None, description="System Quality Number (None if undefined)")
 
 
 def calculate_expectancy(trade_pnls: list[float]) -> float:
@@ -89,18 +92,15 @@ def calculate_expectancy(trade_pnls: list[float]) -> float:
     return (win_rate * avg_win) - (loss_rate * avg_loss)
 
 
-def calculate_profit_factor(trade_pnls: list[float]) -> float:
-    r"""Calculate Profit Factor (PF).
-
-    Formula:
-        PF = sum(Gross Profits) / sum(|Gross Losses|)
+def calculate_profit_factor(trade_pnls: list[float]) -> float | None:
+    r"""Calculate Profit Factor (Gross Profits / Gross Losses).
 
     Args:
         trade_pnls: List of net PnL values per completed trade.
 
     Returns:
-        Profit Factor. Returns float('inf') if no losses and positive profit;
-        returns 0.0 if no trades or no profits.
+        Profit Factor as float, None if statistically undefined (zero losses with profit),
+        or 0.0 if no trades or no profits.
     """
     if not trade_pnls:
         return 0.0
@@ -109,7 +109,7 @@ def calculate_profit_factor(trade_pnls: list[float]) -> float:
     gross_loss = sum(abs(p) for p in trade_pnls if p < 0.0)
 
     if gross_loss == 0.0:
-        return float("inf") if gross_profit > 0.0 else 0.0
+        return None if gross_profit > 0.0 else 0.0
 
     return gross_profit / gross_loss
 
@@ -149,7 +149,9 @@ def calculate_max_drawdown(equity_curve: list[float]) -> DrawdownResult:
     return DrawdownResult(max_drawdown_amount=max_dd_amount, max_drawdown_pct=max_dd_pct)
 
 
-def resolve_periods_per_year(timeframe: str, trading_days_per_year: int = 252) -> int:
+def resolve_periods_per_year(
+    timeframe: str, trading_days_per_year: int = 252, strict: bool = False
+) -> int:
     """Resolve annualization frequency scaling factor from bar timeframe string.
 
     Standard NSE regular market session duration: 375 minutes (09:15 to 15:30 IST).
@@ -193,7 +195,20 @@ def resolve_periods_per_year(timeframe: str, trading_days_per_year: int = 252) -
         bars_per_day = session_minutes / minutes
         return max(1, round(trading_days_per_year * bars_per_day))
 
-    # Default to trading_days_per_year if unrecognized
+    # Match second patterns: e.g. '1s', '5s', '30s', '60second'
+    match_sec = re.match(r"^(\d+(?:\.\d+)?)\s*(?:s|sec|secs|second|seconds)$", tf)
+    if match_sec:
+        seconds = max(1.0, float(match_sec.group(1)))
+        bars_per_day = (session_minutes * 60.0) / seconds
+        return max(1, round(trading_days_per_year * bars_per_day))
+
+    if strict:
+        raise ValueError(
+            f"Unsupported or unrecognized timeframe format: '{timeframe}'. "
+            "Must be daily ('1d'), weekly ('1w'), monthly ('1mo'), or intraday minutes/hours/seconds."
+        )
+
+    # Default to trading_days_per_year if unrecognized and not strict
     return trading_days_per_year
 
 
@@ -201,7 +216,7 @@ def calculate_sharpe_ratio(
     returns: list[float],
     risk_free_rate: float = 0.0,
     periods_per_year: int = 252,
-) -> float:
+) -> float | None:
     r"""Calculate Annualized Sharpe Ratio.
 
     Formula:
@@ -213,19 +228,19 @@ def calculate_sharpe_ratio(
         periods_per_year: Frequency scaling factor (252 for daily, 252 * 75 for 5m).
 
     Returns:
-        Annualized Sharpe Ratio (0.0 if standard deviation is zero or len < 2).
+        Annualized Sharpe Ratio as float, or None if statistically undefined (len < 2 or variance <= 0).
     """
     n = len(returns)
     if n < 2:
-        return 0.0
+        return None
+
+    variance = sum((r - (sum(returns) / n)) ** 2 for r in returns) / (n - 1)
+    if variance <= 0.0:
+        return None
 
     rf_per_period = risk_free_rate / periods_per_year
     excess_returns = [r - rf_per_period for r in returns]
     mean_excess = sum(excess_returns) / n
-
-    variance = sum((r - (sum(returns) / n)) ** 2 for r in returns) / (n - 1)
-    if variance <= 0.0:
-        return 0.0
 
     std_dev = math.sqrt(variance)
     return (mean_excess / std_dev) * math.sqrt(periods_per_year)
@@ -235,7 +250,7 @@ def calculate_sortino_ratio(
     returns: list[float],
     risk_free_rate: float = 0.0,
     periods_per_year: int = 252,
-) -> float:
+) -> float | None:
     r"""Calculate Annualized Sortino Ratio focusing on downside risk.
 
     Formula:
@@ -248,11 +263,16 @@ def calculate_sortino_ratio(
         periods_per_year: Frequency scaling factor (252 for daily).
 
     Returns:
-        Annualized Sortino Ratio.
+        Annualized Sortino Ratio as float, or None if statistically undefined (len < 2 or downside variance <= 0).
     """
     n = len(returns)
     if n < 2:
-        return 0.0
+        return None
+
+    # If returns exhibit zero overall variance (flat equity), Sortino is statistically undefined
+    variance = sum((r - (sum(returns) / n)) ** 2 for r in returns) / (n - 1)
+    if variance <= 0.0:
+        return None
 
     rf_per_period = risk_free_rate / periods_per_year
     excess_returns = [r - rf_per_period for r in returns]
@@ -262,13 +282,13 @@ def calculate_sortino_ratio(
     downside_variance = sum(downside_diffs) / n
 
     if downside_variance <= 0.0:
-        return float("inf") if mean_excess > 0.0 else 0.0
+        return None
 
     downside_std = math.sqrt(downside_variance)
     return (mean_excess / downside_std) * math.sqrt(periods_per_year)
 
 
-def calculate_sqn(trade_pnls: list[float]) -> float:
+def calculate_sqn(trade_pnls: list[float]) -> float | None:
     r"""Calculate System Quality Number (SQN) per Van Tharp.
 
     Formula:
@@ -278,17 +298,17 @@ def calculate_sqn(trade_pnls: list[float]) -> float:
         trade_pnls: List of net PnL values per completed trade.
 
     Returns:
-        SQN score (0.0 if N < 2 or std dev == 0).
+        SQN score as float, or None if statistically undefined (N < 2 or variance <= 0).
     """
     n = len(trade_pnls)
     if n < 2:
-        return 0.0
+        return None
 
     mean_pnl = sum(trade_pnls) / n
     variance = sum((p - mean_pnl) ** 2 for p in trade_pnls) / (n - 1)
 
     if variance <= 0.0:
-        return 0.0
+        return None
 
     std_dev = math.sqrt(variance)
     return math.sqrt(n) * (mean_pnl / std_dev)

@@ -6,6 +6,9 @@ circuit breakers (5% limit), and unhedged expiry-day gamma protection.
 Completely decoupled from strategy generation and evaluated at order submission.
 """
 
+import math
+from datetime import datetime
+
 from aditrader.core.models.enums import OrderSide
 from aditrader.core.models.execution import AccountBalance, Position
 from aditrader.core.models.order import Order
@@ -16,27 +19,42 @@ class RiskEngine:
     """Institutional pre-trade risk engine and portfolio safety gatekeeper."""
 
     def __init__(
-        self, limits: RiskLimits | None = None, initial_capital: float = 1_000_000.0
+        self,
+        limits: RiskLimits | None = None,
+        initial_capital: float = 1_000_000.0,
+        lot_sizes: dict[str, int] | None = None,
     ) -> None:
         self.limits = limits or RiskLimits()
         self.initial_capital = initial_capital
         self.peak_equity = initial_capital
         self.current_equity = initial_capital
+        self.session_starting_equity = initial_capital
+        self.session_peak_equity = initial_capital
         self._circuit_breaker_active = False
+        self.lot_sizes: dict[str, int] = dict(lot_sizes or {})
 
     @property
     def circuit_breaker_active(self) -> bool:
         """Indicates whether portfolio drawdown circuit breaker is currently active."""
         return self._circuit_breaker_active
 
+    def on_session_start(self, timestamp: datetime, current_equity: float) -> None:
+        """Reset intraday circuit breaker for a new trading session while preserving cumulative risk state."""
+        self.session_starting_equity = current_equity
+        self.session_peak_equity = current_equity
+        self._circuit_breaker_active = False
+
     def update_equity(self, current_equity: float) -> None:
-        """Update current portfolio equity and evaluate circuit breaker threshold."""
+        """Update current portfolio equity and evaluate intraday circuit breaker threshold."""
         self.current_equity = current_equity
         if current_equity > self.peak_equity:
             self.peak_equity = current_equity
+        if current_equity > self.session_peak_equity:
+            self.session_peak_equity = current_equity
 
-        if self.peak_equity > 0.0:
-            dd_pct = (self.peak_equity - current_equity) / self.peak_equity
+        # Intraday Drawdown Breaker (evaluated relative to current session peak)
+        if self.session_peak_equity > 0.0:
+            dd_pct = (self.session_peak_equity - current_equity) / self.session_peak_equity
             if dd_pct >= self.limits.portfolio_drawdown_limit_pct:
                 self._circuit_breaker_active = True
 
@@ -44,7 +62,19 @@ class RiskEngine:
         """Reset equity high-water mark and clear circuit breaker."""
         self.peak_equity = self.initial_capital
         self.current_equity = self.initial_capital
+        self.session_starting_equity = self.initial_capital
+        self.session_peak_equity = self.initial_capital
         self._circuit_breaker_active = False
+
+    def resolve_lots(self, symbol: str, qty: int, default_lot_size: int = 1) -> int:
+        """Compute integer lot count for a raw instrument quantity.
+
+        Uses registered lot size from `lot_sizes` or fallback `default_lot_size`.
+        """
+        lot_size = self.lot_sizes.get(symbol, default_lot_size)
+        if lot_size <= 0:
+            lot_size = 1
+        return math.ceil(abs(qty) / lot_size)
 
     def validate_order(
         self,
@@ -53,6 +83,7 @@ class RiskEngine:
         positions: dict[str, Position],
         current_market_price: float,
         *,
+        lot_size: int | None = None,
         is_expiry_day: bool = False,
         is_naked_short: bool = False,
     ) -> RiskCheckResult:
@@ -63,6 +94,7 @@ class RiskEngine:
             balance: Current point-in-time AccountBalance snapshot.
             positions: Map of active portfolio positions.
             current_market_price: Prevailing price for estimated margin calculations.
+            lot_size: Optional contract lot size for derivative lot conversion (defaults to 1 for shares).
             is_expiry_day: True if current bar date is expiration date.
             is_naked_short: True if order represents an unhedged naked short option.
 
@@ -89,7 +121,7 @@ class RiskEngine:
                 passed=False,
                 reason=RiskRejectionReason.CIRCUIT_BREAKER_ACTIVE,
                 detail=(
-                    f"Portfolio drawdown circuit breaker active (peak: {self.peak_equity:.2f}, "
+                    f"Portfolio drawdown circuit breaker active (session peak: {self.session_peak_equity:.2f}, "
                     f"current: {self.current_equity:.2f}). New entries and position flips prohibited."
                 ),
             )
@@ -131,14 +163,33 @@ class RiskEngine:
 
         # Gate 4: Maximum Position Limits (lots)
         if not is_pure_closing:
-            total_current_lots = sum(abs(p.qty) for p in positions.values())
-            projected_lots = total_current_lots - existing_qty_abs + net_new_qty
+            if lot_size is not None:
+                self.lot_sizes[order.symbol] = lot_size
+            sym_lot_size = lot_size or self.lot_sizes.get(order.symbol, 1)
+
+            order_lots = self.resolve_lots(order.symbol, order.qty, default_lot_size=sym_lot_size)
+            existing_lots = (
+                self.resolve_lots(order.symbol, existing_qty_abs, default_lot_size=sym_lot_size)
+                if is_opposite
+                else 0
+            )
+            net_new_lots = max(0, order_lots - existing_lots) if is_opposite else order_lots
+
+            total_current_lots = sum(
+                self.resolve_lots(
+                    p.symbol,
+                    p.qty,
+                    default_lot_size=sym_lot_size if p.symbol == order.symbol else 1,
+                )
+                for p in positions.values()
+            )
+            projected_lots = total_current_lots - existing_lots + net_new_lots
             if projected_lots > self.limits.max_concurrent_lots:
                 return RiskCheckResult(
                     passed=False,
                     reason=RiskRejectionReason.POSITION_LIMIT_EXCEEDED,
                     detail=(
-                        f"Order qty ({order.qty}) brings total lots ({projected_lots}) "
+                        f"Order lots ({order_lots}) brings total lots ({projected_lots}) "
                         f"above maximum allowable ({self.limits.max_concurrent_lots})."
                     ),
                 )
