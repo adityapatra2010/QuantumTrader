@@ -1,12 +1,14 @@
 """Unit tests verifying deterministic backtesting engine, execution timing, and risk gates."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 
 from aditrader.backtesting.runner import BacktestConfig, BacktestRunner
 from aditrader.core.models.enums import OrderSide, OrderStatus, SignalDirection
 from aditrader.core.models.market_data import Bar
+from aditrader.core.models.trade_signal import Signal
 from aditrader.core.risk.models import RiskLimits
 from aditrader.data.feeds.synthetic_feed import SyntheticDataFeed
 from aditrader.data.session import EXCHANGE_TIMEZONE
@@ -18,7 +20,7 @@ from aditrader.strategy.builder.schema import (
     StrategyDSL,
     StrategyLegDefinition,
 )
-from aditrader.strategy.compiler.engine import compile_strategy
+from aditrader.strategy.compiler.engine import ExecutableStrategy, compile_strategy
 
 
 def _build_test_strategy(underlying: str = "NIFTY") -> StrategyDSL:
@@ -237,3 +239,61 @@ def test_backtest_runner_walk_forward_pipeline() -> None:
         strat_test = compile_strategy(dsl)
         res_test = runner.run(strat_test, w.test_bars)
         assert res_test.bar_count == 10
+
+
+def test_backtest_runner_expiry_naked_short_rejection() -> None:
+    """Verify backtest runner enforces unhedged naked short rejection on expiry day."""
+    from aditrader.core.risk.models import RiskRejectionReason
+
+    # Strategy that sells CE on trigger
+    dsl = StrategyDSL(
+        schema_version="1.0",
+        name="Short Call Expiry Strategy",
+        underlying="NIFTY",
+        timeframe="1m",
+        entry_conditions=ConditionGroup(
+            operator=ASTOperator.AND,
+            conditions=[
+                ConditionNode(
+                    category=ConditionCategory.INDICATOR,
+                    field="close",
+                    operator=ASTOperator.GREATER_THAN,
+                    threshold=100.0,
+                )
+            ],
+        ),
+        legs=[
+            StrategyLegDefinition(
+                contract_type="CE",
+                side=OrderSide.SELL,
+                strike_offset=1,
+                lots=1,
+            )
+        ],
+    )
+    bars = _generate_bars()
+
+    class ExpiryShortStrategy(ExecutableStrategy):
+        def on_bar(self, history: list[Bar], **kwargs: Any) -> Signal | None:
+            sig = super().on_bar(history, **kwargs)
+            if sig is not None:
+                return sig.model_copy(
+                    update={
+                        "direction": SignalDirection.SELL,
+                        "metadata": {"is_expiry_day": True, "is_naked_short": True},
+                    }
+                )
+            return None
+
+    strat = ExpiryShortStrategy(dsl)
+    runner = BacktestRunner(BacktestConfig(allow_same_bar_execution=True))
+    result = runner.run(strat, bars)
+
+    assert len(result.signals) > 0
+    assert len(result.orders) > 0
+    assert any(
+        o.status == OrderStatus.REJECTED
+        and RiskRejectionReason.EXPIRY_NAKED_SHORT_PROHIBITED.value in (o.rejection_reason or "")
+        for o in result.orders
+    )
+    assert len(result.trades) == 0

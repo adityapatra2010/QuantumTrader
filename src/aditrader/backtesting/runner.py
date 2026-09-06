@@ -232,18 +232,22 @@ class BacktestRunner:
         balance = broker.get_account_balance()
         positions_map = {p.symbol: p for p in broker.get_positions()}
 
+        is_expiry_day = bool(signal.metadata.get("is_expiry_day", False))
+        is_naked_short = bool(signal.metadata.get("is_naked_short", False))
+
         risk_check = risk_engine.validate_order(
             order=tentative_order,
             balance=balance,
             positions=positions_map,
             current_market_price=execution_price,
+            is_expiry_day=is_expiry_day,
+            is_naked_short=is_naked_short,
         )
 
         if not risk_check.passed:
             # Order rejected by pre-trade risk engine
-            rejection_reason = risk_check.detail or (
-                risk_check.reason.value if risk_check.reason else "Risk gate rejection"
-            )
+            prefix = f"{risk_check.reason.value}: " if risk_check.reason else ""
+            rejection_reason = f"{prefix}{risk_check.detail or 'Risk gate rejection'}"
             rejected_order = OrderStateMachine.transition(
                 tentative_order,
                 OrderStatus.REJECTED,

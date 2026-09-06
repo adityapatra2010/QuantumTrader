@@ -101,3 +101,35 @@ def test_generate_performance_report_integration() -> None:
     assert report.profit_factor == pytest.approx(13_000.0 / 3_000.0)
     assert report.max_drawdown_amount == pytest.approx(3_000.0)
     assert report.max_drawdown_pct == pytest.approx(3_000.0 / 105_000.0)
+
+
+def test_metrics_edge_cases_and_zero_trades() -> None:
+    """Verify metrics behavior on zero trades, flat equity, and constant returns."""
+    # Zero trades report
+    report = generate_performance_report(
+        starting_equity=100_000.0,
+        equity_curve=[100_000.0],
+        trade_pnls=[],
+    )
+    assert report.total_trades == 0
+    assert report.win_rate == 0.0
+    assert report.profit_factor == 0.0
+    assert report.expectancy == 0.0
+    assert report.max_drawdown_amount == 0.0
+    assert report.max_drawdown_pct == 0.0
+    assert report.sharpe_ratio == 0.0
+    assert report.sortino_ratio == 0.0
+    assert report.sqn == 0.0
+
+    # Negative returns
+    neg_returns = [-0.01, -0.02, -0.015, -0.005]
+    sharpe_neg = calculate_sharpe_ratio(neg_returns, risk_free_rate=0.0)
+    sortino_neg = calculate_sortino_ratio(neg_returns, risk_free_rate=0.0)
+    assert sharpe_neg < 0.0
+    assert sortino_neg < 0.0
+
+    # Single trade SQN
+    assert calculate_sqn([100.0]) == 0.0
+
+    # Zero variance SQN
+    assert calculate_sqn([100.0, 100.0, 100.0]) == 0.0
