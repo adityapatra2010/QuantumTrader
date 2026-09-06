@@ -79,12 +79,14 @@ def profile_strategy_dna(dsl: StrategyDSL) -> StrategyDNA:
     # Iron Condor / Credit Spreads check: equal long and short legs, but short legs closer to ATM
     if total_long_lots == total_short_lots and total_short_lots > 0:
         # Check average strike distance from ATM (abs strike offset)
-        avg_short_offset = sum(
-            abs(leg.strike_offset) for leg in legs if leg.side == OrderSide.SELL
-        ) / total_short_lots
-        avg_long_offset = sum(
-            abs(leg.strike_offset) for leg in legs if leg.side == OrderSide.BUY
-        ) / total_long_lots
+        avg_short_offset = (
+            sum(abs(leg.strike_offset) for leg in legs if leg.side == OrderSide.SELL)
+            / total_short_lots
+        )
+        avg_long_offset = (
+            sum(abs(leg.strike_offset) for leg in legs if leg.side == OrderSide.BUY)
+            / total_long_lots
+        )
 
         if avg_short_offset < avg_long_offset:
             # Short legs are closer to ATM (Credit Spread / Iron Condor)
@@ -109,10 +111,18 @@ def profile_strategy_dna(dsl: StrategyDSL) -> StrategyDNA:
 
     # 3. Gamma Risk & Margin Efficiency
     # Check if all short positions are covered by long positions
-    short_call_lots = sum(leg.lots for leg in legs if leg.contract_type == "CE" and leg.side == OrderSide.SELL)
-    long_call_lots = sum(leg.lots for leg in legs if leg.contract_type == "CE" and leg.side == OrderSide.BUY)
-    short_put_lots = sum(leg.lots for leg in legs if leg.contract_type == "PE" and leg.side == OrderSide.SELL)
-    long_put_lots = sum(leg.lots for leg in legs if leg.contract_type == "PE" and leg.side == OrderSide.BUY)
+    short_call_lots = sum(
+        leg.lots for leg in legs if leg.contract_type == "CE" and leg.side == OrderSide.SELL
+    )
+    long_call_lots = sum(
+        leg.lots for leg in legs if leg.contract_type == "CE" and leg.side == OrderSide.BUY
+    )
+    short_put_lots = sum(
+        leg.lots for leg in legs if leg.contract_type == "PE" and leg.side == OrderSide.SELL
+    )
+    long_put_lots = sum(
+        leg.lots for leg in legs if leg.contract_type == "PE" and leg.side == OrderSide.BUY
+    )
 
     has_uncovered_short = (short_call_lots > long_call_lots) or (short_put_lots > long_put_lots)
 
@@ -143,9 +153,15 @@ def profile_strategy_dna(dsl: StrategyDSL) -> StrategyDNA:
         else:
             target_regime = MarketRegime.RANGEBOUND
     else:
-        if directionality == Directionality.DELTA_NEUTRAL and vega_exposure == VegaExposure.NEGATIVE:
+        if (
+            directionality == Directionality.DELTA_NEUTRAL
+            and vega_exposure == VegaExposure.NEGATIVE
+        ):
             target_regime = MarketRegime.LOW_IV_SIDEWAYS
-        elif directionality == Directionality.DELTA_NEUTRAL and vega_exposure == VegaExposure.POSITIVE:
+        elif (
+            directionality == Directionality.DELTA_NEUTRAL
+            and vega_exposure == VegaExposure.POSITIVE
+        ):
             target_regime = MarketRegime.HIGH_IV_EXPANSION
         elif directionality in (Directionality.BULLISH, Directionality.BEARISH):
             target_regime = MarketRegime.TREND_FOLLOWING

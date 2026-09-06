@@ -1,0 +1,103 @@
+"""Unit tests verifying mathematical accuracy of performance and risk metrics."""
+
+import math
+
+import pytest
+
+from aditrader.backtesting.analytics.metrics import (
+    calculate_expectancy,
+    calculate_max_drawdown,
+    calculate_profit_factor,
+    calculate_sharpe_ratio,
+    calculate_sortino_ratio,
+    calculate_sqn,
+    generate_performance_report,
+)
+
+
+def test_calculate_expectancy_benchmark() -> None:
+    """Verify expectancy formula against known trade outcomes."""
+    # 2 wins (+100, +150) and 2 losses (-50, -50)
+    pnls = [100.0, -50.0, 150.0, -50.0]
+    expectancy = calculate_expectancy(pnls)
+    # Win rate: 0.5, avg win: 125.0; Loss rate: 0.5, avg loss: 50.0
+    # E = (0.5 * 125.0) - (0.5 * 50.0) = 62.5 - 25.0 = 37.5
+    assert expectancy == pytest.approx(37.5)
+
+
+def test_calculate_expectancy_empty_or_all_wins() -> None:
+    """Verify expectancy on edge cases (empty list, zero losses)."""
+    assert calculate_expectancy([]) == 0.0
+
+    all_wins = [50.0, 50.0, 50.0]
+    assert calculate_expectancy(all_wins) == pytest.approx(50.0)
+
+
+def test_calculate_profit_factor_benchmark() -> None:
+    """Verify Profit Factor calculation: Gross Profits / Gross Losses."""
+    pnls = [100.0, -50.0, 150.0, -50.0]
+    # Gross profit: 250, Gross loss: 100 -> PF = 2.5
+    assert calculate_profit_factor(pnls) == pytest.approx(2.5)
+
+    # Zero losses -> infinite PF
+    assert math.isinf(calculate_profit_factor([100.0, 200.0]))
+
+    # Zero profits -> 0.0 PF
+    assert calculate_profit_factor([-100.0, -50.0]) == 0.0
+
+
+def test_calculate_max_drawdown_benchmark() -> None:
+    """Verify peak-to-trough drawdown calculation in INR and percentage."""
+    equity = [1000.0, 1200.0, 1100.0, 900.0, 1300.0]
+    dd = calculate_max_drawdown(equity)
+
+    # Peak: 1200, Trough: 900 -> DD amount: 300, DD pct: 300/1200 = 0.25 (25%)
+    assert dd.max_drawdown_amount == pytest.approx(300.0)
+    assert dd.max_drawdown_pct == pytest.approx(0.25)
+
+
+def test_calculate_sharpe_and_sortino_ratios() -> None:
+    """Verify annualized Sharpe and Sortino ratios."""
+    # Positive daily returns with occasional dip
+    returns = [0.01, 0.02, -0.005, 0.015, 0.008]
+    sharpe = calculate_sharpe_ratio(returns, risk_free_rate=0.0, periods_per_year=252)
+    sortino = calculate_sortino_ratio(returns, risk_free_rate=0.0, periods_per_year=252)
+
+    assert sharpe > 0.0
+    assert sortino > 0.0
+    # Because downside deviation is smaller than total volatility, Sortino > Sharpe
+    assert sortino > sharpe
+
+
+def test_calculate_sqn_benchmark() -> None:
+    """Verify System Quality Number (Van Tharp)."""
+    pnls = [100.0, -50.0, 150.0, -50.0]
+    sqn = calculate_sqn(pnls)
+
+    # Mean: 37.5, N: 4, Sample Variance: 10625.0, StdDev: 103.0776
+    # SQN = sqrt(4) * (37.5 / 103.0776) = 0.7276
+    assert sqn == pytest.approx(0.7276, rel=1e-3)
+
+
+def test_generate_performance_report_integration() -> None:
+    """Verify full PerformanceReport generation."""
+    equity_curve = [100_000.0, 105_000.0, 102_000.0, 110_000.0]
+    trade_pnls = [5_000.0, -3_000.0, 8_000.0]
+
+    report = generate_performance_report(
+        starting_equity=100_000.0,
+        equity_curve=equity_curve,
+        trade_pnls=trade_pnls,
+    )
+
+    assert report.starting_equity == 100_000.0
+    assert report.ending_equity == 110_000.0
+    assert report.net_profit == 10_000.0
+    assert report.return_pct == pytest.approx(0.10)
+    assert report.total_trades == 3
+    assert report.winning_trades == 2
+    assert report.losing_trades == 1
+    assert report.win_rate == pytest.approx(2 / 3)
+    assert report.profit_factor == pytest.approx(13_000.0 / 3_000.0)
+    assert report.max_drawdown_amount == pytest.approx(3_000.0)
+    assert report.max_drawdown_pct == pytest.approx(3_000.0 / 105_000.0)

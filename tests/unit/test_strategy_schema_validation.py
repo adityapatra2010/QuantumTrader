@@ -34,9 +34,7 @@ def test_valid_strategy_dsl_instantiation() -> None:
             ],
         ),
         legs=[
-            StrategyLegDefinition(
-                contract_type="CE", side=OrderSide.BUY, strike_offset=0, lots=1
-            )
+            StrategyLegDefinition(contract_type="CE", side=OrderSide.BUY, strike_offset=0, lots=1)
         ],
     )
     assert dsl.schema_version == "1.0"

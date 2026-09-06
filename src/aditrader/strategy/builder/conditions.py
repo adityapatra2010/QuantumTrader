@@ -24,11 +24,15 @@ class EvaluationContext(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    history: list[Bar] = Field(..., min_length=1, description="Historical OHLCV bars leading to current bar")
+    history: list[Bar] = Field(
+        ..., min_length=1, description="Historical OHLCV bars leading to current bar"
+    )
     current_time: datetime | None = Field(
         default=None, description="Current exchange timestamp (defaults to latest bar timestamp)"
     )
-    greeks: Greeks | None = Field(default=None, description="Active position or ATM Greeks snapshot")
+    greeks: Greeks | None = Field(
+        default=None, description="Active position or ATM Greeks snapshot"
+    )
     current_premium: float | None = Field(
         default=None, ge=0.0, description="Current live option/strategy premium"
     )
@@ -90,9 +94,7 @@ class BaseASTEvaluator(ABC):
 
         raise ValueError(f"Unsupported group operator '{group.operator}'")
 
-    def evaluate(
-        self, item: ConditionNode | ConditionGroup, context: EvaluationContext
-    ) -> bool:
+    def evaluate(self, item: ConditionNode | ConditionGroup, context: EvaluationContext) -> bool:
         """Dispatch evaluation to node or group."""
         if isinstance(item, ConditionGroup):
             return self.evaluate_group(item, context)

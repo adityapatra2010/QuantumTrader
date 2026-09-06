@@ -65,7 +65,9 @@ def create_nifty_iron_condor_dsl() -> StrategyDSL:
             # Long Call Hedge
             StrategyLegDefinition(contract_type="CE", side=OrderSide.BUY, strike_offset=2, lots=1),
             # Short Put Wing
-            StrategyLegDefinition(contract_type="PE", side=OrderSide.SELL, strike_offset=-1, lots=1),
+            StrategyLegDefinition(
+                contract_type="PE", side=OrderSide.SELL, strike_offset=-1, lots=1
+            ),
             # Long Put Hedge
             StrategyLegDefinition(contract_type="PE", side=OrderSide.BUY, strike_offset=-2, lots=1),
         ],

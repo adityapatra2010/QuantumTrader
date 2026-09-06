@@ -1,4 +1,4 @@
-"""Backtesting engine, execution runners, dataset splitters, and analytics."""
+"""Analytics facade module re-exporting metrics."""
 
 from aditrader.backtesting.analytics.metrics import (
     DrawdownResult,
@@ -11,21 +11,10 @@ from aditrader.backtesting.analytics.metrics import (
     calculate_sqn,
     generate_performance_report,
 )
-from aditrader.backtesting.runner import BacktestConfig, BacktestResult, BacktestRunner
-from aditrader.backtesting.splitters import (
-    WalkForwardWindow,
-    generate_walk_forward_windows,
-    split_out_of_sample,
-    split_train_test,
-)
 
 __all__ = [
-    "BacktestConfig",
-    "BacktestResult",
-    "BacktestRunner",
     "DrawdownResult",
     "PerformanceReport",
-    "WalkForwardWindow",
     "calculate_expectancy",
     "calculate_max_drawdown",
     "calculate_profit_factor",
@@ -33,7 +22,4 @@ __all__ = [
     "calculate_sortino_ratio",
     "calculate_sqn",
     "generate_performance_report",
-    "generate_walk_forward_windows",
-    "split_out_of_sample",
-    "split_train_test",
 ]

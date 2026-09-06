@@ -151,14 +151,20 @@ class ConditionNode(BaseModel):
                 )
 
         elif self.operator in (ASTOperator.GREATER_THAN, ASTOperator.LESS_THAN, ASTOperator.EQUALS):
-            if self.threshold is None and self.compare_indicator is None and self.compare_to_field is None:
+            if (
+                self.threshold is None
+                and self.compare_indicator is None
+                and self.compare_to_field is None
+            ):
                 raise ValueError(
                     f"Operator {self.operator.value} requires a 'threshold', 'compare_to_field', or 'compare_indicator'."
                 )
 
         # Must have either a field or an indicator or target_regime
         if self.field is None and self.indicator is None and self.target_regime is None:
-            raise ValueError("ConditionNode must specify either 'field', 'indicator', or 'target_regime'.")
+            raise ValueError(
+                "ConditionNode must specify either 'field', 'indicator', or 'target_regime'."
+            )
 
         return self
 

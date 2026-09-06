@@ -99,7 +99,9 @@ class StrategyRecord(BaseModel):
     id: str = Field(..., min_length=1, description="Unique strategy record identifier (UUID)")
     name: str = Field(..., min_length=1, description="Human-readable strategy name")
     version: str = Field(..., min_length=1, description="Semantic version string (e.g., '1.0.0')")
-    category: StrategyCategory = Field(default=StrategyCategory.BUILT_IN, description="Strategy origin")
+    category: StrategyCategory = Field(
+        default=StrategyCategory.BUILT_IN, description="Strategy origin"
+    )
     creator: str = Field(default="System", description="Strategy author or generator subsystem")
     created_at: datetime = Field(..., description="Creation timestamp in UTC/IST")
     validation_score: float | None = Field(

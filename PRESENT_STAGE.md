@@ -1,24 +1,24 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-06 17:05 IST  
-**Current Phase**: Phase 4 — COMPLETE & AUDITED ✅ | Preparing Phase 5 (Backtesting Engine & Anti-Overfitting Controls)  
-**Last Verified By**: AGY CLI Phase 4 Test & Tooling Suite (Ruff, Mypy Strict, Pytest 102/102)  
+**Last Updated**: 2026-09-06 17:35 IST  
+**Current Phase**: Phase 5 — COMPLETE & AUDITED ✅ | Preparing Phase 6 (Validation Engine & Institutional Mode)  
+**Last Verified By**: AGY CLI Phase 5 Test & Tooling Suite (Ruff, Mypy Strict, Pytest 126/126)  
 
 ---
 
 ## Repository State
 
 - **Branch**: `main`
-- **Working Tree**: Core domain entities, order state machine, paper broker, local SQLite ledger persistence, market data feeds, Kotak Neo adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, and version-controlled strategy registry implemented and verified.
+- **Working Tree**: Core domain entities, order state machine, paper broker, local SQLite ledger persistence, market data feeds, Kotak Neo adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine, walk-forward analysis & OOS splitters, pre-trade risk engine, and quantitative performance analytics implemented and verified.
 
 ---
 
 ## Active Implementation Rules
 
-Until Phase 5 sign-off:
+Until Phase 6 sign-off:
 - **Do not implement live broker order routing** (strictly air-gapped; read-only market data feeds only).
 - **Do not execute raw dynamic code** (`eval()`, `exec()`, or dynamic python code generation).
-- **Do not implement backtesting loops, walk-forward splitters, or risk gates** (Phase 5).
+- **Do not implement validation policy rules or institutional rejection filters** (Phase 6).
 - **Do not integrate AI forecasting or vision modules** (Phases 6 & 7).
 - **Do not construct Plotly Dash dashboards or interactive CLI handlers** (Phase 8).
 - **Do not modify architecture or contracts** without proposing an ADR update in `DECISIONS.md`.
@@ -29,19 +29,21 @@ Until Phase 5 sign-off:
 ## Architecture Status
 
 - **Documentation**: `██████████` 100%
-- **Implementation**: `█████░░░░░` 50% (Phases 0, 1, 2, 3, and 4 Complete)
+- **Implementation**: `██████░░░░` 60% (Phases 0, 1, 2, 3, 4, and 5 Complete)
 
 ---
 
 ## Next Milestone
 
-### Phase 5: Backtesting Engine & Anti-Overfitting Controls
+### Phase 6: Strategy Validation Engine & Institutional Mode
 **Definition of Done**:
-- Build backtest runner with strict point-in-time isolation (zero future data leakage).
-- Support Walk-Forward Analysis and Out-of-Sample (Train/Test) split harnesses to prevent overfitting.
-- Build `risk-engine`: Pre-trade margin gates, unhedged expiry-day gamma protection, and portfolio drawdown circuit breakers.
-- Build `performance-metrics`: Calculate mathematical expectancy ($E$), Profit Factor ($PF$), Sharpe, Sortino, SQN, and Max Drawdown.
-- Acceptance: Backtester simulates 1,000 bars with transaction costs, logging metrics and rejecting orders that breach margin thresholds.
+- Implement institutional mode validation rules:
+  - Positive mathematical expectancy gate ($E > 0$).
+  - Drawdown tolerance limits (Max Drawdown $\le 15\%$).
+  - Sample size significance checks ($N \ge 30$ trades).
+  - Unhedged tail risk / naked short gamma explosion veto.
+- Reject strategies failing validation; tag approved strategies for paper trading.
+- Generate structured validation dossiers with diagnostic logs.
 
 ---
 
@@ -58,6 +60,17 @@ Until Phase 5 sign-off:
 ---
 
 ## Completed
+
+### Phase 5: Backtesting Engine & Anti-Overfitting Controls
+**Status**: COMPLETE & AUDITED ✅
+- **Deterministic Backtest Orchestrator (`backtesting.runner`)**: `BacktestRunner`, `BacktestConfig`, and `BacktestResult` connecting `DataFeed` / `list[Bar]` $\to$ `ExecutableStrategy` $\to$ `RiskEngine` $\to$ `PaperBroker`. Enforces strict point-in-time isolation with default anti-lookahead execution timing (signal generated at Bar $T$ close, filled at Bar $T+1$ open with slippage) and optional configurable same-bar execution. Accurately tracks signals, orders, fills, and mark-to-market equity curves with FIFO roundtrip PnL matching.
+- **Pre-Trade Risk Engine (`core.risk`)**: `RiskEngine`, `RiskLimits`, `RiskCheckResult`, and `RiskRejectionReason` providing an independent pre-trade barrier. Enforces 85% margin utilization ceiling, intraday 5% portfolio drawdown circuit breaker (with exemptions for position-reducing/closing orders), unhedged expiry-day gamma protection, and concurrent position limits.
+- **Anti-Overfitting Data Splitters (`backtesting.splitters`)**: Chronological train/test splitters (`split_train_test`, `split_out_of_sample`) and Walk-Forward Analysis (`generate_walk_forward_windows`) supporting both rolling and expanding/anchored windows, guaranteeing strictly non-overlapping timestamp windows (`train[-1].timestamp < test[0].timestamp`).
+- **Institutional Performance Analytics (`backtesting.analytics.metrics` & `analytics.metrics`)**: Closed-form quantitative metric calculators for mathematical expectancy ($E$), profit factor ($PF$), maximum peak-to-trough drawdown (amount and percentage), annualized Sharpe ratio, Sortino ratio, and System Quality Number (SQN), producing comprehensive `PerformanceReport` summaries.
+- **Automated Verification**:
+  - `ruff check .` and `ruff format --check .` passing with 0 warnings/errors (Python 3.11 target).
+  - `mypy src tests` passing in strict mode across 101 source files with 0 errors (Python 3.11 target).
+  - `pytest` suite passing 126/126 unit and integration tests (100% pass rate in 1.45s).
 
 ### Phase 4: Versioned Strategy DSL & Compiler Engine
 **Status**: COMPLETE & AUDITED ✅
@@ -156,18 +169,17 @@ Until Phase 5 sign-off:
 
 ## Current Work
 
-**Status**: PHASE 4 COMPLETE & AUDITED ✅ — AWAITING USER SIGN-OFF TO BEGIN PHASE 5
+**Status**: PHASE 5 COMPLETE & AUDITED ✅ — AWAITING USER SIGN-OFF TO BEGIN PHASE 6
 
 Pending Action Items:
-1. Commit and push Phase 4 implementation (`feat(phase-4): implement versioned strategy DSL and compiler engine`).
-2. Await explicit user sign-off to proceed with Phase 5 (Backtesting Engine & Anti-Overfitting Controls).
+1. Commit and push Phase 5 implementation (`feat(phase-5): implement backtesting engine and anti-overfitting controls`).
+2. Await explicit user sign-off to proceed with Phase 6 (Strategy Validation Engine & Institutional Mode).
 
 ---
 
 ## Not Implemented Yet (Do NOT Hallucinate)
 
 The following components do **NOT** exist in code:
-- No backtest runner, walk-forward splits, or performance metrics (`backtesting/`, `analytics/`)
-- No validation rules or runtime risk gates (`validation/`, `core/risk/`)
+- No validation rules, expectancy filters, or institutional veto gates (`validation/`)
 - No AI forecasting models, vision parsers, or reviewer modules (`ai/`)
 - No Plotly Dash web interface or CLI entry points (`ui/`, `cli/`)

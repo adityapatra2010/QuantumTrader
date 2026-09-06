@@ -185,9 +185,7 @@ def test_executable_strategy_signal_lifecycle() -> None:
             ],
         ),
         legs=[
-            StrategyLegDefinition(
-                contract_type="CE", side=OrderSide.SELL, strike_offset=1, lots=1
-            )
+            StrategyLegDefinition(contract_type="CE", side=OrderSide.SELL, strike_offset=1, lots=1)
         ],
     )
 

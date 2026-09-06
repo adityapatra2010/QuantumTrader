@@ -174,7 +174,9 @@ class DefaultASTEvaluator(BaseASTEvaluator):
                 else None
             )
         else:
-            series = _resolve_indicator_series(node.indicator, node.indicator_params, context.history)
+            series = _resolve_indicator_series(
+                node.indicator, node.indicator_params, context.history
+            )
             if not series or series[-1] is None:
                 return False
             curr_val = series[-1]
@@ -191,7 +193,9 @@ class DefaultASTEvaluator(BaseASTEvaluator):
             if not comp_series or comp_series[-1] is None:
                 return False
             curr_ref = comp_series[-1]
-            prev_ref = comp_series[-2] if len(comp_series) >= 2 and comp_series[-2] is not None else None
+            prev_ref = (
+                comp_series[-2] if len(comp_series) >= 2 and comp_series[-2] is not None else None
+            )
         elif node.compare_to_field:
             curr_ref = _resolve_bar_field(node.compare_to_field, context.current_bar)
             prev_ref = (
@@ -278,7 +282,11 @@ class DefaultASTEvaluator(BaseASTEvaluator):
                 return False
             val = context.current_premium
         elif f in ("decay_pct", "combined_decay_pct"):
-            if context.current_premium is None or context.entry_premium is None or context.entry_premium <= 0:
+            if (
+                context.current_premium is None
+                or context.entry_premium is None
+                or context.entry_premium <= 0
+            ):
                 return False
             val = (context.entry_premium - context.current_premium) / context.entry_premium
         elif f == "entry_premium":

@@ -15,6 +15,12 @@ from aditrader.core.models import (
     Tick,
     Trade,
 )
+from aditrader.core.risk import (
+    RiskCheckResult,
+    RiskEngine,
+    RiskLimits,
+    RiskRejectionReason,
+)
 from aditrader.core.state_machine import (
     InvalidOrderStateTransitionError,
     OrderStateMachine,
@@ -33,6 +39,10 @@ __all__ = [
     "OrderType",
     "PaperBroker",
     "Position",
+    "RiskCheckResult",
+    "RiskEngine",
+    "RiskLimits",
+    "RiskRejectionReason",
     "Signal",
     "SignalDirection",
     "SlippageModel",
