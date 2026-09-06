@@ -25,6 +25,7 @@ class AISourceType(StrEnum):
     STRATEGY_SUGGESTION = "STRATEGY_SUGGESTION"
     STRATEGY_REVIEW = "STRATEGY_REVIEW"
     EDUCATIONAL_EXPLANATION = "EDUCATIONAL_EXPLANATION"
+    OCR_EXTRACTION = "OCR_EXTRACTION"
 
 
 class ProvenanceRecord(BaseModel):
@@ -224,6 +225,10 @@ class VisionResult(BaseModel):
         default=False,
         description="True if no reliable technical levels or patterns could be detected",
     )
+    ocr_text: str | None = Field(
+        default=None,
+        description="Optional OCR text context provided during analysis",
+    )
     provenance: ProvenanceRecord = Field(
         description="Model provenance record for vision extraction"
     )
@@ -237,6 +242,57 @@ class VisionResult(BaseModel):
         for r in self.resistance:
             if r <= 0.0:
                 raise ValueError(f"Resistance level must be positive, got {r}")
+        return self
+
+
+class OCRBoundingBox(BaseModel):
+    """Bounding box coordinate region for recognized text."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    left: float = Field(ge=0.0, description="Left coordinate")
+    top: float = Field(ge=0.0, description="Top coordinate")
+    width: float = Field(ge=0.0, description="Width of bounding box")
+    height: float = Field(ge=0.0, description="Height of bounding box")
+
+
+class OCRTextRegion(BaseModel):
+    """Detected text element or line with optional confidence and bounding region."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    text: str = Field(min_length=1, description="Recognized text string")
+    confidence: float | None = Field(
+        default=None, ge=0.0, le=100.0, description="Recognition confidence score (0-100)"
+    )
+    box: OCRBoundingBox | None = Field(default=None, description="Optional bounding box region")
+
+
+class OCRResult(BaseModel):
+    """Provider-agnostic normalized OCR extraction output."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    text: str = Field(description="Aggregated recognized text")
+    confidence: float | None = Field(
+        default=None, ge=0.0, le=100.0, description="Overall recognition confidence score (0-100)"
+    )
+    regions: list[OCRTextRegion] = Field(
+        default_factory=list, description="Extracted text regions or lines"
+    )
+    source_image_hash: str = Field(
+        min_length=64, max_length=64, description="64-char SHA-256 hex digest of source image bytes"
+    )
+    is_empty: bool = Field(default=False, description="True if no text could be extracted")
+    provenance: ProvenanceRecord = Field(description="Provenance audit record for OCR extraction")
+
+    @model_validator(mode="after")
+    def validate_ocr_hash_mirror(self) -> "OCRResult":
+        """Ensure source_image_hash matches provenance.input_hash."""
+        if self.source_image_hash.lower() != self.provenance.input_hash.lower():
+            raise ValueError(
+                f"source_image_hash ({self.source_image_hash}) must match provenance.input_hash ({self.provenance.input_hash})"
+            )
         return self
 
 

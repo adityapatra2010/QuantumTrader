@@ -48,6 +48,24 @@ class EnvCredentialResolver(AICredentialResolver):
     def get_credential(self, provider: str, key_name: str = "api_key") -> str:
         env_var = self._resolve_env_var_name(provider, key_name)
         val = os.environ.get(env_var)
+        if (
+            (not val or not val.strip())
+            and provider.lower() in ("google", "gemini")
+            and key_name.lower() == "api_key"
+        ):
+            val = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        elif (
+            (not val or not val.strip())
+            and provider.lower() in ("ocrspace", "ocr_space")
+            and key_name.lower() == "api_key"
+        ):
+            val = os.environ.get("OCRSPACE_API_KEY") or os.environ.get("OCR_SPACE_API_KEY")
+        elif (
+            (not val or not val.strip())
+            and provider.lower() in ("openrouter", "open_router")
+            and key_name.lower() == "api_key"
+        ):
+            val = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPEN_ROUTER_API_KEY")
         if not val or not val.strip():
             raise AICredentialError(
                 f"Missing required credential '{key_name}' for AI provider '{provider}'. "
@@ -58,6 +76,24 @@ class EnvCredentialResolver(AICredentialResolver):
     def has_credential(self, provider: str, key_name: str = "api_key") -> bool:
         env_var = self._resolve_env_var_name(provider, key_name)
         val = os.environ.get(env_var)
+        if (
+            (not val or not val.strip())
+            and provider.lower() in ("google", "gemini")
+            and key_name.lower() == "api_key"
+        ):
+            val = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        elif (
+            (not val or not val.strip())
+            and provider.lower() in ("ocrspace", "ocr_space")
+            and key_name.lower() == "api_key"
+        ):
+            val = os.environ.get("OCRSPACE_API_KEY") or os.environ.get("OCR_SPACE_API_KEY")
+        elif (
+            (not val or not val.strip())
+            and provider.lower() in ("openrouter", "open_router")
+            and key_name.lower() == "api_key"
+        ):
+            val = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPEN_ROUTER_API_KEY")
         return bool(val and val.strip())
 
 

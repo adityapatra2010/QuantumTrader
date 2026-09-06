@@ -11,6 +11,7 @@ Per ADR 005 and ADR 012:
 
 from aditrader.ai.base import (
     ForecastEngine,
+    OCREngine,
     StrategyReviewer,
     StrategySuggestor,
     VisionEngine,
@@ -21,6 +22,7 @@ from aditrader.ai.catalog import (
     ModelContextLimits,
     ModelMetadata,
     ModelPricing,
+    get_default_model_catalog,
 )
 from aditrader.ai.config import (
     AIBudgetConfig,
@@ -54,11 +56,20 @@ from aditrader.ai.models import (
     DossierSection,
     DossierSectionSourceType,
     ForecastResult,
+    OCRBoundingBox,
+    OCRResult,
+    OCRTextRegion,
     PatternObservation,
     ProvenanceRecord,
     ResearchDossier,
     SuggestionResult,
     VisionResult,
+)
+from aditrader.ai.ocr import OCRSpaceEngine
+from aditrader.ai.providers import (
+    GoogleAIProvider,
+    OCRSpaceProvider,
+    OpenRouterProvider,
 )
 from aditrader.ai.registry import (
     AIProvider,
@@ -68,6 +79,10 @@ from aditrader.ai.registry import (
 from aditrader.ai.service import (
     AIServiceResolver,
     SubsystemName,
+)
+from aditrader.ai.vision import (
+    GeminiVisionEngine,
+    OpenRouterVisionEngine,
 )
 
 __all__ = [
@@ -100,11 +115,21 @@ __all__ = [
     "EnvCredentialResolver",
     "ForecastEngine",
     "ForecastResult",
+    "GeminiVisionEngine",
+    "GoogleAIProvider",
     "ModelCatalog",
     "ModelContextLimits",
     "ModelMetadata",
     "ModelPricing",
     "ModelUsageLimit",
+    "OCRBoundingBox",
+    "OCREngine",
+    "OCRResult",
+    "OCRSpaceEngine",
+    "OCRSpaceProvider",
+    "OCRTextRegion",
+    "OpenRouterProvider",
+    "OpenRouterVisionEngine",
     "PatternObservation",
     "ProvenanceRecord",
     "ResearchDossier",
@@ -115,4 +140,5 @@ __all__ = [
     "SuggestionResult",
     "VisionEngine",
     "VisionResult",
+    "get_default_model_catalog",
 ]

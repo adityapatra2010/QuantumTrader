@@ -16,6 +16,7 @@ from aditrader.ai.models import (
     DossierSection,
     DossierSectionSourceType,
     ForecastResult,
+    OCRResult,
     SuggestionResult,
     VisionResult,
 )
@@ -59,12 +60,18 @@ class VisionEngine(ABC):
     """Abstract interface for multimodal chart screenshot analysis."""
 
     @abstractmethod
-    def analyze(self, image_bytes: bytes, spot_price: float | None = None) -> VisionResult:
+    def analyze(
+        self,
+        image_bytes: bytes,
+        spot_price: float | None = None,
+        ocr_result: OCRResult | None = None,
+    ) -> VisionResult:
         """Extract observable support/resistance and patterns from chart imagery.
 
         Args:
             image_bytes: Raw bytes of uploaded chart image.
             spot_price: Optional prevailing spot price for coordinate envelope validation.
+            ocr_result: Optional OCR-extracted text and bounding regions from a prior OCR stage.
 
         Returns:
             VisionResult containing detected structures, reasoning, and image hash.
@@ -79,6 +86,38 @@ class VisionEngine(ABC):
     @abstractmethod
     def is_available(self) -> bool:
         """Return True if vision service and API credentials are functional.
+
+        Must never raise network or runtime exceptions; returns False if backend is
+        unreachable or unconfigured.
+        """
+        ...
+
+
+class OCREngine(ABC):
+    """Abstract interface for optical character recognition engines."""
+
+    @abstractmethod
+    def extract_text(self, image_bytes: bytes) -> OCRResult:
+        """Extract text and bounding regions from image bytes.
+
+        Args:
+            image_bytes: Raw bytes of uploaded chart or document image.
+
+        Returns:
+            OCRResult with extracted text, regions, and ProvenanceRecord.
+
+        Raises:
+            AIUnavailableError: If OCR service is offline or unconfigured.
+            AITimeoutError: If OCR processing times out.
+            AICredentialError: If API key is missing or invalid.
+            AIMalformedOutputError: If output format is invalid or corrupted.
+            AIProviderError: If OCR provider reports rate limit or server error.
+        """
+        ...
+
+    @abstractmethod
+    def is_available(self) -> bool:
+        """Return True if OCR service and credentials are operational.
 
         Must never raise network or runtime exceptions; returns False if backend is
         unreachable or unconfigured.

@@ -11,6 +11,7 @@ from typing import Any
 
 from aditrader.ai.base import (
     ForecastEngine,
+    OCREngine,
     StrategyReviewer,
     StrategySuggestor,
     VisionEngine,
@@ -75,6 +76,15 @@ class AIProvider(ABC):
         """
         ...
 
+    @abstractmethod
+    def get_ocr_engine(self, model_id: str, **kwargs: Any) -> OCREngine:
+        """Instantiate or return OCREngine for model_id.
+
+        Raises:
+            AIUnsupportedCapabilityError: If this provider does not support OCR.
+        """
+        ...
+
 
 class BaseAIProvider(AIProvider):
     """Convenience base class providing default unsupported capability rejections."""
@@ -97,6 +107,11 @@ class BaseAIProvider(AIProvider):
     def get_strategy_reviewer(self, model_id: str, **kwargs: Any) -> StrategyReviewer:
         raise AIUnsupportedCapabilityError(
             f"Provider '{self.provider_id}' does not support strategy review"
+        )
+
+    def get_ocr_engine(self, model_id: str, **kwargs: Any) -> OCREngine:
+        raise AIUnsupportedCapabilityError(
+            f"Provider '{self.provider_id}' does not support OCR engine"
         )
 
 

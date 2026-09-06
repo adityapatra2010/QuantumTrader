@@ -45,6 +45,7 @@ from aditrader.ai.models import (
     DossierSection,
     DossierSectionSourceType,
     ForecastResult,
+    OCRResult,
     ProvenanceRecord,
     SuggestionResult,
     VisionResult,
@@ -92,7 +93,12 @@ class MockForecastEngine(ForecastEngine):
 
 
 class MockVisionEngine(VisionEngine):
-    def analyze(self, image_bytes: bytes, spot_price: float | None = None) -> VisionResult:
+    def analyze(
+        self,
+        image_bytes: bytes,
+        spot_price: float | None = None,
+        ocr_result: OCRResult | None = None,
+    ) -> VisionResult:
         return VisionResult(
             trend="Bullish",
             support=[24000.0],

@@ -155,3 +155,157 @@ class ModelCatalog:
     def count(self) -> int:
         """Return total number of registered models."""
         return len(self._models)
+
+    def register_defaults(self) -> None:
+        """Register default known foundation models into catalog."""
+        # Google Gemini 2.0 Flash
+        self.register(
+            ModelMetadata(
+                provider="google",
+                model_id="gemini-2.0-flash",
+                display_name="Gemini 2.0 Flash",
+                capabilities={
+                    AICapability.VISION,
+                    AICapability.STRUCTURED_OUTPUT,
+                    AICapability.TEXT_GENERATION,
+                    AICapability.REASONING,
+                    AICapability.OCR,
+                },
+                context_limits=ModelContextLimits(
+                    max_context_tokens=1048576,
+                    max_output_tokens=8192,
+                ),
+                pricing=ModelPricing(
+                    input_cost_per_1k_tokens=0.0001,
+                    output_cost_per_1k_tokens=0.0004,
+                    cost_per_image=0.00002,
+                    currency="USD",
+                ),
+            ),
+            overwrite=True,
+        )
+        # Google Gemini 1.5 Flash
+        self.register(
+            ModelMetadata(
+                provider="google",
+                model_id="gemini-1.5-flash",
+                display_name="Gemini 1.5 Flash",
+                capabilities={
+                    AICapability.VISION,
+                    AICapability.STRUCTURED_OUTPUT,
+                    AICapability.TEXT_GENERATION,
+                    AICapability.REASONING,
+                    AICapability.OCR,
+                },
+                context_limits=ModelContextLimits(
+                    max_context_tokens=1048576,
+                    max_output_tokens=8192,
+                ),
+                pricing=ModelPricing(
+                    input_cost_per_1k_tokens=0.000075,
+                    output_cost_per_1k_tokens=0.0003,
+                    cost_per_image=0.00002,
+                    currency="USD",
+                ),
+            ),
+            overwrite=True,
+        )
+        # Google Gemini 1.5 Pro
+        self.register(
+            ModelMetadata(
+                provider="google",
+                model_id="gemini-1.5-pro",
+                display_name="Gemini 1.5 Pro",
+                capabilities={
+                    AICapability.VISION,
+                    AICapability.STRUCTURED_OUTPUT,
+                    AICapability.TEXT_GENERATION,
+                    AICapability.REASONING,
+                    AICapability.OCR,
+                },
+                context_limits=ModelContextLimits(
+                    max_context_tokens=2097152,
+                    max_output_tokens=8192,
+                ),
+            ),
+            overwrite=True,
+        )
+        # Google Text Embedding 004 (non-vision model for capability testing)
+        self.register(
+            ModelMetadata(
+                provider="google",
+                model_id="text-embedding-004",
+                display_name="Text Embedding 004",
+                capabilities={
+                    AICapability.TEXT_GENERATION,
+                },
+            ),
+            overwrite=True,
+        )
+        # OCR.Space Engine 2
+        self.register(
+            ModelMetadata(
+                provider="ocrspace",
+                model_id="ocr-engine-2",
+                display_name="OCR.Space Engine 2",
+                capabilities={
+                    AICapability.OCR,
+                },
+                pricing=ModelPricing(
+                    cost_per_image=0.0,
+                    currency="USD",
+                ),
+            ),
+            overwrite=True,
+        )
+        # OpenRouter - Gemma 4 26B A4B
+        self.register(
+            ModelMetadata(
+                provider="openrouter",
+                model_id="google/gemma-4-26b-a4b-it",
+                display_name="Gemma 4 26B A4B (OpenRouter)",
+                capabilities={
+                    AICapability.VISION,
+                    AICapability.STRUCTURED_OUTPUT,
+                    AICapability.TEXT_GENERATION,
+                    AICapability.REASONING,
+                },
+                context_limits=ModelContextLimits(
+                    max_context_tokens=262144,
+                    max_output_tokens=8192,
+                ),
+            ),
+            overwrite=True,
+        )
+        # OpenRouter - Gemma 4 26B A4B Free tier
+        self.register(
+            ModelMetadata(
+                provider="openrouter",
+                model_id="google/gemma-4-26b-a4b-it:free",
+                display_name="Gemma 4 26B A4B Free (OpenRouter)",
+                capabilities={
+                    AICapability.VISION,
+                    AICapability.STRUCTURED_OUTPUT,
+                    AICapability.TEXT_GENERATION,
+                    AICapability.REASONING,
+                },
+                context_limits=ModelContextLimits(
+                    max_context_tokens=262144,
+                    max_output_tokens=8192,
+                ),
+                pricing=ModelPricing(
+                    input_cost_per_1k_tokens=0.0,
+                    output_cost_per_1k_tokens=0.0,
+                    cost_per_image=0.0,
+                    currency="USD",
+                ),
+            ),
+            overwrite=True,
+        )
+
+
+def get_default_model_catalog() -> ModelCatalog:
+    """Return a new ModelCatalog populated with default supported model metadata."""
+    catalog = ModelCatalog()
+    catalog.register_defaults()
+    return catalog

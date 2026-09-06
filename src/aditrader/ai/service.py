@@ -6,10 +6,11 @@ Per Phase 7A:
 - Zero network calls or runtime model executions.
 """
 
-from typing import Literal
+from typing import Any, Literal
 
 from aditrader.ai.base import (
     ForecastEngine,
+    OCREngine,
     StrategyReviewer,
     StrategySuggestor,
     VisionEngine,
@@ -157,18 +158,61 @@ class AIServiceResolver:
             **sub_cfg.extra_params,
         )
 
-    def resolve_vision_engine(self, require_credentials: bool = True) -> VisionEngine:
-        """Resolve and instantiate configured VisionEngine."""
+    def resolve_vision_engine(
+        self,
+        require_credentials: bool = True,
+        with_ocr: bool = False,
+    ) -> VisionEngine:
+        """Resolve and instantiate configured VisionEngine.
+
+        Args:
+            require_credentials: If True, enforce that provider credentials exist.
+            with_ocr: If True, attempt to resolve and attach configured OCREngine.
+        """
         self.validate_subsystem_resolution(
             "vision", AICapability.VISION, require_credentials=require_credentials
         )
         sub_cfg = self.get_subsystem_config("vision")
         provider = self.registry.get_provider(sub_cfg.provider)
+        extra_kwargs: dict[str, Any] = dict(sub_cfg.extra_params)
+        if sub_cfg.temperature is not None:
+            extra_kwargs.setdefault("temperature", sub_cfg.temperature)
+        if require_credentials and self.credential_resolver is not None:
+            extra_kwargs.setdefault(
+                "api_key", self.credential_resolver.get_credential(sub_cfg.provider)
+            )
+
+        if with_ocr:
+            try:
+                ocr_engine = self.resolve_ocr_engine(require_credentials=require_credentials)
+                extra_kwargs.setdefault("ocr_engine", ocr_engine)
+            except Exception:
+                # OCR resolution failure must not prevent vision engine instantiation
+                pass
+
         return provider.get_vision_engine(
             sub_cfg.model_id,
             timeout_seconds=sub_cfg.timeout_seconds,
             max_retries=sub_cfg.max_retries,
-            **sub_cfg.extra_params,
+            **extra_kwargs,
+        )
+
+    def resolve_ocr_engine(self, require_credentials: bool = True) -> OCREngine:
+        """Resolve and instantiate configured OCREngine."""
+        self.validate_subsystem_resolution(
+            "ocr", AICapability.OCR, require_credentials=require_credentials
+        )
+        sub_cfg = self.get_subsystem_config("ocr")
+        provider = self.registry.get_provider(sub_cfg.provider)
+        extra_kwargs: dict[str, Any] = dict(sub_cfg.extra_params)
+        if require_credentials and self.credential_resolver is not None:
+            extra_kwargs.setdefault(
+                "api_key", self.credential_resolver.get_credential(sub_cfg.provider)
+            )
+        return provider.get_ocr_engine(
+            sub_cfg.model_id,
+            timeout_seconds=sub_cfg.timeout_seconds,
+            **extra_kwargs,
         )
 
     def resolve_strategy_suggestor(self, require_credentials: bool = True) -> StrategySuggestor:
