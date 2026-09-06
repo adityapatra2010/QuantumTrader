@@ -1,24 +1,24 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-06 16:45 IST  
-**Current Phase**: Phase 2 — COMPLETE ✅ | Preparing Phase 3 (Options Derivatives & Volatility Engine)  
-**Last Verified By**: AGY CLI Phase 2 Test & Tooling Suite (Ruff, Mypy Strict, Pytest 55/55)  
+**Last Updated**: 2026-09-06 16:51 IST  
+**Current Phase**: Phase 3 — COMPLETE ✅ | Preparing Phase 4 (Versioned Strategy DSL & Compiler Engine)  
+**Last Verified By**: AGY CLI Phase 3 Test & Tooling Suite (Ruff, Mypy Strict, Pytest 75/75)  
 
 ---
 
 ## Repository State
 
 - **Branch**: `main`
-- **Working Tree**: Core domain entities, order state machine, paper broker, local SQLite ledger persistence, NSE session timing controls, CSV/Synthetic data feeds, Kotak Neo read-only adapter, TickAggregator, LocalDataCache (Parquet), and DataFeedStreamer implemented and verified.
+- **Working Tree**: Core domain entities, order state machine, paper broker, local SQLite ledger persistence, market data feeds, Kotak Neo adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, and multi-leg payoff engine implemented and verified.
 
 ---
 
 ## Active Implementation Rules
 
-Until Phase 3 sign-off:
+Until Phase 4 sign-off:
 - **Do not implement live broker order routing** (strictly air-gapped; read-only market data feeds only).
-- **Do not create options analytics or Greeks calculators** (Phase 3).
 - **Do not create strategy DSL compilers or AST evaluators** (Phase 4).
+- **Do not execute raw dynamic code** (`eval()`, `exec()`, or dynamic python code generation).
 - **Do not integrate AI forecasting or vision modules** (Phases 5 & 6).
 - **Do not construct Plotly Dash dashboards or interactive CLI handlers** (Phase 8).
 - **Do not modify architecture or contracts** without proposing an ADR update in `DECISIONS.md`.
@@ -29,19 +29,19 @@ Until Phase 3 sign-off:
 ## Architecture Status
 
 - **Documentation**: `██████████` 100%
-- **Implementation**: `███░░░░░░░` 30% (Phases 0, 1, and 2 Complete)
+- **Implementation**: `████░░░░░░` 40% (Phases 0, 1, 2, and 3 Complete)
 
 ---
 
 ## Next Milestone
 
-### Phase 3: Options Derivatives & Volatility Engine
+### Phase 4: Versioned Strategy DSL & Compiler Engine
 **Definition of Done**:
-- Implement `options/chain.py`: Aggregate normalized strike ladders, Open Interest, and expiry dates dynamically from scrip master.
-- Implement `options/iv.py`: Numerical Implied Volatility (IV) solver using Newton-Raphson / Brent's method derived from market premiums.
-- Implement `options/greeks.py`: Black-Scholes pricing engine computing Delta, Gamma, Theta, and Vega.
-- Implement `options/payoff.py`: Pure function computing at-expiry and mark-to-market payoff curves for multi-leg option strategies.
-- Acceptance: Unit tests confirm IV convergence against market prices and verify Greeks and payoff bounds for Iron Condors and Straddles without external network dependencies.
+- Define versioned declarative JSON AST schema (`schema_version: "1.0"`).
+- Build `strategy_compiler` to parse condition trees into stateless, executable state machines (`on_bar(history: list[Bar]) -> Optional[Signal]`).
+- Implement condition evaluators: Indicators, Time/Session, Greeks, Premium, OI, and Market Structure (strictly using declarative AST operators; dynamic code execution prohibited per ADR 007).
+- Build `library/` registry with semantic versioning and Strategy DNA vector profiling.
+- Acceptance: Compiler transforms a versioned multi-leg DSL JSON document into an executable object without generating dynamic Python code.
 
 ---
 
@@ -58,6 +58,18 @@ Until Phase 3 sign-off:
 ---
 
 ## Completed
+
+### Phase 3: Options Derivatives & Volatility Engine
+**Status**: COMPLETE ✅
+- **Closed-Form Black-Scholes Greeks Engine**: `options.greeks` calculating Delta, Gamma, Theta (1-calendar-day and 1-trading-day), Vega (per 1% vol), and Rho (per 1% rate) with verified parity and expiration boundary handling.
+- **Robust Numerical IV Solver**: `options.iv` implementing hybrid Newton-Raphson (using analytical Vega derivative) and Bisection fallback spanning [0.1%, 500%] volatility with explicit tolerances (`IV_SOLVER_CONVERGENCE_TOLERANCE = 1e-5`, `IV_PRICE_TOLERANCE = 0.01 INR`), enforcing European exercise convention and no-arbitrage bounds.
+- **Dynamic Strike Ladder & Expiry Discovery**: `options.chain` (`OptionChainEngine`) mapping scrip master contracts (`ContractMetadata`) into structured `ChainRow` ladders, resolving At-The-Money (ATM) strikes dynamically, preserving exchange lot sizes, and evaluating live Greeks per strike.
+- **Pure Multi-Leg Payoff Engine**: `options.payoff` evaluating at-expiry P&L curves, multi-DTE mark-to-market curves, exact breakevens via linear root interpolation (`PAYOFF_INTERPOLATION_TOLERANCE = 0.01 INR`), max profit, max loss, and net debit/credit.
+- **Analytical Benchmark Verification**: Unit tests verify Black-Scholes prices and Greeks against published analytical benchmark figures (Hull textbook standards) within `1e-4` precision.
+- **Automated Verification**:
+  - `ruff check .` passing with 0 warnings/errors (Python 3.11 target).
+  - `mypy src tests` passing in strict mode across 75 source files with 0 errors (Python 3.11 target).
+  - `pytest` suite passing 75/75 unit tests (100% pass rate in 0.96s).
 
 ### Phase 2: Market Data Layer & Ingestion Pipeline
 **Status**: COMPLETE ✅
@@ -130,18 +142,17 @@ Until Phase 3 sign-off:
 
 ## Current Work
 
-**Status**: READY FOR USER SIGN-OFF TO BEGIN PHASE 3
+**Status**: READY FOR USER SIGN-OFF TO BEGIN PHASE 4
 
 Pending Action Items:
-1. Stage and commit Phase 2 implementation to Git.
-2. Await user sign-off to proceed with Phase 3 (Options Derivatives & Volatility Engine).
+1. Commit Phase 3 implementation to Git.
+2. Await user sign-off to proceed with Phase 4 (Versioned Strategy DSL & Compiler Engine).
 
 ---
 
 ## Not Implemented Yet (Do NOT Hallucinate)
 
 The following components do **NOT** exist in code:
-- No options analytics, Greeks, or payoff calculators (`options/`)
 - No strategy DSL compiler, AST evaluators, or strategy library (`strategy/`)
 - No validation rules or runtime risk gates (`validation/`, `core/risk/`)
 - No AI forecasting models, vision parsers, or reviewer modules (`ai/`)
