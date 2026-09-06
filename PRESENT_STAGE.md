@@ -1,25 +1,24 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-06 18:10 IST  
-**Current Phase**: Phase 5.6 — COMPLETE & AUDITED ✅ | Preparing Phase 6 (Validation Engine & Institutional Mode)  
-**Last Verified By**: AGY CLI Phase 5.6 Research Integrity Suite (Ruff, Mypy Strict, Pytest 150/150)  
+**Last Updated**: 2026-09-06 18:30 IST  
+**Current Phase**: Phase 6 — COMPLETE & AUDITED ✅ | Preparing Instrument Search & Selection Subsystem  
+**Last Verified By**: AGY CLI Phase 6 Quality Verification Suite (Ruff, Mypy Strict, Pytest 185/185)  
 
 ---
 
 ## Repository State
 
 - **Branch**: `main`
-- **Working Tree**: Core domain entities, order state machine, paper broker with net equity accounting, local SQLite ledger persistence, market data feeds, Kotak Neo adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine with options air-gap guards and volume participation constraints, walk-forward analysis & OOS splitters, hardened pre-trade risk engine with lot-aware position limits and session-boundary resets, finite performance analytics with strict timeframe resolution, and options backtesting boundary placeholders implemented and verified.
+- **Working Tree**: Core domain entities, order state machine, paper broker with net equity accounting, local SQLite ledger persistence, market data feeds, Kotak Neo adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine with options air-gap guards and volume participation constraints, walk-forward analysis & OOS splitters, hardened pre-trade risk engine with lot-aware position limits and session-boundary resets, finite performance analytics with strict timeframe resolution, static AST structural validation, institutional historical statistical validation for linear assets, and theoretical payoff/Greek risk validation for multi-leg option strategies implemented and verified.
 
 ---
 
 ## Active Implementation Rules
 
-Until Phase 6 sign-off:
 - **Do not implement live broker order routing** (strictly air-gapped; read-only market data feeds only).
 - **Do not execute raw dynamic code** (`eval()`, `exec()`, or dynamic python code generation).
-- **Do not implement validation policy rules or institutional rejection filters** (Phase 6).
-- **Do not integrate AI forecasting or vision modules** (Phases 6 & 7).
+- **Options backtesting remains air-gapped**: Never emit historical performance metrics for options; theoretical payoff modeling only.
+- **Do not integrate AI forecasting or vision modules** (Phases 7+).
 - **Do not construct Plotly Dash dashboards or interactive CLI handlers** (Phase 8).
 - **Do not modify architecture or contracts** without proposing an ADR update in `DECISIONS.md`.
 - **Maintain strict Python 3.11 target compatibility** across all typing, syntax, and libraries.
@@ -29,21 +28,18 @@ Until Phase 6 sign-off:
 ## Architecture Status
 
 - **Documentation**: `██████████` 100%
-- **Implementation**: `███████░░░` 68% (Phases 0, 1, 2, 3, 4, 5, 5.5, and 5.6 Complete)
+- **Implementation**: `████████░░` 76% (Phases 0, 1, 2, 3, 4, 5, 5.5, 5.6, and 6 Complete)
 
 ---
 
 ## Next Milestone
 
-### Phase 6: Strategy Validation Engine & Institutional Mode
+### Instrument Search & Selection Subsystem
 **Definition of Done**:
-- Implement institutional mode validation rules:
-  - Positive mathematical expectancy gate ($E > 0$).
-  - Drawdown tolerance limits (Max Drawdown $\le 15\%$).
-  - Sample size significance checks ($N \ge 30$ trades).
-  - Unhedged tail risk / naked short gamma explosion veto.
-- Reject strategies failing validation; tag approved strategies for paper trading.
-- Generate structured validation dossiers with diagnostic logs.
+- Implement high-speed local contract discovery and search engine over broker scrip master and cache.
+- Hierarchical derivatives resolution: Underlying -> Contract Type -> Expiry Date -> Strike -> CE/PE.
+- Prefix, exact, and fuzzy symbol matching with deterministic institutional ranking.
+- Integration with Kotak Neo master data cache.
 
 ---
 
@@ -62,6 +58,19 @@ Until Phase 6 sign-off:
 ---
 
 ## Completed
+
+### Phase 6: Strategy Validation Engine & Institutional Policy Framework
+**Status**: COMPLETE & AUDITED ✅
+- **Architectural Tri-Path Validation Engine (`src/aditrader/validation/`)**: Built three decoupled validation paths enforcing strict research integrity:
+  1. **Static AST Structural Validator (`validation/ast/`)**: Validates JSON AST trees before compilation; verifies schema version, allowed timeframe, node logic (cardinality, range bounds, crossover targets), strike ladder offsets ($-50 \le offset \le +50$), lot limits ($1 \le lots \le 100$), and contradictory opposing leg rejection.
+  2. **Historical Statistical Validator (`validation/institutional/historical.py`)**: Dedicated strictly to linear assets (Equities & Futures). Requires `BacktestResult`; enforces non-negotiable positive mathematical expectancy floor ($E > 0$), timeframe-aware sample size floors ($N \ge 100$ intraday, $N \ge 50$ hourly, $N \ge 30$ daily, $N \ge 20$ swing), profit factor, maximum drawdown, Sharpe/Sortino/SQN, and multi-regime walk-forward / out-of-sample retention. Hard-rejects any option strategies.
+  3. **Options Theoretical Validator (`validation/institutional/options_payoff.py`)**: Dedicated strictly to multi-leg option strategies. Formally tagged as `THEORETICAL_VALIDATION_ONLY`. Mathematically analyzes payoff curves, Greeks, defined-risk structure, unhedged expiry gamma veto, theoretical risk/reward ratios, and breakeven corridors. Never emits historical performance metrics (expectancy, Sharpe, win rate).
+- **Configurable Institutional Policies (`validation/policies.py`)**: Implemented `InstitutionalPolicy` (strict safety floors), `ModeratePolicy` (standard paper-trading thresholds), and `ResearchPolicy` (exploratory warnings).
+- **Research Availability Router (`validation/service.py`)**: Exposes `check_research_availability` which returns `RESEARCH_UNAVAILABLE` with permitted alternatives (payoff modeling, forward paper trading) for options backtesting, keeping research boundaries explicit.
+- **Automated Verification**:
+  - `ruff check .` and `ruff format --check .` passing with 0 warnings/errors (Python 3.11 target).
+  - `mypy src tests` passing in strict mode across 112 source files with 0 errors (Python 3.11 target).
+  - `pytest` suite passing 185/185 unit and integration tests (100% pass rate in 3.17s) with 88% overall coverage.
 
 ### Phase 5.6: Research Integrity Hardening & Adversarial Defenses
 **Status**: COMPLETE & AUDITED ✅

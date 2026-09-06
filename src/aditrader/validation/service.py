@@ -1,0 +1,154 @@
+"""Unified Strategy Validation Service orchestrating AST, Historical, and Theoretical Options paths."""
+
+from typing import Any
+
+from aditrader.backtesting.runner import BacktestResult
+from aditrader.strategy.builder.schema import StrategyDSL
+from aditrader.validation.ast.validator import ASTValidator
+from aditrader.validation.institutional.historical import HistoricalStatisticalValidator
+from aditrader.validation.institutional.options_payoff import OptionsTheoreticalValidator
+from aditrader.validation.models import (
+    GateSeverity,
+    ResearchAvailability,
+    SampleSizeStatus,
+    ValidationGateResult,
+    ValidationResult,
+    ValidationScope,
+    ValidationStatus,
+)
+from aditrader.validation.policies import (
+    ValidationPolicy,
+    create_institutional_policy,
+)
+
+
+def check_research_availability(strategy: StrategyDSL) -> ResearchAvailability:
+    """Check research and backtesting capabilities for a given strategy."""
+    if strategy.legs:
+        return ResearchAvailability(
+            status="RESEARCH_UNAVAILABLE",
+            permitted_alternatives=[
+                "Analyze Payoff & Greeks",
+                "Static Strategy Validation",
+                "Forward Paper Trading",
+            ],
+            detail=(
+                "Historical backtesting is not available for multi-leg option strategies. "
+                "Simulating options requires dynamic IV surface and tick-level chain data (Phase 9 OptionsBacktestRunner). "
+                "Permitted alternatives: Theoretical Payoff/Greeks Modeling or Live Forward Paper Trading."
+            ),
+        )
+
+    return ResearchAvailability(
+        status="AVAILABLE",
+        permitted_alternatives=[
+            "Historical Backtest",
+            "Walk-Forward Analysis",
+            "Out-of-Sample Validation",
+            "Forward Paper Trading",
+        ],
+        detail="Linear asset (Equity/Futures) fully supported for point-in-time historical backtesting.",
+    )
+
+
+class StrategyValidationService:
+    """Institutional Strategy Validation Service.
+
+    Orchestrates the three explicit validation paths:
+    1. Static AST Structural Validation (ALL strategies)
+    2. Historical Statistical Validation (EQUITIES and FUTURES only)
+    3. Theoretical Payoff & Greek Risk Validation (OPTIONS only)
+    """
+
+    def __init__(self, default_policy: ValidationPolicy | None = None) -> None:
+        self.policy = default_policy or create_institutional_policy()
+
+    def validate(
+        self,
+        strategy: StrategyDSL | dict[str, Any],
+        backtest_result: BacktestResult | None = None,
+        policy: ValidationPolicy | None = None,
+        *,
+        spot_price: float = 24000.0,
+        dte_days: float = 7.0,
+        oos_result: BacktestResult | None = None,
+        walk_forward_results: list[BacktestResult] | None = None,
+    ) -> ValidationResult:
+        """Execute appropriate validation pipeline matching strategy asset class.
+
+        Args:
+            strategy: StrategyDSL instance or raw JSON/dict definition.
+            backtest_result: Required for Equities/Futures historical statistical validation.
+            policy: Optional ValidationPolicy override (defaults to Institutional).
+            spot_price: Prevailing underlying spot price for theoretical option payoff analysis.
+            dte_days: Days to expiry for theoretical option payoff analysis.
+            oos_result: Optional Out-of-Sample BacktestResult for overfitting analysis.
+            walk_forward_results: Optional list of window BacktestResults for parameter stability.
+
+        Returns:
+            ValidationResult with explicit scope, metrics, and gate outcomes.
+        """
+        active_policy = policy or self.policy
+
+        # Step 1: Static AST Validation
+        ast_result = ASTValidator.validate(strategy)
+        if ast_result.status == ValidationStatus.REJECTED:
+            return ast_result
+
+        dsl = (
+            strategy if isinstance(strategy, StrategyDSL) else StrategyDSL.model_validate(strategy)
+        )
+
+        # Step 2: Route by Strategy Type
+        if dsl.legs:
+            # Options Derivative Strategy Path
+            if backtest_result is not None:
+                raise ValueError(
+                    f"Option strategy '{dsl.name}' cannot accept a historical BacktestResult. "
+                    "Options backtesting is not supported. Use theoretical payoff validation."
+                )
+            return OptionsTheoreticalValidator.validate(
+                strategy=dsl,
+                policy=active_policy,
+                spot_price=spot_price,
+                dte_days=dte_days,
+            )
+        else:
+            # Linear Equities / Futures Historical Statistical Path
+            if backtest_result is None:
+                return ValidationResult(
+                    strategy_name=dsl.name,
+                    schema_version=dsl.schema_version,
+                    underlying=dsl.underlying,
+                    asset_class="FUTURES" if "FUT" in dsl.underlying.upper() else "EQUITY",
+                    validation_scope=ValidationScope.HISTORICAL,
+                    status=ValidationStatus.NOT_RECOMMENDED,
+                    validation_score=ast_result.validation_score,
+                    sample_size_status=SampleSizeStatus.NOT_APPLICABLE,
+                    historical_vs_theoretical="HISTORICAL",
+                    metrics={},
+                    failed_gates=["MISSING_BACKTEST_RESULT"],
+                    gate_results=[
+                        ValidationGateResult(
+                            gate_name="MISSING_BACKTEST_RESULT",
+                            passed=False,
+                            severity=GateSeverity.THRESHOLD,
+                            detail="No BacktestResult provided. Strategy passed AST validation but lacks historical performance verification.",
+                        )
+                    ],
+                    warnings=[
+                        "BacktestResult missing. Historical statistical gates were not evaluated."
+                    ],
+                    suggested_improvements=[
+                        "Execute BacktestRunner to generate historical performance metrics."
+                    ],
+                    policy_name=active_policy.policy_name,
+                )
+
+            return HistoricalStatisticalValidator.validate(
+                strategy=dsl,
+                result=backtest_result,
+                policy=active_policy,
+                oos_result=oos_result,
+                walk_forward_results=walk_forward_results,
+            )
