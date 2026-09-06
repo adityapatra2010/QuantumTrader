@@ -15,15 +15,38 @@ from aditrader.ai.base import (
     StrategySuggestor,
     VisionEngine,
 )
+from aditrader.ai.catalog import (
+    AICapability,
+    ModelCatalog,
+    ModelContextLimits,
+    ModelMetadata,
+    ModelPricing,
+)
+from aditrader.ai.config import (
+    AIBudgetConfig,
+    AIServiceConfig,
+    AISubsystemsConfig,
+    ModelUsageLimit,
+    SubsystemModelConfig,
+)
+from aditrader.ai.credentials import (
+    AICredentialResolver,
+    DictCredentialResolver,
+    EnvCredentialResolver,
+)
 from aditrader.ai.errors import (
     AIConfigError,
+    AICredentialError,
     AIError,
     AILookaheadError,
     AILowConfidenceError,
     AIMalformedOutputError,
+    AIModelNotFoundError,
     AIProviderError,
+    AIProviderNotFoundError,
     AITimeoutError,
     AIUnavailableError,
+    AIUnsupportedCapabilityError,
 )
 from aditrader.ai.models import (
     AISourceType,
@@ -37,27 +60,58 @@ from aditrader.ai.models import (
     SuggestionResult,
     VisionResult,
 )
+from aditrader.ai.registry import (
+    AIProvider,
+    AIProviderRegistry,
+    BaseAIProvider,
+)
+from aditrader.ai.service import (
+    AIServiceResolver,
+    SubsystemName,
+)
 
 __all__ = [
+    "AIBudgetConfig",
+    "AICapability",
     "AIConfigError",
+    "AICredentialError",
+    "AICredentialResolver",
     "AIError",
     "AILookaheadError",
     "AILowConfidenceError",
     "AIMalformedOutputError",
+    "AIModelNotFoundError",
+    "AIProvider",
     "AIProviderError",
+    "AIProviderNotFoundError",
+    "AIProviderRegistry",
+    "AIServiceConfig",
+    "AIServiceResolver",
     "AISourceType",
+    "AISubsystemsConfig",
     "AITimeoutError",
     "AIUnavailableError",
+    "AIUnsupportedCapabilityError",
+    "BaseAIProvider",
     "BiasCfg",
+    "DictCredentialResolver",
     "DossierSection",
     "DossierSectionSourceType",
+    "EnvCredentialResolver",
     "ForecastEngine",
     "ForecastResult",
+    "ModelCatalog",
+    "ModelContextLimits",
+    "ModelMetadata",
+    "ModelPricing",
+    "ModelUsageLimit",
     "PatternObservation",
     "ProvenanceRecord",
     "ResearchDossier",
     "StrategyReviewer",
     "StrategySuggestor",
+    "SubsystemModelConfig",
+    "SubsystemName",
     "SuggestionResult",
     "VisionEngine",
     "VisionResult",

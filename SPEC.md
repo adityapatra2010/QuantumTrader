@@ -31,6 +31,13 @@
 | `SuggestionResult` | `strategy_dsl, provenance, bias_applied, regime_context, rationale, validation_result, is_validated` | Declarative strategy proposal container (un-validated until gate approval) |
 | `DossierSection` | `title, source_type (DETERMINISTIC/AI_ADVISORY/STRUCTURAL/METADATA), content, provenance` | Categorized evidence section in quantitative research dossier |
 | `ResearchDossier` | `dossier_id, strategy_name, strategy_id, generated_at, sections[], validation_result, disclaimer` | Institutional quantitative research dossier with compliance disclaimers |
+| `ModelMetadata` | `provider, model_id, display_name, capabilities, availability, context_limits, pricing, metadata` | Typed model catalog metadata and capability profile (Phase 7A) |
+| `ModelPricing` | `input_cost_per_1k_tokens, output_cost_per_1k_tokens, cost_per_image, currency` | Model inference cost accounting metadata (Phase 7A) |
+| `ModelContextLimits` | `max_context_tokens, max_output_tokens` | Model context window and token boundary limits (Phase 7A) |
+| `AIBudgetConfig` | `max_total_spend, max_total_requests, currency, warn_spend_threshold_pct, model_limits` | Provider-agnostic spend and usage budget configuration (Phase 7A) |
+| `SubsystemModelConfig` | `provider, model_id, temperature, timeout_seconds, max_retries, required_capabilities, extra_params` | Routing configuration for a single AI subsystem (Phase 7A) |
+| `AISubsystemsConfig` | `vision, forecasting, strategy_suggestor, strategy_reviewer, ocr` | Independent model assignments across five AI subsystems (Phase 7A) |
+| `AIServiceConfig` | `enabled, subsystems, budget` | Root configuration for AI Advisory Services Layer (Phase 7A) |
 
 ---
 

@@ -35,4 +35,20 @@ class AILookaheadError(AIError):
 
 
 class AIConfigError(AIError):
-    """Raised when an AI provider or model is misconfigured (missing API key, invalid endpoint, unsupported model)."""
+    """Raised when an AI provider, model, or subsystem is misconfigured."""
+
+
+class AICredentialError(AIConfigError):
+    """Raised when required credentials or API keys for an AI provider are missing or invalid."""
+
+
+class AIModelNotFoundError(AIConfigError):
+    """Raised when a requested AI model is not registered in the catalog."""
+
+
+class AIProviderNotFoundError(AIConfigError):
+    """Raised when a requested AI provider is not registered in the registry."""
+
+
+class AIUnsupportedCapabilityError(AIError):
+    """Raised when an operation requires an AI model capability not supported by the selected model."""

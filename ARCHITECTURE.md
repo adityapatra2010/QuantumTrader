@@ -78,6 +78,12 @@ v
 
 ### 7. AI Advisory Services Layer (`ai/`)
 - Pure advisory layer producing non-authoritative proposals (`SuggestionResult`, `VisionResult`, `ForecastResult`).
+- Provider-Agnostic Infrastructure (Phase 7A):
+  - `AIProviderRegistry`: Dynamic provider registration (`AIProvider`) decoupling core logic from vendor SDKs.
+  - `ModelCatalog`: In-memory catalog of models with explicit, queryable capabilities (`AICapability`), context limits, and pricing metadata.
+  - `AIServiceResolver`: Resolves configured models across subsystems, enforcing capability requirements and provider availability without network dependencies.
+  - `AICredentialResolver`: Resolves local secrets/environment variables with explicit typed failures on missing credentials (`AICredentialError`).
+  - `AIBudgetConfig`: Typed usage limits and spend threshold configurations.
 - Encapsulates machine learning models behind swappable, abstract interfaces (`base.py`):
   - `forecasting/`: Probabilistic time-series trajectory forecasting (`ForecastEngine`) with strict anti-lookahead validation.
   - `vision/`: Multimodal chart screenshot extraction (`VisionEngine`) detecting observable support/resistance and patterns.
