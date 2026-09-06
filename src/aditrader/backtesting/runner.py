@@ -24,7 +24,7 @@ from aditrader.core.broker import PaperBroker
 from aditrader.core.costs import CostCalculator, SlippageModel
 from aditrader.core.models.enums import OrderSide, OrderStatus, OrderType, SignalDirection
 from aditrader.core.models.execution import Position, Trade
-from aditrader.core.models.market_data import Bar
+from aditrader.core.models.market_data import Bar, MarketDataSourceType
 from aditrader.core.models.order import Order
 from aditrader.core.models.trade_signal import Signal
 from aditrader.core.risk.engine import RiskEngine
@@ -77,6 +77,46 @@ class BacktestConfig(BaseModel):
     )
 
 
+class SimulationAssumptions(BaseModel):
+    """Explicit recorded assumptions under which the historical simulation was conducted."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    data_resolution: str | None = Field(
+        default=None, description="Timeframe/resolution of data feed (e.g. '1m', '5m')"
+    )
+    quotes_present: bool = Field(
+        default=False, description="Whether genuine bid/ask quotes were present in data"
+    )
+    fill_assumption: Literal["NEXT_BAR_OPEN", "SAME_BAR_CLOSE", "TICK_LEVEL", "MID_PRICE"] = Field(
+        ..., description="Execution fill timing assumption"
+    )
+    slippage_model: str = Field(..., description="Slippage model name and configuration")
+    slippage_bps: float = Field(default=0.0, description="Base slippage basis points")
+    cost_model: str = Field(
+        default="NSE_STATUTORY", description="Statutory and transaction fee schedule applied"
+    )
+    volume_participation_enforced: bool = Field(
+        default=False, description="Whether volume participation limits were active"
+    )
+    max_volume_participation_pct: float | None = Field(
+        default=None, description="Max candle volume participation ceiling"
+    )
+    volume_limit_action: str = Field(
+        default="REJECT", description="Action taken when order exceeds volume ceiling"
+    )
+    data_source_type: MarketDataSourceType = Field(
+        default=MarketDataSourceType.HISTORICAL_RECORD,
+        description="Origin classification of input feed",
+    )
+    data_source_name: str | None = Field(
+        default=None, description="Identifier of data feed provider or file"
+    )
+    is_synthetic_data: bool = Field(
+        default=False, description="True if simulated/synthetic data was used"
+    )
+
+
 class BacktestResult(BaseModel):
     """Complete immutable audit trail of a completed backtest run."""
 
@@ -107,6 +147,10 @@ class BacktestResult(BaseModel):
         description="Hypothetical ending equity if all terminal open positions were liquidated at final bar close with friction",
     )
     performance: PerformanceReport = Field(..., description="Institutional performance summary")
+    simulation_assumptions: SimulationAssumptions | None = Field(
+        default=None,
+        description="Audit record of explicit simulation assumptions applied during backtest",
+    )
 
 
 class BacktestRunner:
@@ -281,6 +325,49 @@ class BacktestRunner:
 
         all_orders = broker.get_orders()
 
+        # Determine simulation assumptions
+        is_syn = any(b.is_synthetic for b in bars) if bars else False
+        src_type = (
+            MarketDataSourceType.SYNTHETIC_TEST
+            if is_syn
+            else MarketDataSourceType.HISTORICAL_RECORD
+        )
+        src_name: str | None = None
+        if not isinstance(data, list):
+            src_name = str(getattr(data, "file_path", type(data).__name__))
+        elif bars and bars[0].source:
+            src_name = bars[0].source
+        else:
+            src_name = "in_memory_bars"
+
+        slip_name = (
+            self.config.slippage_model.__class__.__name__
+            if self.config.slippage_model
+            else "SlippageModel"
+        )
+        slip_bps = (
+            round(float(getattr(self.config.slippage_model, "percentage", 0.0)) * 10000.0, 2)
+            if self.config.slippage_model
+            else 0.0
+        )
+
+        assumptions = SimulationAssumptions(
+            data_resolution=strategy.dsl.timeframe,
+            quotes_present=False,
+            fill_assumption=(
+                "SAME_BAR_CLOSE" if self.config.allow_same_bar_execution else "NEXT_BAR_OPEN"
+            ),
+            slippage_model=slip_name,
+            slippage_bps=slip_bps,
+            cost_model="NSE_STATUTORY",
+            volume_participation_enforced=self.config.max_volume_participation_pct is not None,
+            max_volume_participation_pct=self.config.max_volume_participation_pct,
+            volume_limit_action=self.config.volume_limit_action,
+            data_source_type=src_type,
+            data_source_name=src_name,
+            is_synthetic_data=is_syn,
+        )
+
         return BacktestResult(
             strategy_name=strategy.dsl.name,
             underlying=strategy.dsl.underlying,
@@ -294,6 +381,7 @@ class BacktestRunner:
             terminal_unrealized_pnl=terminal_unrealized_pnl,
             liquidated_ending_equity=liquidated_ending_equity,
             performance=performance,
+            simulation_assumptions=assumptions,
         )
 
     def _process_signal_execution(

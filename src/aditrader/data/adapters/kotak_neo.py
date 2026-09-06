@@ -6,7 +6,7 @@ from typing import Any
 
 from aditrader.core.models.market_data import Bar, Tick
 from aditrader.data.adapters.base import AbstractBrokerAdapter, ContractMetadata
-from aditrader.data.session import normalize_to_ist
+from aditrader.data.session import EXCHANGE_TIMEZONE, normalize_to_ist
 
 
 class KotakNeoAdapter(AbstractBrokerAdapter):
@@ -221,3 +221,97 @@ class KotakNeoAdapter(AbstractBrokerAdapter):
         self._is_authenticated = False
         self._subscriptions.clear()
         self._tick_callbacks.clear()
+
+    def parse_quote_packet(self, packet: dict[str, Any]) -> Tick:
+        """
+        Parse raw Kotak Neo WebSocket or quote packet into canonical Tick.
+
+        Captures all genuinely present quote/depth/trade fields without inventing missing values.
+        """
+        raw_symbol = (
+            packet.get("symbol")
+            or packet.get("ts")
+            or packet.get("trading_symbol")
+            or packet.get("pTrdSymbol")
+        )
+        symbol = str(raw_symbol).strip() if raw_symbol is not None else ""
+        if not symbol:
+            raise ValueError("Quote packet missing symbol or trading symbol")
+
+        raw_ltp = packet.get("ltp", packet.get("lp", packet.get("last_price", 0.0)))
+        ltp = float(raw_ltp)
+
+        # Volume
+        raw_vol = packet.get("volume", packet.get("v", packet.get("vol", 0)))
+        volume = int(float(raw_vol)) if raw_vol is not None else 0
+
+        # Open Interest
+        raw_oi = packet.get("oi", packet.get("open_interest"))
+        oi = int(float(raw_oi)) if raw_oi is not None and str(raw_oi).strip() != "" else None
+
+        # Bid / Ask Quotes
+        raw_bid = packet.get("bid", packet.get("bp", packet.get("bp1", packet.get("best_bid"))))
+        bid = float(raw_bid) if raw_bid is not None and float(raw_bid) > 0.0 else None
+
+        raw_ask = packet.get(
+            "ask", packet.get("sp", packet.get("ap", packet.get("sp1", packet.get("best_ask"))))
+        )
+        ask = float(raw_ask) if raw_ask is not None and float(raw_ask) > 0.0 else None
+
+        raw_bid_qty = packet.get("bid_qty", packet.get("bq", packet.get("bq1")))
+        bid_qty = (
+            int(float(raw_bid_qty))
+            if raw_bid_qty is not None and int(float(raw_bid_qty)) >= 0
+            else None
+        )
+
+        raw_ask_qty = packet.get("ask_qty", packet.get("sq", packet.get("aq", packet.get("sq1"))))
+        ask_qty = (
+            int(float(raw_ask_qty))
+            if raw_ask_qty is not None and int(float(raw_ask_qty)) >= 0
+            else None
+        )
+
+        # Exchange & Token
+        exchange = packet.get("exchange", packet.get("e", packet.get("pExchSeg")))
+        exchange_str = str(exchange).strip() if exchange else None
+
+        token = packet.get("token", packet.get("tok", packet.get("pSymbolToken")))
+        token_str = str(token).strip() if token else None
+
+        # Timestamp
+        ts_raw = packet.get("timestamp", packet.get("ltt", packet.get("lut", packet.get("time"))))
+        if ts_raw is not None:
+            if isinstance(ts_raw, datetime):
+                timestamp = normalize_to_ist(ts_raw)
+            elif isinstance(ts_raw, (int, float)):
+                val = float(ts_raw)
+                if val > 1e11:  # milliseconds epoch
+                    val = val / 1000.0
+                timestamp = datetime.fromtimestamp(val, tz=EXCHANGE_TIMEZONE)
+            elif isinstance(ts_raw, str) and ts_raw.strip():
+                try:
+                    parsed = datetime.fromisoformat(ts_raw.strip())
+                    timestamp = normalize_to_ist(parsed)
+                except ValueError:
+                    timestamp = datetime.now(tz=EXCHANGE_TIMEZONE)
+            else:
+                timestamp = datetime.now(tz=EXCHANGE_TIMEZONE)
+        else:
+            timestamp = datetime.now(tz=EXCHANGE_TIMEZONE)
+
+        return Tick(
+            symbol=symbol,
+            ltp=ltp,
+            timestamp=timestamp,
+            volume=volume,
+            oi=oi,
+            bid=bid,
+            ask=ask,
+            bid_qty=bid_qty,
+            ask_qty=ask_qty,
+            exchange=exchange_str,
+            instrument_token=token_str,
+            source="KOTAK_NEO",
+            is_synthetic=False,
+        )

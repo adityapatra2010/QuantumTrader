@@ -6,6 +6,7 @@ from uuid import uuid4
 from aditrader.core.costs import CostCalculator, InstrumentClass, SlippageModel
 from aditrader.core.models.enums import OrderSide, OrderStatus, OrderType, SignalDirection
 from aditrader.core.models.execution import AccountBalance, Position, Trade
+from aditrader.core.models.market_data import Tick
 from aditrader.core.models.order import Order
 from aditrader.core.models.trade_signal import Signal
 from aditrader.core.state_machine import OrderStateMachine
@@ -130,9 +131,14 @@ class PaperBroker:
         order: Order,
         current_market_price: float | None = None,
         timestamp: datetime | None = None,
+        bid: float | None = None,
+        ask: float | None = None,
     ) -> Order:
         """
         Validate risk gates and transition order from CREATED -> SUBMITTED (and FILLED if executable).
+
+        When genuine bid/ask quotes are available, market orders fill against realistic liquidity
+        (BUY at ask, SELL at bid) with slippage, instead of assuming fills at mid/LTP.
         """
         ts = timestamp or self._now()
         market_price = current_market_price or self._latest_prices.get(order.symbol)
@@ -170,12 +176,27 @@ class PaperBroker:
         # If market price is available, check for immediate execution
         if market_price is not None:
             if submitted.order_type == OrderType.MARKET:
-                return self._execute_fill(submitted, market_price, submitted.qty, ts)
+                # Use best quote if available: BUY fills at ask, SELL fills at bid
+                base_price = (
+                    ask
+                    if (submitted.side == OrderSide.BUY and ask is not None and ask > 0.0)
+                    else bid
+                    if (submitted.side == OrderSide.SELL and bid is not None and bid > 0.0)
+                    else market_price
+                )
+                return self._execute_fill(submitted, base_price, submitted.qty, ts)
             elif submitted.order_type == OrderType.LIMIT and submitted.price is not None:
+                comp_price = (
+                    ask
+                    if (submitted.side == OrderSide.BUY and ask is not None and ask > 0.0)
+                    else bid
+                    if (submitted.side == OrderSide.SELL and bid is not None and bid > 0.0)
+                    else market_price
+                )
                 is_executable = (
-                    market_price <= submitted.price
+                    comp_price <= submitted.price
                     if submitted.side == OrderSide.BUY
-                    else market_price >= submitted.price
+                    else comp_price >= submitted.price
                 )
                 if is_executable:
                     return self._execute_fill(submitted, submitted.price, submitted.qty, ts)
@@ -224,10 +245,18 @@ class PaperBroker:
     # --------------------------------------------------------------------------
 
     def on_tick(
-        self, tick_symbol: str, ltp: float, timestamp: datetime | None = None
+        self,
+        tick_symbol: str,
+        ltp: float,
+        timestamp: datetime | None = None,
+        bid: float | None = None,
+        ask: float | None = None,
     ) -> list[Trade]:
         """
         Process market price update: evaluate pending limit orders and update MTM P&L.
+
+        If bid/ask quotes are available, evaluates limit order executability against quotes:
+        BUY limit checks if ask <= price, SELL limit checks if bid >= price.
         """
         ts = timestamp or self._now()
         self._latest_prices[tick_symbol] = ltp
@@ -246,8 +275,17 @@ class PaperBroker:
                 and order.price is not None
             ):
                 remaining_qty = order.qty - order.filled_qty
+                comp_price = (
+                    ask
+                    if (order.side == OrderSide.BUY and ask is not None and ask > 0.0)
+                    else bid
+                    if (order.side == OrderSide.SELL and bid is not None and bid > 0.0)
+                    else ltp
+                )
                 is_executable = (
-                    ltp <= order.price if order.side == OrderSide.BUY else ltp >= order.price
+                    comp_price <= order.price
+                    if order.side == OrderSide.BUY
+                    else comp_price >= order.price
                 )
                 if is_executable and remaining_qty > 0:
                     self._execute_fill(order, order.price, remaining_qty, ts)
@@ -255,6 +293,18 @@ class PaperBroker:
                         executed_trades.append(self._trades[-1])
 
         return executed_trades
+
+    def on_market_tick(self, tick: Tick) -> list[Trade]:
+        """
+        Process a canonical Tick observation, using genuine bid/ask quotes when present.
+        """
+        return self.on_tick(
+            tick_symbol=tick.symbol,
+            ltp=tick.ltp,
+            timestamp=tick.timestamp,
+            bid=tick.bid,
+            ask=tick.ask,
+        )
 
     def on_signal(
         self,

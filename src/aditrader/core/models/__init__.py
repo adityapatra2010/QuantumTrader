@@ -13,6 +13,8 @@ from aditrader.core.models.execution import (
 )
 from aditrader.core.models.market_data import (
     Bar,
+    MarketDataProvenance,
+    MarketDataSourceType,
     Tick,
 )
 from aditrader.core.models.order import (
@@ -25,6 +27,8 @@ from aditrader.core.models.trade_signal import (
 __all__ = [
     "AccountBalance",
     "Bar",
+    "MarketDataProvenance",
+    "MarketDataSourceType",
     "Order",
     "OrderSide",
     "OrderStatus",

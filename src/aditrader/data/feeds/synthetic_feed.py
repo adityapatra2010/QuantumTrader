@@ -68,6 +68,10 @@ class SyntheticDataFeed(DataFeed):
                 close=close_p,
                 volume=volume,
                 oi=oi,
+                symbol=self.symbol,
+                timeframe=f"{self.interval_seconds}s",
+                source="SYNTHETIC",
+                is_synthetic=True,
             )
             self._bars.append(bar)
 
@@ -104,6 +108,8 @@ class SyntheticDataFeed(DataFeed):
                 volume=rng.randint(10, 200),
                 oi=bar.oi,
                 timestamp=curr_t,
+                source="SYNTHETIC",
+                is_synthetic=True,
             )
             ticks.append(tick)
             curr_t += tick_dt

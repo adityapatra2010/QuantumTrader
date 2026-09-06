@@ -36,13 +36,18 @@ class LocalDataCache:
             return path
 
         timestamps = [b.timestamp.isoformat() for b in bars]
-        symbols = [symbol for _ in bars]
+        symbols = [b.symbol for b in bars]
         opens = [b.open for b in bars]
         highs = [b.high for b in bars]
         lows = [b.low for b in bars]
         closes = [b.close for b in bars]
         volumes = [b.volume for b in bars]
         ois = [b.oi for b in bars]
+        vwaps = [b.vwap for b in bars]
+        tick_counts = [b.tick_count for b in bars]
+        sources = [b.source for b in bars]
+        timeframes = [b.timeframe for b in bars]
+        is_synthetics = [b.is_synthetic for b in bars]
 
         table = pa.Table.from_arrays(
             [
@@ -54,6 +59,11 @@ class LocalDataCache:
                 pa.array(closes, pa.float64()),
                 pa.array(volumes, pa.int64()),
                 pa.array(ois, pa.int64()),
+                pa.array(vwaps, pa.float64()),
+                pa.array(tick_counts, pa.int64()),
+                pa.array(sources, pa.string()),
+                pa.array(timeframes, pa.string()),
+                pa.array(is_synthetics, pa.bool_()),
             ],
             names=[
                 "timestamp",
@@ -64,6 +74,11 @@ class LocalDataCache:
                 "close",
                 "volume",
                 "open_interest",
+                "vwap",
+                "tick_count",
+                "source",
+                "timeframe",
+                "is_synthetic",
             ],
         )
 
@@ -92,12 +107,26 @@ class LocalDataCache:
         start_ist = normalize_to_ist(start_time) if start_time else None
         end_ist = normalize_to_ist(end_time) if end_time else None
 
+        vwap_col = pydict.get("vwap")
+        tc_col = pydict.get("tick_count")
+        src_col = pydict.get("source")
+        tf_col = pydict.get("timeframe")
+        syn_col = pydict.get("is_synthetic")
+        sym_col = pydict.get("symbol")
+
         for i in range(n_rows):
             ts = normalize_to_ist(datetime.fromisoformat(pydict["timestamp"][i]))
             if start_ist and ts < start_ist:
                 continue
             if end_ist and ts > end_ist:
                 continue
+
+            vwap = float(vwap_col[i]) if vwap_col and vwap_col[i] is not None else None
+            tick_count = int(tc_col[i]) if tc_col and tc_col[i] is not None else None
+            source = str(src_col[i]) if src_col and src_col[i] is not None else None
+            tf = str(tf_col[i]) if tf_col and tf_col[i] is not None else None
+            is_syn = bool(syn_col[i]) if syn_col and syn_col[i] is not None else False
+            bar_sym = str(sym_col[i]) if sym_col and sym_col[i] is not None else None
 
             bar = Bar(
                 timestamp=ts,
@@ -107,6 +136,12 @@ class LocalDataCache:
                 close=float(pydict["close"][i]),
                 volume=int(pydict["volume"][i]),
                 oi=int(pydict["open_interest"][i]),
+                symbol=bar_sym,
+                vwap=vwap,
+                tick_count=tick_count,
+                source=source,
+                timeframe=tf,
+                is_synthetic=is_syn,
             )
             bars.append(bar)
 
@@ -126,6 +161,13 @@ class LocalDataCache:
         bids = [t.bid for t in ticks]
         asks = [t.ask for t in ticks]
         ois = [t.oi for t in ticks]
+        bid_qtys = [t.bid_qty for t in ticks]
+        ask_qtys = [t.ask_qty for t in ticks]
+        exchanges = [t.exchange for t in ticks]
+        tokens = [t.instrument_token for t in ticks]
+        sources = [t.source for t in ticks]
+        data_types = [t.data_type for t in ticks]
+        is_synthetics = [t.is_synthetic for t in ticks]
 
         table = pa.Table.from_arrays(
             [
@@ -136,6 +178,13 @@ class LocalDataCache:
                 pa.array(bids, pa.float64()),
                 pa.array(asks, pa.float64()),
                 pa.array(ois, pa.int64()),
+                pa.array(bid_qtys, pa.int64()),
+                pa.array(ask_qtys, pa.int64()),
+                pa.array(exchanges, pa.string()),
+                pa.array(tokens, pa.string()),
+                pa.array(sources, pa.string()),
+                pa.array(data_types, pa.string()),
+                pa.array(is_synthetics, pa.bool_()),
             ],
             names=[
                 "timestamp",
@@ -145,6 +194,13 @@ class LocalDataCache:
                 "bid",
                 "ask",
                 "open_interest",
+                "bid_qty",
+                "ask_qty",
+                "exchange",
+                "instrument_token",
+                "source",
+                "data_type",
+                "is_synthetic",
             ],
         )
 
@@ -163,18 +219,47 @@ class LocalDataCache:
         ticks: list[Tick] = []
         n_rows = len(pydict["timestamp"])
 
+        bid_col = pydict.get("bid")
+        ask_col = pydict.get("ask")
+        oi_col = pydict.get("open_interest")
+        bid_qty_col = pydict.get("bid_qty")
+        ask_qty_col = pydict.get("ask_qty")
+        exch_col = pydict.get("exchange")
+        tok_col = pydict.get("instrument_token")
+        src_col = pydict.get("source")
+        dt_col = pydict.get("data_type")
+        syn_col = pydict.get("is_synthetic")
+
         for i in range(n_rows):
             ts = datetime.fromisoformat(pydict["timestamp"][i])
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=EXCHANGE_TIMEZONE)
 
+            bid = float(bid_col[i]) if bid_col and bid_col[i] is not None else None
+            ask = float(ask_col[i]) if ask_col and ask_col[i] is not None else None
+            oi = int(oi_col[i]) if oi_col and oi_col[i] is not None else None
+            bid_qty = int(bid_qty_col[i]) if bid_qty_col and bid_qty_col[i] is not None else None
+            ask_qty = int(ask_qty_col[i]) if ask_qty_col and ask_qty_col[i] is not None else None
+            exch = str(exch_col[i]) if exch_col and exch_col[i] is not None else None
+            tok = str(tok_col[i]) if tok_col and tok_col[i] is not None else None
+            source = str(src_col[i]) if src_col and src_col[i] is not None else None
+            data_type = str(dt_col[i]) if dt_col and dt_col[i] is not None else "TICK"
+            is_syn = bool(syn_col[i]) if syn_col and syn_col[i] is not None else False
+
             tick = Tick(
                 symbol=pydict["symbol"][i],
                 ltp=float(pydict["ltp"][i]),
                 volume=int(pydict["volume"][i]),
-                bid=float(pydict["bid"][i]),
-                ask=float(pydict["ask"][i]),
-                oi=int(pydict["open_interest"][i]),
+                bid=bid,
+                ask=ask,
+                oi=oi,
+                bid_qty=bid_qty,
+                ask_qty=ask_qty,
+                exchange=exch,
+                instrument_token=tok,
+                source=source,
+                data_type=data_type,
+                is_synthetic=is_syn,
                 timestamp=ts,
             )
             ticks.append(tick)

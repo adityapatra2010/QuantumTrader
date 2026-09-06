@@ -69,6 +69,11 @@ class CSVDataFeed(DataFeed):
                 volume = int(float(cleaned_row.get("volume", 0)))
                 oi = int(float(cleaned_row.get("oi", 0)))
 
+                vwap_raw = cleaned_row.get("vwap")
+                vwap = float(vwap_raw) if vwap_raw and float(vwap_raw) > 0 else None
+                tc_raw = cleaned_row.get("tick_count", cleaned_row.get("ticks"))
+                tick_count = int(float(tc_raw)) if tc_raw and int(float(tc_raw)) >= 0 else None
+
                 bar = Bar(
                     timestamp=ist_ts,
                     open=open_p,
@@ -77,6 +82,12 @@ class CSVDataFeed(DataFeed):
                     close=close_p,
                     volume=volume,
                     oi=oi,
+                    symbol=self.symbol,
+                    vwap=vwap,
+                    tick_count=tick_count,
+                    source="CSV_HISTORICAL",
+                    timeframe=self.timeframe,
+                    is_synthetic=False,
                 )
                 loaded.append(bar)
 
