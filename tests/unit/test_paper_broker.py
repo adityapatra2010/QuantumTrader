@@ -126,7 +126,9 @@ def test_limit_order_delayed_fill(broker: PaperBroker) -> None:
     # Market tick drops to 149.0 -> triggers limit fill at order price 150.0
     trades = broker.on_tick(symbol, 149.0, timestamp=now)
     assert len(trades) == 1
-    assert broker._orders[order.order_id].average_fill_price == pytest.approx(150.075, abs=0.01)  # with slippage
+    assert broker._orders[order.order_id].average_fill_price == pytest.approx(
+        150.075, abs=0.01
+    )  # with slippage
 
 
 def test_margin_threshold_rejection(broker: PaperBroker) -> None:
@@ -325,4 +327,3 @@ def test_position_reversal_long_to_short(broker: PaperBroker) -> None:
     pos_mtm = broker.get_positions()[0]
     expected_short_unrealized = round((sell_price - 3550.0) * 30, 2)
     assert pos_mtm.unrealized_pnl == pytest.approx(expected_short_unrealized, abs=0.1)
-

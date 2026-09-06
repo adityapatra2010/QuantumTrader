@@ -1,22 +1,22 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-06 16:40 IST  
-**Current Phase**: Phase 2 — IN PROGRESS 🔨 (Market Data Layer & Ingestion Pipeline)  
-**Last Verified By**: AGY CLI Phase 1 Audit & Hardening Suite (Ruff, Mypy Strict, Pytest 30/30)  
+**Last Updated**: 2026-09-06 16:45 IST  
+**Current Phase**: Phase 2 — COMPLETE ✅ | Preparing Phase 3 (Options Derivatives & Volatility Engine)  
+**Last Verified By**: AGY CLI Phase 2 Test & Tooling Suite (Ruff, Mypy Strict, Pytest 55/55)  
 
 ---
 
 ## Repository State
 
 - **Branch**: `main`
-- **Working Tree**: Core domain entities, order state machine, cost & slippage models, paper broker, and local SQLite/Alembic ledger persistence implemented, audited, and tested.
+- **Working Tree**: Core domain entities, order state machine, paper broker, local SQLite ledger persistence, NSE session timing controls, CSV/Synthetic data feeds, Kotak Neo read-only adapter, TickAggregator, LocalDataCache (Parquet), and DataFeedStreamer implemented and verified.
 
 ---
 
 ## Active Implementation Rules
 
-Until Phase 2 sign-off:
-- **Do not implement live broker API adapters or live order routing** (air-gapped paper trading only; read-only market data feeds).
+Until Phase 3 sign-off:
+- **Do not implement live broker order routing** (strictly air-gapped; read-only market data feeds only).
 - **Do not create options analytics or Greeks calculators** (Phase 3).
 - **Do not create strategy DSL compilers or AST evaluators** (Phase 4).
 - **Do not integrate AI forecasting or vision modules** (Phases 5 & 6).
@@ -29,28 +29,19 @@ Until Phase 2 sign-off:
 ## Architecture Status
 
 - **Documentation**: `██████████` 100%
-- **Implementation**: `██░░░░░░░░` 20% (Phase 1 Audited & Complete; Phase 2 in progress)
+- **Implementation**: `███░░░░░░░` 30% (Phases 0, 1, and 2 Complete)
 
 ---
 
 ## Next Milestone
 
-### Phase 2: Market Data Layer & Ingestion Pipeline (Active)
+### Phase 3: Options Derivatives & Volatility Engine
 **Definition of Done**:
-- Ingestion feed implementations: Historical CSV replay (`data/feeds/csv_feed.py`) and synthetic market data generator (`data/feeds/synthetic_feed.py`).
-- Abstract broker adapter interface (`data/adapters/base.py`) with read-only Kotak Neo adapter implementation (`data/adapters/kotak_neo.py`).
-- NSE session calendar and market hours validation (`data/session.py`: 09:15 to 15:30 IST, holidays, weekly/monthly expiries).
-- Thread-safe ring buffer and tick aggregator (`data/feeds/aggregator.py`) emitting immutable 1m/5m `Bar` events.
-- Local Parquet caching layer (`data/cache.py`) for tick and OHLCV bar historical data.
-- Streamer orchestrator (`data/feeds/streamer.py`) exposing unified consumer interface for both historical files and live feeds.
-- Deterministic unit and integration tests verifying replay determinism, session filtering, and cache round-tripping without live broker connections.
-
-### Phase 3: Options Derivatives & Volatility Engine (Upcoming)
-**Definition of Done**:
-- Strike ladders, Open Interest, and expiry dates dynamically from scrip master.
-- Numerical Implied Volatility (IV) solver using Newton-Raphson / Brent's method.
-- Black-Scholes pricing engine computing Delta, Gamma, Theta, and Vega.
-- Pure payoff engine for multi-leg strategies.
+- Implement `options/chain.py`: Aggregate normalized strike ladders, Open Interest, and expiry dates dynamically from scrip master.
+- Implement `options/iv.py`: Numerical Implied Volatility (IV) solver using Newton-Raphson / Brent's method derived from market premiums.
+- Implement `options/greeks.py`: Black-Scholes pricing engine computing Delta, Gamma, Theta, and Vega.
+- Implement `options/payoff.py`: Pure function computing at-expiry and mark-to-market payoff curves for multi-leg option strategies.
+- Acceptance: Unit tests confirm IV convergence against market prices and verify Greeks and payoff bounds for Iron Condors and Straddles without external network dependencies.
 
 ---
 
@@ -67,6 +58,21 @@ Until Phase 2 sign-off:
 ---
 
 ## Completed
+
+### Phase 2: Market Data Layer & Ingestion Pipeline
+**Status**: COMPLETE ✅
+- **Strict Exchange Timestamping (`Asia/Kolkata`)**: `data.session` module normalizing naive/aware datetimes, validating NSE regular hours (09:15–15:30 IST), pre-open, post-market, weekends, and standard NSE holidays.
+- **Deterministic Historical CSV Replay**: `data.feeds.csv_feed` (`CSVDataFeed` and `data.csv_feed` alias) reading point-in-time CSV files, enforcing chronological ordering, deduplicating identical timestamps, and optional market hours filtering.
+- **Deterministic Synthetic Data Generator**: `data.feeds.synthetic_feed` (`SyntheticDataFeed`) with seeded random walk generation for offline deterministic testing, bounded OHLCV candles, and intermediate tick generation.
+- **Abstract Broker Adapter Interface**: `data.adapters.base` (`AbstractBrokerAdapter` and `ContractMetadata`) enforcing read-only boundary and security veto against real order routing (ADR 002).
+- **Concrete Kotak Neo Adapter**: `data.adapters.kotak_neo` (`KotakNeoAdapter`) providing authentication, scrip master CSV row parsing into `ContractMetadata`, tick subscription management, and offline/mock test mode.
+- **Tick Aggregator & Ring Buffer**: `data.feeds.aggregator` with thread-safe `RingBuffer[T]` (ADR 008) avoiding unbounded memory growth and `TickAggregator` rolling up streaming ticks into immutable 1m/5m `Bar` events.
+- **Local Columnar Cache**: `data.cache` (`LocalDataCache`) providing high-throughput local Parquet serialization and deserialization for bars and ticks with timestamp window filtering.
+- **Streamer Orchestrator**: `data.feeds.streamer` (`DataFeedStreamer`) providing a unified consumer interface driving runner loops identically across live feeds and historical files.
+- **Automated Verification**:
+  - `ruff check .` passing with 0 warnings/errors (Python 3.11 target).
+  - `mypy src tests` passing in strict mode across 65 source files with 0 errors (Python 3.11 target).
+  - `pytest` suite passing 55/55 unit tests (100% pass rate).
 
 ### Phase 1: Core Domain Entities & Order State Machine (Audited)
 **Status**: COMPLETE & AUDITED ✅
@@ -124,26 +130,17 @@ Until Phase 2 sign-off:
 
 ## Current Work
 
-**Status**: IMPLEMENTING PHASE 2 (Market Data Layer & Ingestion Pipeline)
+**Status**: READY FOR USER SIGN-OFF TO BEGIN PHASE 3
 
-Active Tasks:
-1. Implement `aditrader.data.session`: NSE session timings, calendar, holiday checks, and `Asia/Kolkata` time normalization.
-2. Implement `aditrader.data.feeds.base`: Abstract `DataFeed` consumer protocol.
-3. Implement `aditrader.data.feeds.csv_feed`: Deterministic point-in-time historical candle replay.
-4. Implement `aditrader.data.feeds.synthetic_feed`: Deterministic synthetic tick/bar generator.
-5. Implement `aditrader.data.adapters.base`: Abstract read-only broker adapter interface and `ContractMetadata` model.
-6. Implement `aditrader.data.adapters.kotak_neo`: Concrete Kotak Neo read-only adapter with scrip master discovery.
-7. Implement `aditrader.data.feeds.aggregator`: Thread-safe `RingBuffer` and `TickAggregator` (1m/5m immutable `Bar` emission).
-8. Implement `aditrader.data.cache`: Local Parquet/Polars caching layer.
-9. Implement `aditrader.data.feeds.streamer`: Unified `DataFeedStreamer` coordinating live and historical feeds.
-10. Build deterministic unit tests verifying session controls, CSV replay determinism, aggregator roll-ups, and cache round-trips.
+Pending Action Items:
+1. Stage and commit Phase 2 implementation to Git.
+2. Await user sign-off to proceed with Phase 3 (Options Derivatives & Volatility Engine).
 
 ---
 
 ## Not Implemented Yet (Do NOT Hallucinate)
 
 The following components do **NOT** exist in code:
-- No market data adapters or WebSocket streamers (`data/adapters/`, `data/feeds/`)
 - No options analytics, Greeks, or payoff calculators (`options/`)
 - No strategy DSL compiler, AST evaluators, or strategy library (`strategy/`)
 - No validation rules or runtime risk gates (`validation/`, `core/risk/`)
