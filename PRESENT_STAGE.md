@@ -1,25 +1,25 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-06 16:51 IST  
-**Current Phase**: Phase 3 — COMPLETE ✅ | Preparing Phase 4 (Versioned Strategy DSL & Compiler Engine)  
-**Last Verified By**: AGY CLI Phase 3 Test & Tooling Suite (Ruff, Mypy Strict, Pytest 75/75)  
+**Last Updated**: 2026-09-06 17:05 IST  
+**Current Phase**: Phase 4 — COMPLETE & AUDITED ✅ | Preparing Phase 5 (Backtesting Engine & Anti-Overfitting Controls)  
+**Last Verified By**: AGY CLI Phase 4 Test & Tooling Suite (Ruff, Mypy Strict, Pytest 102/102)  
 
 ---
 
 ## Repository State
 
 - **Branch**: `main`
-- **Working Tree**: Core domain entities, order state machine, paper broker, local SQLite ledger persistence, market data feeds, Kotak Neo adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, and multi-leg payoff engine implemented and verified.
+- **Working Tree**: Core domain entities, order state machine, paper broker, local SQLite ledger persistence, market data feeds, Kotak Neo adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, and version-controlled strategy registry implemented and verified.
 
 ---
 
 ## Active Implementation Rules
 
-Until Phase 4 sign-off:
+Until Phase 5 sign-off:
 - **Do not implement live broker order routing** (strictly air-gapped; read-only market data feeds only).
-- **Do not create strategy DSL compilers or AST evaluators** (Phase 4).
 - **Do not execute raw dynamic code** (`eval()`, `exec()`, or dynamic python code generation).
-- **Do not integrate AI forecasting or vision modules** (Phases 5 & 6).
+- **Do not implement backtesting loops, walk-forward splitters, or risk gates** (Phase 5).
+- **Do not integrate AI forecasting or vision modules** (Phases 6 & 7).
 - **Do not construct Plotly Dash dashboards or interactive CLI handlers** (Phase 8).
 - **Do not modify architecture or contracts** without proposing an ADR update in `DECISIONS.md`.
 - **Maintain strict Python 3.11 target compatibility** across all typing, syntax, and libraries.
@@ -29,19 +29,19 @@ Until Phase 4 sign-off:
 ## Architecture Status
 
 - **Documentation**: `██████████` 100%
-- **Implementation**: `████░░░░░░` 40% (Phases 0, 1, 2, and 3 Complete)
+- **Implementation**: `█████░░░░░` 50% (Phases 0, 1, 2, 3, and 4 Complete)
 
 ---
 
 ## Next Milestone
 
-### Phase 4: Versioned Strategy DSL & Compiler Engine
+### Phase 5: Backtesting Engine & Anti-Overfitting Controls
 **Definition of Done**:
-- Define versioned declarative JSON AST schema (`schema_version: "1.0"`).
-- Build `strategy_compiler` to parse condition trees into stateless, executable state machines (`on_bar(history: list[Bar]) -> Optional[Signal]`).
-- Implement condition evaluators: Indicators, Time/Session, Greeks, Premium, OI, and Market Structure (strictly using declarative AST operators; dynamic code execution prohibited per ADR 007).
-- Build `library/` registry with semantic versioning and Strategy DNA vector profiling.
-- Acceptance: Compiler transforms a versioned multi-leg DSL JSON document into an executable object without generating dynamic Python code.
+- Build backtest runner with strict point-in-time isolation (zero future data leakage).
+- Support Walk-Forward Analysis and Out-of-Sample (Train/Test) split harnesses to prevent overfitting.
+- Build `risk-engine`: Pre-trade margin gates, unhedged expiry-day gamma protection, and portfolio drawdown circuit breakers.
+- Build `performance-metrics`: Calculate mathematical expectancy ($E$), Profit Factor ($PF$), Sharpe, Sortino, SQN, and Max Drawdown.
+- Acceptance: Backtester simulates 1,000 bars with transaction costs, logging metrics and rejecting orders that breach margin thresholds.
 
 ---
 
@@ -58,6 +58,20 @@ Until Phase 4 sign-off:
 ---
 
 ## Completed
+
+### Phase 4: Versioned Strategy DSL & Compiler Engine
+**Status**: COMPLETE & AUDITED ✅
+- **Versioned JSON AST Schema (`strategy.builder.schema`)**: Pydantic v2 frozen schema pinned to `schema_version: "1.0"` (ADR 001). Supported comparison operators (`GREATER_THAN`, `LESS_THAN`, `EQUALS`, `WITHIN_RANGE`, `CROSSES_ABOVE`, `CROSSES_BELOW`, `MATCHES_REGIME`), composite combinators (`AND`, `OR`, `NOT`), condition categories (`indicator`, `time`, `greeks`, `premium`, `open_interest`, `market_structure`, `regime`), and option leg definitions.
+- **Pure Indicator Library (`strategy.compiler.indicators`)**: Statically registered, pure-function technical indicators (`SMA`, `EMA`, `RSI`, `ATR`, `BollingerBands`, `Supertrend`) with zero dynamic code execution (ADR 007) and strict numerical accuracy.
+- **Static AST Evaluators (`strategy.compiler.evaluators`)**: Multi-category condition evaluators evaluating bar history, technical crossover events, time-of-day windows, option Greek sensitivities, premium decay percentages, and open interest / PCR without script interpretation.
+- **Deterministic Strategy State Machine (`strategy.compiler.engine`)**: `ExecutableStrategy` implementing stateless `on_bar(history: list[Bar]) -> Signal | None` contract, emitting standard `Signal` directives with zero order routing capabilities (ADR 002).
+- **Strategy DNA Profiling (`strategy.library.dna`)**: Multi-dimensional vector profiler calculating Directionality (strike-weighted delta proxy), Theta Exposure, Vega Risk, Gamma Risk (uncovered short option detection), Margin Efficiency, Style, and Target Regime.
+- **Institutional Option Templates (`strategy.library.templates`)**: Built-in production templates for Nifty Weekly Iron Condor, Nifty Long Straddle, and Nifty Bull Call Spread.
+- **Version-Controlled Catalog (`strategy.library.registry`)**: Thread-safe `StrategyRegistry` with strict version immutability (overwriting existing versions raises `StrategyVersionExistsError`), ID and Name lookups, and multi-criteria DNA filtering.
+- **Automated Verification**:
+  - `ruff check .` passing with 0 warnings/errors (Python 3.11 target).
+  - `mypy src tests` passing in strict mode across 89 source files with 0 errors (Python 3.11 target).
+  - `pytest` suite passing 102/102 unit tests (100% pass rate in 0.99s).
 
 ### Phase 3: Options Derivatives & Volatility Engine
 **Status**: COMPLETE ✅
@@ -142,18 +156,18 @@ Until Phase 4 sign-off:
 
 ## Current Work
 
-**Status**: READY FOR USER SIGN-OFF TO BEGIN PHASE 4
+**Status**: PHASE 4 COMPLETE & AUDITED ✅ — AWAITING USER SIGN-OFF TO BEGIN PHASE 5
 
 Pending Action Items:
-1. Phase 3 committed and pushed (`76d1fae`).
-2. Awaiting explicit user sign-off to proceed with Phase 4 (Versioned Strategy DSL & Compiler Engine).
+1. Commit and push Phase 4 implementation (`feat(phase-4): implement versioned strategy DSL and compiler engine`).
+2. Await explicit user sign-off to proceed with Phase 5 (Backtesting Engine & Anti-Overfitting Controls).
 
 ---
 
 ## Not Implemented Yet (Do NOT Hallucinate)
 
 The following components do **NOT** exist in code:
-- No strategy DSL compiler, AST evaluators, or strategy library (`strategy/`)
+- No backtest runner, walk-forward splits, or performance metrics (`backtesting/`, `analytics/`)
 - No validation rules or runtime risk gates (`validation/`, `core/risk/`)
 - No AI forecasting models, vision parsers, or reviewer modules (`ai/`)
 - No Plotly Dash web interface or CLI entry points (`ui/`, `cli/`)
