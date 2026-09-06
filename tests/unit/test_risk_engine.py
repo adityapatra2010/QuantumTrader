@@ -131,6 +131,17 @@ def test_risk_engine_circuit_breaker_trigger_and_closing_exemption() -> None:
     )
     assert result_close_short.passed is True
 
+    # Position flip: Existing long 10, SELL 25 attempts to flip to -15 short -> MUST BE REJECTED!
+    sell_flip_order = _create_order(symbol="RELIANCE", side=OrderSide.SELL, qty=25)
+    result_flip = engine.validate_order(
+        sell_flip_order,
+        balance,
+        {"RELIANCE": existing_long},
+        current_market_price=2500.0,
+    )
+    assert result_flip.passed is False
+    assert result_flip.reason == RiskRejectionReason.CIRCUIT_BREAKER_ACTIVE
+
 
 def test_risk_engine_expiry_naked_short_rejection() -> None:
     engine = RiskEngine()

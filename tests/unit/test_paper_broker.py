@@ -327,3 +327,39 @@ def test_position_reversal_long_to_short(broker: PaperBroker) -> None:
     pos_mtm = broker.get_positions()[0]
     expected_short_unrealized = round((sell_price - 3550.0) * 30, 2)
     assert pos_mtm.unrealized_pnl == pytest.approx(expected_short_unrealized, abs=0.1)
+
+
+def test_short_and_long_total_capital_accounting(broker: PaperBroker) -> None:
+    """Verify total_capital equity accounting does not inflate on shorting or double-count gains."""
+    now = datetime.now(UTC)
+    init_cap = broker.initial_capital
+
+    # 1. Short 10 units @ 100.0
+    order = broker.create_order(
+        symbol="NIFTY_SHORT",
+        side=OrderSide.SELL,
+        order_type=OrderType.MARKET,
+        qty=10,
+        timestamp=now,
+    )
+    broker.submit_order(order, current_market_price=100.0, timestamp=now)
+    bal1 = broker.get_account_balance()
+    # Total capital immediately after fill must equal initial capital minus slippage & fees
+    assert bal1.total_capital < init_cap
+    assert bal1.total_capital > init_cap - 50.0  # reasonable friction
+
+    # 2. Adverse price move: rises from 100 to 120 (loss of ~200)
+    broker.on_tick("NIFTY_SHORT", ltp=120.0, timestamp=now)
+    bal_adverse = broker.get_account_balance()
+    assert bal_adverse.unrealized_pnl < -190.0
+    assert bal_adverse.total_capital == pytest.approx(
+        bal1.total_capital + bal_adverse.unrealized_pnl, abs=1.0
+    )
+
+    # 3. Favorable price move: drops from 100 to 80 (gain of ~200)
+    broker.on_tick("NIFTY_SHORT", ltp=80.0, timestamp=now)
+    bal_favorable = broker.get_account_balance()
+    assert bal_favorable.unrealized_pnl > 190.0
+    assert bal_favorable.total_capital == pytest.approx(
+        bal1.total_capital + bal_favorable.unrealized_pnl, abs=1.0
+    )

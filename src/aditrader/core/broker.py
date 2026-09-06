@@ -56,7 +56,15 @@ class PaperBroker:
                 used_margin += abs(pos.qty) * current_price
 
         used_margin = round(used_margin, 2)
-        total_capital = round(self.cash_balance + used_margin + unrealized_pnl, 2)
+        portfolio_market_value = sum(
+            float(pos.qty)
+            * self._latest_prices.get(
+                pos.symbol, pos.buy_avg_price if pos.qty > 0 else pos.sell_avg_price
+            )
+            for pos in self._positions.values()
+            if pos.qty != 0
+        )
+        total_capital = round(self.cash_balance + portfolio_market_value, 2)
         available_margin = round(
             max(0.0, (total_capital * self.max_margin_utilization) - used_margin), 2
         )

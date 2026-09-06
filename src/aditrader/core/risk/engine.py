@@ -70,26 +70,27 @@ class RiskEngine:
             RiskCheckResult indicating pass or failure classification.
         """
         existing_pos = positions.get(order.symbol)
-        is_closing = False
-        if (
-            existing_pos
+        is_opposite = (
+            existing_pos is not None
             and existing_pos.qty != 0
             and (
                 (existing_pos.qty > 0 and order.side == OrderSide.SELL)
                 or (existing_pos.qty < 0 and order.side == OrderSide.BUY)
             )
-        ):
-            is_closing = True
+        )
+        existing_qty_abs = abs(existing_pos.qty) if is_opposite and existing_pos is not None else 0
+        net_new_qty = (order.qty - existing_qty_abs) if is_opposite else order.qty
+        is_pure_closing = is_opposite and (order.qty <= existing_qty_abs)
 
         # Gate 1: Portfolio Drawdown Circuit Breaker
-        # Closing orders are always permitted to reduce portfolio risk.
-        if self._circuit_breaker_active and not is_closing:
+        # Only strictly closing/reducing orders are permitted to reduce portfolio risk.
+        if self._circuit_breaker_active and not is_pure_closing:
             return RiskCheckResult(
                 passed=False,
                 reason=RiskRejectionReason.CIRCUIT_BREAKER_ACTIVE,
                 detail=(
                     f"Portfolio drawdown circuit breaker active (peak: {self.peak_equity:.2f}, "
-                    f"current: {self.current_equity:.2f}). New entries prohibited."
+                    f"current: {self.current_equity:.2f}). New entries and position flips prohibited."
                 ),
             )
 
@@ -97,7 +98,7 @@ class RiskEngine:
         if (
             is_expiry_day
             and self.limits.prohibit_expiry_naked_shorts
-            and not is_closing
+            and not is_pure_closing
             and order.side == OrderSide.SELL
             and is_naked_short
         ):
@@ -108,8 +109,8 @@ class RiskEngine:
             )
 
         # Gate 3: Maximum Margin Utilization (85% Ceiling)
-        if not is_closing:
-            order_margin = float(order.qty) * current_market_price
+        if not is_pure_closing:
+            order_margin = float(net_new_qty) * current_market_price
             projected_used_margin = balance.used_margin + order_margin
             total_cap = (
                 balance.total_capital if balance.total_capital > 0.0 else self.initial_capital
@@ -128,14 +129,15 @@ class RiskEngine:
                 )
 
         # Gate 4: Maximum Position Limits (lots)
-        if not is_closing:
+        if not is_pure_closing:
             total_current_lots = sum(abs(p.qty) for p in positions.values())
-            if total_current_lots + order.qty > self.limits.max_concurrent_lots:
+            projected_lots = total_current_lots - existing_qty_abs + net_new_qty
+            if projected_lots > self.limits.max_concurrent_lots:
                 return RiskCheckResult(
                     passed=False,
                     reason=RiskRejectionReason.POSITION_LIMIT_EXCEEDED,
                     detail=(
-                        f"Order qty ({order.qty}) brings total lots ({total_current_lots + order.qty}) "
+                        f"Order qty ({order.qty}) brings total lots ({projected_lots}) "
                         f"above maximum allowable ({self.limits.max_concurrent_lots})."
                     ),
                 )
