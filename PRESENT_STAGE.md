@@ -1,46 +1,56 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-06 16:32 IST  
-**Current Phase**: Phase 1 — COMPLETE ✅ | Preparing Phase 2 (Market Data Layer & Ingestion Pipeline)  
-**Last Verified By**: AGY CLI Phase 1 Test & Tooling Suite (Ruff, Mypy Strict, Pytest 27/27)  
+**Last Updated**: 2026-09-06 16:40 IST  
+**Current Phase**: Phase 2 — IN PROGRESS 🔨 (Market Data Layer & Ingestion Pipeline)  
+**Last Verified By**: AGY CLI Phase 1 Audit & Hardening Suite (Ruff, Mypy Strict, Pytest 30/30)  
 
 ---
 
 ## Repository State
 
 - **Branch**: `main`
-- **Working Tree**: Core domain entities, order state machine, cost & slippage models, paper broker, and local SQLite/Alembic ledger persistence implemented and tested.
+- **Working Tree**: Core domain entities, order state machine, cost & slippage models, paper broker, and local SQLite/Alembic ledger persistence implemented, audited, and tested.
 
 ---
 
 ## Active Implementation Rules
 
 Until Phase 2 sign-off:
-- **Do not implement live broker API adapters or live order routing** (air-gapped paper trading only).
+- **Do not implement live broker API adapters or live order routing** (air-gapped paper trading only; read-only market data feeds).
 - **Do not create options analytics or Greeks calculators** (Phase 3).
 - **Do not create strategy DSL compilers or AST evaluators** (Phase 4).
 - **Do not integrate AI forecasting or vision modules** (Phases 5 & 6).
 - **Do not construct Plotly Dash dashboards or interactive CLI handlers** (Phase 8).
 - **Do not modify architecture or contracts** without proposing an ADR update in `DECISIONS.md`.
+- **Maintain strict Python 3.11 target compatibility** across all typing, syntax, and libraries.
 
 ---
 
 ## Architecture Status
 
 - **Documentation**: `██████████` 100%
-- **Implementation**: `██░░░░░░░░` 20% (Phases 0 and 1 Complete)
+- **Implementation**: `██░░░░░░░░` 20% (Phase 1 Audited & Complete; Phase 2 in progress)
 
 ---
 
 ## Next Milestone
 
-### Phase 2: Market Data Layer & Ingestion Pipeline
+### Phase 2: Market Data Layer & Ingestion Pipeline (Active)
 **Definition of Done**:
-- Ingestion feed implementations: Historical CSV replay and synthetic market data generator.
-- Abstract broker adapter interface: Read-only Kotak Neo market data feed integration.
-- NSE session calendar and market hours validation (09:15 to 15:30 IST, holidays, weekly/monthly expiries).
-- Local Parquet caching layer for tick and 1-minute bar historical data.
-- Unit and integration tests verify replay determinism, session filtering, and cache round-tripping without live broker connections.
+- Ingestion feed implementations: Historical CSV replay (`data/feeds/csv_feed.py`) and synthetic market data generator (`data/feeds/synthetic_feed.py`).
+- Abstract broker adapter interface (`data/adapters/base.py`) with read-only Kotak Neo adapter implementation (`data/adapters/kotak_neo.py`).
+- NSE session calendar and market hours validation (`data/session.py`: 09:15 to 15:30 IST, holidays, weekly/monthly expiries).
+- Thread-safe ring buffer and tick aggregator (`data/feeds/aggregator.py`) emitting immutable 1m/5m `Bar` events.
+- Local Parquet caching layer (`data/cache.py`) for tick and OHLCV bar historical data.
+- Streamer orchestrator (`data/feeds/streamer.py`) exposing unified consumer interface for both historical files and live feeds.
+- Deterministic unit and integration tests verifying replay determinism, session filtering, and cache round-tripping without live broker connections.
+
+### Phase 3: Options Derivatives & Volatility Engine (Upcoming)
+**Definition of Done**:
+- Strike ladders, Open Interest, and expiry dates dynamically from scrip master.
+- Numerical Implied Volatility (IV) solver using Newton-Raphson / Brent's method.
+- Black-Scholes pricing engine computing Delta, Gamma, Theta, and Vega.
+- Pure payoff engine for multi-leg strategies.
 
 ---
 
@@ -58,18 +68,27 @@ Until Phase 2 sign-off:
 
 ## Completed
 
-### Phase 1: Core Domain Entities & Order State Machine
-**Status**: COMPLETE ✅
+### Phase 1: Core Domain Entities & Order State Machine (Audited)
+**Status**: COMPLETE & AUDITED ✅
 - **Immutable Domain Entities**: `Tick`, `Bar`, `Signal`, `Order`, `Trade`, `Position`, `AccountBalance` implemented with frozen Pydantic models, runtime invariant validations, and price envelope checks.
 - **Formal Order State Machine**: `OrderStateMachine` implementing strictly allowed lifecycle transitions (`CREATED` $\to$ `SUBMITTED` $\to$ `FILLED` | `PARTIALLY_FILLED` | `CANCELLED` | `REJECTED`), blocking illegal backwards/terminal transitions with `InvalidOrderStateTransitionError`.
 - **Cost & Slippage Calculators**: `CostCalculator` calculating statutory Indian equity/derivative taxes (STT, Exchange turnover charges, GST, SEBI turnover fees, Stamp duty) and `SlippageModel` (linear basis points + half-spread modeling).
 - **Core PaperBroker Engine**: `PaperBroker` managing virtual cash balances, dynamic margin allocations with an 85% safety ceiling, position lot tracking, realized P&L, MTM unrealized P&L, limit order matching, and signal ingestion.
+- **Audited Position Accounting**: Verified with dedicated unit tests:
+  - Partial fills and progressive multi-fill execution on single orders.
+  - Partial position reduction preserving entry price of remaining lots.
+  - Position reversals (Long to Short flipping) with correct entry price resets and P&L attribution.
+  - Strict separation of realized P&L vs MTM unrealized P&L across all states.
+- **Architectural Boundary Verification**:
+  - Confirmed 0 imports in `core/` from `data/`, `ai/`, `ui/`, or broker SDKs.
+  - Confirmed air-gapped execution: `PaperBroker` has zero network or routing capabilities.
+- **Bidirectional Migration Verification**:
+  - `alembic upgrade head` $\to$ `alembic downgrade -1` $\to$ `alembic upgrade head` verified clean.
 - **Local Ledger Persistence**: SQLAlchemy ORM models (`OrderRecord`, `TradeRecord`, `PositionRecord`, `AccountBalanceRecord`) managed through `LedgerRepository` using SQLite in WAL mode (`PRAGMA journal_mode=WAL`).
-- **Database Migrations**: Alembic migration `0002_core_tables.py` creating persistent tables.
 - **Automated Verification**:
-  - `ruff check .` passing with 0 warnings/errors.
-  - `mypy src tests` passing in strict mode across 48 source files with 0 errors.
-  - `pytest` suite passing 27/27 unit tests (100% pass rate).
+  - `ruff check .` passing with 0 warnings/errors (Python 3.11 target).
+  - `mypy src tests` passing in strict mode across 48 source files with 0 errors (Python 3.11 target).
+  - `pytest` suite passing 30/30 unit tests (100% pass rate).
 
 ### Phase 0: Repository Baseline, Tooling & Infrastructure Strategy
 **Status**: COMPLETE ✅
@@ -105,11 +124,19 @@ Until Phase 2 sign-off:
 
 ## Current Work
 
-**Status**: READY FOR USER SIGN-OFF TO BEGIN PHASE 2
+**Status**: IMPLEMENTING PHASE 2 (Market Data Layer & Ingestion Pipeline)
 
-Pending Action Items:
-1. Stage and commit Phase 1 implementation to Git.
-2. Await user sign-off to proceed with Phase 2 (Market Data Layer & Ingestion Pipeline).
+Active Tasks:
+1. Implement `aditrader.data.session`: NSE session timings, calendar, holiday checks, and `Asia/Kolkata` time normalization.
+2. Implement `aditrader.data.feeds.base`: Abstract `DataFeed` consumer protocol.
+3. Implement `aditrader.data.feeds.csv_feed`: Deterministic point-in-time historical candle replay.
+4. Implement `aditrader.data.feeds.synthetic_feed`: Deterministic synthetic tick/bar generator.
+5. Implement `aditrader.data.adapters.base`: Abstract read-only broker adapter interface and `ContractMetadata` model.
+6. Implement `aditrader.data.adapters.kotak_neo`: Concrete Kotak Neo read-only adapter with scrip master discovery.
+7. Implement `aditrader.data.feeds.aggregator`: Thread-safe `RingBuffer` and `TickAggregator` (1m/5m immutable `Bar` emission).
+8. Implement `aditrader.data.cache`: Local Parquet/Polars caching layer.
+9. Implement `aditrader.data.feeds.streamer`: Unified `DataFeedStreamer` coordinating live and historical feeds.
+10. Build deterministic unit tests verifying session controls, CSV replay determinism, aggregator roll-ups, and cache round-trips.
 
 ---
 
