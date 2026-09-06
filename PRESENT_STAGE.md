@@ -1,8 +1,8 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-06 18:55 IST  
-**Current Phase**: Phase 6 & Instrument Search Subsystem — SEALED & VERIFIED ✅ | Ready for Phase 7  
-**Last Verified By**: AGY CLI Quality Verification Suite (Ruff Clean, Mypy Strict Clean across 120 files, Pytest 233/233)  
+**Last Updated**: 2026-09-06 19:15 IST  
+**Current Phase**: Phase 7 Preconditions & Typed Contracts — COMPLETE & VERIFIED ✅ | Ready for Phase 7 Implementation  
+**Last Verified By**: AGY CLI Quality Verification Suite (Ruff Clean, Mypy Strict Clean across 124 files, Pytest 244/244)  
 
 ---
 
@@ -54,6 +54,7 @@
 - Dynamic contract expiry discovery from broker scrip master (ADR 009).
 - Simulation integrity, portfolio net equity accounting & timeframe annualization (ADR 010).
 - Research integrity hardening: options air-gap, volume realism, session risk & finite metrics (ADR 011).
+- AI advisory provenance, reproducibility, and research dossier integrity (ADR 012).
 
 ---
 
@@ -220,34 +221,28 @@
 ---
 
 ## Current Work
-
-**Status**: PHASE 6 & INSTRUMENT SEARCH SUBSYSTEM SEALED & VERIFIED ✅
-
+ 
+**Status**: PHASE 7 PRECONDITIONS & TYPED CONTRACTS COMPLETE & VERIFIED ✅ | Ready for Phase 7 Implementation
+ 
 ### Baseline Verification Summary:
-- **Test Suite**: 233/233 unit and integration tests passing (100% pass rate in 1.55s).
-- **Static Analysis**: Strict `mypy` clean (120 source files, 0 errors, Python 3.11 target).
+- **Test Suite**: 244/244 unit and integration tests passing (100% pass rate in 1.61s) — including all 233 Phase 6 tests plus 11 Phase 7 contract and invariant tests.
+- **Static Analysis**: Strict `mypy` clean (124 source files, 0 errors, Python 3.11 target).
 - **Linter & Formatting**: `ruff check` and `ruff format` clean (0 warnings, 0 errors).
-- **First-Pass Audit Remediations**: All 10 original audit findings resolved and verified:
-  1. Payoff slope boundary calculation and algebraic wing check prevent naked short options from passing defined-risk architecture gates.
-  2. Query parser expiry regex hardened to eliminate stock ticker substring poisoning (MARUTI, SUNPHARMA).
-  3. Contract specifications (strike steps, lot sizes) dynamically resolved via authoritative market specs and hierarchy metadata (ADR 009).
-  4. Fallback matching rules strictly respect user-specified option types, strikes, and expiry hints.
-  5. Instrument deterministic ranking partitions active vs. expired contracts, prioritizing active near-month contracts.
-  6. ResearchPolicy respects non-zero profit factor configuration without triggering unconditional hard floors.
-  7. Asset classification strictly checks explicit futures demarcations, preventing equity misclassification (e.g. FUTURECONSUMER).
-  8. Out-of-sample (OOS) validation enforces genuine temporal disjointness, preventing lookahead leakage.
-  9. Theoretical option payoff validation supports deterministic evaluation timestamps.
-  10. Ambiguous cross-exchange token collisions require explicit exchange disambiguation.
-- **Second-Pass Adversarial Audit**: Completed with zero Critical and zero High severity findings.
-- **Documented Non-Blocking Limitations**:
-  1. Multi-expiry / calendar option legs: Theoretical validator flattens legs to single DTE; terminal intrinsic curve modeling assumes single expiration.
-  2. Missing contract spec fallback: Equities without cache or authoritative specs fallback to lot size 1.
-- **Next Milestone**: Phase 7 (AI Subsystems & Advisory Pipeline). Ready to begin upon instruction.
-
+- **Phase 7 Preconditions Completed**:
+  1. ADR 012 (`DECISIONS.md`): Formulated comprehensive architectural decision record establishing AI advisory provenance, reproducibility, confidence tracking, and quantitative research dossier integrity.
+  2. Architecture Layering (`ARCHITECTURE.md`): Positioned AI Advisory Services Layer strictly above Strategy Library and below Presentation/UI layer. Guaranteed zero execution, order-routing, or validation-bypass authority. Complete degraded mode defined.
+  3. Provenance & Cryptographic Auditing (`ai/models.py`): Defined `ProvenanceRecord` with strict 64-character SHA-256 hexadecimal hash verification for `input_hash`, UTC timezone enforcement, model/provider identity, seed, and confidence score.
+  4. Anti-Lookahead Validation (`ai/models.py`): Defined `ForecastResult` enforcing `cutoff_timestamp <= min(timestamps)` with UTC awareness, strictly preventing lookahead bias when forecasts are evaluated in backtests or walk-forward windows.
+  5. Mandatory AI_ADVISORY Segregation (`ai/base.py`): Enforced that `StrategyReviewer.review()` outputs must carry `DossierSectionSourceType.AI_ADVISORY`, raising `AIMalformedOutputError` if deterministic evidence is forged or masqueraded.
+  6. Multimodal & Suggestion Contracts (`ai/models.py`, `ai/base.py`): Defined `VisionResult`, `PatternObservation`, `BiasCfg` (60/40 default bias), and `SuggestionResult` with explicit pre-validation requirements.
+  7. Quantitative Research Dossier (`research/__init__.py`): Defined `ResearchDossier` and `DossierSection` models separating deterministic quantitative backtest metrics from AI advisory sections, with statutory institutional compliance disclaimers.
+- **Next Milestone**: Phase 7A (AI Infrastructure, Registry & Configuration Foundation).
+ 
 ---
-
+ 
 ## Not Implemented Yet (Do NOT Hallucinate)
-
+ 
 The following components do **NOT** exist in code:
-- No AI forecasting foundation models, vision screenshot parsers, or reviewer modules (`ai/`)
+- No concrete AI provider runtime integrations (Gemini API client, Kronos/Chronos inference, OCR engine) (`ai/`)
 - No Plotly Dash web interface or interactive CLI handlers (`ui/`, `cli/`)
+

@@ -183,4 +183,45 @@ Hostile adversarial review (Phase 5.5.1) identified remaining structural simulat
 - **Positive**: Guarantees zero look-ahead and proxy leakage for options; enforces realistic liquidity limits; enables multi-day intraday risk management; prevents statistical metric crashes; preserves pristine roundtrip trade records.
 - **Negative**: Multi-leg option strategies cannot be executed by `BacktestRunner` (must await dedicated option-chain runner in future milestones); strategies with zero losses report `profit_factor = None` instead of `inf`.
 
+---
+
+## ADR 012: AI Advisory Provenance, Reproducibility, and Research Dossier Integrity
+
+### Context
+Phase 7 introduces AI-driven advisory capabilities including time-series forecasting (Kronos/Chronos), multimodal chart vision (Gemini Vision), automated strategy suggestion, qualitative review, and research dossier generation. These capabilities introduce severe research integrity and statistical realism risks:
+1. **Conflation of Probabilistic Forecasts with Empirical Backtests**: If an AI prediction, LLM hypothesis, or hallucinated statistic is presented alongside verified empirical backtest metrics or Black-Scholes Greeks, researchers may misinterpret advisory suggestions as verified historical proof.
+2. **Experiment Irreproducibility & Model Drift**: Non-deterministic sampling without seeds, unrecorded model versions, or unhashed input data prevents scientific replication of quantitative research dossiers.
+3. **Silent Failure & Fabrication**: If an external AI provider fails (rate limit, timeout, or service outage), naive fallbacks might inject synthetic placeholders or mock data that masquerade as genuine analysis.
+4. **Validation Authority Bypass**: If an AI strategy suggestor could mark a strategy as "ready to trade" without passing the authoritative `StrategyValidationService`, unsafe or negative-expectancy strategies could reach the paper broker.
+5. **Lookahead Bias in Time-Series Forecasts**: If a forecast fails to record its exact point-in-time cutoff relative to the evaluated historical bars, future prices could leak into the forecast context.
+
+### Decision
+1. **Mandatory Cryptographic Provenance Record (`ProvenanceRecord`)**:
+   Every AI-generated artifact (`ForecastResult`, `VisionResult`, `SuggestionResult`, and AI sections in `ResearchDossier`) must carry an immutable `ProvenanceRecord` detailing:
+   - `source_type`: Subsystem category (`PROBABILISTIC_FORECAST`, `MULTIMODAL_VISION`, `STRATEGY_SUGGESTION`, `STRATEGY_REVIEW`, `EDUCATIONAL_EXPLANATION`).
+   - `model_id`, `model_version`, and `provider`.
+   - `generated_at`: Timezone-aware UTC generation timestamp (naive datetimes strictly rejected).
+   - `input_hash`: Exactly 64 hexadecimal characters verifying SHA-256 cryptographic digest of input dataset, chart image, or prompt bytes. Arbitrary strings or placeholders are rejected.
+   - `seed` and `is_deterministic`: `is_deterministic=True` is acknowledged as an implementation-trust assertion declared by the provider; when declared, bit-for-bit identical outputs for identical `input_hash` and `seed` are expected.
+   - `confidence`: Normalized [0.0, 1.0] confidence score or `None` if uncalibrated.
+2. **Strict Segregation of Dossier Evidence (`DossierSectionSourceType`)**:
+   `ResearchDossier` sections must be categorized into `DETERMINISTIC` (verified backtest metrics, Black-Scholes Greeks, ledger records), `AI_ADVISORY` (model forecasts, LLM reviews, visual extractions), `STRUCTURAL` (DSL schema, rules), or `METADATA`. Sections tagged `AI_ADVISORY` are strictly required to attach a `ProvenanceRecord` and are barred from masquerading as empirical evidence. Every dossier must include an institutional compliance and non-advice disclaimer. Providers must supply non-empty content and raise `AIMalformedOutputError` rather than returning empty placeholders.
+3. **StrategyReviewer Contract-Level AI_ADVISORY Enforcement**:
+   The `StrategyReviewer` base class enforces via template method that any generated section strictly carries `source_type=DossierSectionSourceType.AI_ADVISORY` and valid provenance. If a concrete reviewer attempts to return `DETERMINISTIC` or any other non-advisory source type, an `AIMalformedOutputError` is immediately raised.
+4. **Absolute Veto Authority of Deterministic Validation Engine**:
+   AI components remain strictly advisory. A `SuggestionResult` carries `is_validated = False` until explicitly evaluated and approved by `StrategyValidationService`. Consumers must explicitly verify `validation_result.status == ValidationStatus.APPROVED`; the mere presence of `validation_result` does not imply approval (it may be `REJECTED` or `NOT_RECOMMENDED`). AI models possess zero authority to approve strategies, bypass AST validation, override institutional policy floors, or route orders.
+5. **Explicit Failure & Degraded-Mode Semantics**:
+   Define an explicit exception hierarchy (`AIError`, `AIUnavailableError`, `AITimeoutError`, `AIMalformedOutputError`, `AIProviderError`, `AILowConfidenceError`, `AILookaheadError`, `AIConfigError`). AI outages must degrade cleanly by omitting advisory sections or raising explicit errors; they must NEVER fabricate mock data or fail open. `is_available()` on engine interfaces must never raise network/runtime exceptions and must return `False` if backend resources are unreachable or unconfigured.
+6. **Anti-Lookahead & Timezone-Aware Temporal Invariants**:
+   `ForecastResult` must explicitly encode timezone-aware `cutoff_timestamp` and require all forecast target `timestamps` to be timezone-aware, strictly monotonically increasing, and strictly in the future ($t > cutoff\_timestamp$). Target prices must maintain numerical consistency ($low \le close \le high$). Temporal comparisons are performed on normalized UTC datetimes, preventing raw `TypeError` crashes.
+7. **Vision Result Mirror Integrity**:
+   In `VisionResult`, `source_image_hash` serves as an ergonomic top-level mirror of `provenance.input_hash`. Both reflect the 64-character SHA-256 digest of raw chart image bytes.
+8. **Transparent Configurable Bias Prior (`BiasCfg`)**:
+   The premium selling vs. buying bias for strategy suggestion must be represented as a machine-readable Pydantic model (`BiasCfg(sell_pct=0.60, buy_pct=0.40)`) with an exact sum-to-one validation constraint, preventing hidden hardcoded biases.
+
+### Consequences
+- **Positive**: Guarantees complete auditability, cryptographic input tracking, and reproducibility; prevents AI hallucinations from masquerading as deterministic evidence; eliminates naive-vs-aware datetime comparison errors and guarantees strict monotonic future forecasting; preserves 100% offline usability when AI providers are unavailable.
+- **Negative**: Requires computing SHA-256 digests on all inputs; requires timezone-aware datetime hygiene throughout the pipeline.
+
+
 

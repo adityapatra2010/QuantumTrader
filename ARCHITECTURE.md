@@ -10,20 +10,31 @@ The platform is designed as a modular trading operating system rather than a mon
 |
 v
 +-----------------------------------------------------------------------+
+|                         Advisory Services Layer                       |
+|   AI Subsystems: Suggestor | Vision | Reviewer | Teacher | Forecast   |
+|   (Strictly non-authoritative proposals carrying ProvenanceRecord)    |
++-----------------------------------+-----------------------------------+
+|
+v
++-----------------------------------------------------------------------+
 |                          Application Services                         |
-|   Strategy Builder Engine   |   Validation Engine   |   Research WS   |
+|   Strategy Validation Engine (Authoritative Veto) | Backtest Runner   |
+|   Strategy Registry | Research Dossier Generator | Instrument Search  |
 +-----------------------------------+-----------------------------------+
 |
 v
 +-----------------------------------------------------------------------+
 |                          Domain Core & Options                        |
 |   Options Engine (Chain/Greeks/Payoffs)    |    Paper Broker Engine   |
+|   Strategy Compiler | Strategy DNA         |    Runtime Risk Engine   |
 +-----------------------------------+-----------------------------------+
 |
 v
 +-----------------------------------------------------------------------+
 |                      Infrastructure & Adapters                        |
-|   Broker Adapters (Kotak Neo)   |   AI Subsystems (Kronos / Gemini)   |
+|   Broker Adapters (Kotak Neo)      |   Local SQLite Ledger (WAL)      |
+|   Parquet Scrip/Bar Cache          |   In-Memory Ring Buffers         |
+|   External Model API Adapters (Kronos / Gemini SDKs - pure connectors)|
 +-----------------------------------------------------------------------+
 
 
@@ -65,41 +76,67 @@ v
 - Catalog of Built-in, AI-Generated, and User-Defined strategies.
 - Strategy DNA profiler: Computes vector metadata (Directionality, Theta Exposure, Vega Risk, Margin Efficiency, Scalp vs. Positional) to match strategies against market regimes.
 
-### 7. AI Subsystem (`ai/`)
-- Encapsulates machine learning models behind swappable interfaces:
-  - `forecasting/`: Foundation time-series models (Kronos, Chronos) outputting probability distributions.
-  - `vision/`: Gemini multimodal models parsing uploaded chart screenshots for key levels and patterns.
-  - `reviewer/`: Analytical critique pipeline reviewing strategy robustness.
-  - `teacher/`: Plain-language explanation module breaking down payoff mechanics and Greeks.
-  - `suggestor/`: Automated options structure generator operating on a configurable premium selling/buying allocation (default 60/40).
+### 7. AI Advisory Services Layer (`ai/`)
+- Pure advisory layer producing non-authoritative proposals (`SuggestionResult`, `VisionResult`, `ForecastResult`).
+- Encapsulates machine learning models behind swappable, abstract interfaces (`base.py`):
+  - `forecasting/`: Probabilistic time-series trajectory forecasting (`ForecastEngine`) with strict anti-lookahead validation.
+  - `vision/`: Multimodal chart screenshot extraction (`VisionEngine`) detecting observable support/resistance and patterns.
+  - `suggestor/`: Automated options structure generator (`StrategySuggestor`) operating on transparent, configurable premium selling/buying allocation (`BiasCfg`, default 60/40).
+  - `reviewer/`: Analytical critique pipeline (`StrategyReviewer`) reviewing strategy robustness and explaining failure modes.
+  - `teacher/`: Plain-language explanation module breaking down payoff mechanics and Greeks without offering speculative financial advice.
+- Strict Architectural Guardrails:
+  - Every AI output must carry an immutable `ProvenanceRecord` with a 64-char SHA-256 `input_hash` (ADR 012).
+  - Zero authority to bypass, soften, or alter deterministic validation gates (`StrategyValidationService`).
+  - Zero live broker order placement or execution capabilities.
+  - Complete degraded-mode operation when AI providers are unavailable (ADR 012).
 
 ### 8. Research Workspace (`research/`)
-- Dossier generator producing strategy performance reports, parameter sensitivity grids, and historical regime distributions.
+- Dossier generator producing comprehensive quantitative strategy dossiers (`ResearchDossier`).
+- Strict evidence segregation: distinguishes `DETERMINISTIC` backtest metrics and payoff math from `AI_ADVISORY` model outputs (ADR 012).
+- Mandates institutional compliance disclaimers on all advisory content.
 
 ---
 
 ## AI Review & Execution Pipeline
 
 ```
-[User / Chart / AI Suggestor]
-|
-v
-Strategy Draft (JSON DSL)
-|
-v
-Validation Engine (AST & Institutional Mode Filters)
-|
-|      (If the user still wants to continue)
-+-----------------------+-----------------------+
-|                                               |
-[Rejected]                                      [Approved]
-|                                               |
-v                                               +------------+------------+
-Diagnostics & Failure Dossier                   |                         |
-                                                v                         v
-                                      AI Reviewer & Teacher      Strategy Compiler
-                                      (Dossier & Explanations)            |
-                                                                          v
-                                                                Paper Broker Execution
-                                                                (Runtime Risk Gates Checked)
+[Uploaded Chart Image]            [Historical Bars]              [Market Regime]
+         │                               │                              │
+         ▼                               ▼                              ▼
+    VisionEngine                  ForecastEngine                 Regime Classifier
+    (Observable                     (Probabilistic                     │
+     Patterns)                       Trajectory)                       │
+         │                               │                             │
+         ▼                               ▼                             │
+    VisionResult                  ForecastResult                       │
+         └───────────────┬───────────────┘                             │
+                         │                                             │
+                         ▼                                             ▼
+                 StrategySuggestor ◄───────────────────────────────────┘
+                 (Configurable BiasCfg e.g. 60/40)
+                         │
+                         ▼
+                  SuggestionResult
+                  (Declarative StrategyDSL + ProvenanceRecord)
+                         │
+                         ▼
+         Authoritative Strategy Validation Service
+         (AST Structural Gate + Institutional Statistical Gate / Options Payoff)
+                         │
+        ┌────────────────┴────────────────┐
+        ▼                                 ▼
+   [REJECTED]                        [APPROVED]
+        │                                 │
+        ▼                                 ▼
+   Diagnostics Dossier             Research Dossier Generator
+   (Failure Analysis)              (DossierSection: DETERMINISTIC vs. AI_ADVISORY)
+                                          │
+                                          ▼
+                                   Human Reviewer
+                                   (User must explicitly review and trigger)
+                                          │
+                                          ▼
+                                 Paper Broker Execution
+                                 (Runtime Risk Engine Pre-Trade Gates Checked)
 ```
+

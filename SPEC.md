@@ -23,7 +23,14 @@
 | `ChainRow` | `strike, expiry, call: {ltp, oi, iv, greeks}, put: {ltp, oi, iv, greeks}` | Option chain grid row |
 | `PayoffPoint` | `underlying_price, pnl_at_expiry, pnl_mark_to_market` | Curve coordinates for payoff visualizer |
 | `ValidationResult` | `validation_score (0-100), status (APPROVED/NOT_RECOMMENDED/REJECTED), metrics: dict, rejection_reasons: list[str], suggested_improvements: list[str]` | Pre-trade risk audit output |
-| `ForecastResult` | `timestamps[], predicted_close[], predicted_high[], predicted_low[], confidence_spread` | Probabilistic time-series output |
+| `ProvenanceRecord` | `source_type, model_id, model_version, provider, generated_at, input_hash, seed, is_deterministic, confidence` | Cryptographic and metadata audit trail for AI artifacts (ADR 012) |
+| `ForecastResult` | `cutoff_timestamp, horizon_bars, timestamps[], predicted_close[], predicted_high[], predicted_low[], confidence_spread, provenance, warning` | Probabilistic time-series forecast with strict anti-lookahead validation |
+| `PatternObservation` | `name, confidence, description` | Observable technical chart pattern from vision analysis |
+| `VisionResult` | `trend, support[], resistance[], patterns[], reasoning, source_image_hash, is_empty, provenance` | Structured multimodal chart extraction data |
+| `BiasCfg` | `sell_pct, buy_pct` | Machine-readable selling vs. buying bias configuration prior |
+| `SuggestionResult` | `strategy_dsl, provenance, bias_applied, regime_context, rationale, validation_result, is_validated` | Declarative strategy proposal container (un-validated until gate approval) |
+| `DossierSection` | `title, source_type (DETERMINISTIC/AI_ADVISORY/STRUCTURAL/METADATA), content, provenance` | Categorized evidence section in quantitative research dossier |
+| `ResearchDossier` | `dossier_id, strategy_name, strategy_id, generated_at, sections[], validation_result, disclaimer` | Institutional quantitative research dossier with compliance disclaimers |
 
 ---
 
