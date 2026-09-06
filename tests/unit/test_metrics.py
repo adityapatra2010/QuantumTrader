@@ -12,6 +12,7 @@ from aditrader.backtesting.analytics.metrics import (
     calculate_sortino_ratio,
     calculate_sqn,
     generate_performance_report,
+    resolve_periods_per_year,
 )
 
 
@@ -133,3 +134,52 @@ def test_metrics_edge_cases_and_zero_trades() -> None:
 
     # Zero variance SQN
     assert calculate_sqn([100.0, 100.0, 100.0]) == 0.0
+
+
+def test_resolve_periods_per_year() -> None:
+    """Verify timeframe resolution mapping across daily, weekly, and intraday bars."""
+    # Daily / Weekly / Monthly
+    assert resolve_periods_per_year("1d") == 252
+    assert resolve_periods_per_year("daily") == 252
+    assert resolve_periods_per_year("D") == 252
+    assert resolve_periods_per_year("1w") == 52
+    assert resolve_periods_per_year("weekly") == 52
+    assert resolve_periods_per_year("1mo") == 12
+
+    # Intraday minutes (375 min session)
+    assert resolve_periods_per_year("1m") == 252 * 375  # 94,500
+    assert resolve_periods_per_year("5m") == 252 * 75  # 18,900
+    assert resolve_periods_per_year("15m") == 252 * 25  # 6,300
+    assert resolve_periods_per_year("30m") == int(252 * 12.5)  # 3,150
+    assert resolve_periods_per_year("75m") == 252 * 5  # 1,260
+
+    # Intraday hours
+    assert resolve_periods_per_year("1h") == int(252 * 6.25)  # 1,575
+    assert resolve_periods_per_year("1hour") == int(252 * 6.25)  # 1,575
+
+    # Case insensitivity and whitespace
+    assert resolve_periods_per_year("  5M  ") == 18_900
+    assert resolve_periods_per_year("15MIN") == 6_300
+
+    # Fallback to default
+    assert resolve_periods_per_year("unknown_tf") == 252
+    assert resolve_periods_per_year("custom", trading_days_per_year=250) == 250
+
+
+def test_timeframe_aware_sharpe_scaling() -> None:
+    """Verify that intraday returns annualized with 5m periods yield higher factor than daily."""
+    # Say a 5m bar has mean return of 0.0002 with std 0.001
+    intraday_returns = [0.0002, 0.0001, -0.0001, 0.0003, 0.0002] * 20
+    daily_factor = resolve_periods_per_year("1d")
+    m5_factor = resolve_periods_per_year("5m")
+
+    sharpe_daily_scale = calculate_sharpe_ratio(
+        intraday_returns, risk_free_rate=0.0, periods_per_year=daily_factor
+    )
+    sharpe_5m_scale = calculate_sharpe_ratio(
+        intraday_returns, risk_free_rate=0.0, periods_per_year=m5_factor
+    )
+
+    # sqrt(18900) / sqrt(252) = sqrt(75) approx 8.66x
+    ratio = sharpe_5m_scale / sharpe_daily_scale
+    assert ratio == pytest.approx(math.sqrt(75), rel=1e-3)

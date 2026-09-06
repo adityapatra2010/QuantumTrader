@@ -297,3 +297,43 @@ def test_backtest_runner_expiry_naked_short_rejection() -> None:
         for o in result.orders
     )
     assert len(result.trades) == 0
+
+
+def test_backtest_runner_timeframe_aware_metrics() -> None:
+    """Verify BacktestRunner automatically resolves timeframe annualization if not explicitly set."""
+    import math
+
+    dsl = _build_test_strategy()
+    assert dsl.timeframe == "1m"
+    bars = _generate_bars()
+
+    # 1. Automatic timeframe-resolved (1m -> 94,500 periods)
+    runner_auto = BacktestRunner(BacktestConfig(periods_per_year=None, risk_free_rate=0.0))
+    res_auto = runner_auto.run(compile_strategy(dsl), bars)
+
+    # 2. Forced daily annualization (252 periods)
+    runner_daily = BacktestRunner(BacktestConfig(periods_per_year=252, risk_free_rate=0.0))
+    res_daily = runner_daily.run(compile_strategy(dsl), bars)
+
+    if res_daily.performance.sharpe_ratio != 0.0:
+        ratio = res_auto.performance.sharpe_ratio / res_daily.performance.sharpe_ratio
+        assert ratio == pytest.approx(math.sqrt(375), rel=1e-2)
+
+
+def test_options_backtest_runner_boundary() -> None:
+    """Verify that OptionsBacktestRunner enforces architectural boundary and raises NotImplementedError."""
+    from aditrader.backtesting.options import OptionsBacktestConfig, OptionsBacktestRunner
+
+    opt_config = OptionsBacktestConfig(
+        pricing_mode="black_scholes_synthetic",
+        iv_smile_interpolation=True,
+    )
+    runner = OptionsBacktestRunner(opt_config)
+    dsl = _build_test_strategy()
+    bars = _generate_bars()
+    strat = compile_strategy(dsl)
+
+    with pytest.raises(
+        NotImplementedError, match="OptionsBacktestRunner is an architectural placeholder"
+    ):
+        runner.run(strat, bars)

@@ -241,3 +241,65 @@ def test_risk_engine_reset() -> None:
     assert bool(engine.circuit_breaker_active) is False
     assert engine.peak_equity == 500_000.0
     assert engine.current_equity == 500_000.0
+
+
+def test_risk_engine_position_reversal_margin_limit() -> None:
+    """Verify position reversal order that exceeds margin ceiling on new net exposure is rejected."""
+    limits = RiskLimits(max_margin_utilization_pct=0.85)
+    engine = RiskEngine(limits=limits, initial_capital=100_000.0)
+    balance = AccountBalance(
+        total_capital=100_000.0,
+        available_margin=90_000.0,
+        used_margin=10_000.0,
+        unrealized_pnl=0.0,
+        realized_pnl=0.0,
+    )
+    existing_long = Position(symbol="NIFTY", qty=10, buy_avg_price=1000.0, updated_at=_NOW)
+    positions = {"NIFTY": existing_long}
+
+    # 1. Pure closing order: SELL 10 -> PASSES
+    close_order = _create_order(symbol="NIFTY", side=OrderSide.SELL, qty=10)
+    assert (
+        engine.validate_order(close_order, balance, positions, current_market_price=1000.0).passed
+        is True
+    )
+
+    # 2. Position reversal: SELL 100 -> closes 10, opens 90 short.
+    # Released margin: 10,000; New margin: 90 * 1,000 = 90,000.
+    # Projected used margin: 90,000 / 100,000 = 90% > 85% ceiling!
+    reversal_order = _create_order(symbol="NIFTY", side=OrderSide.SELL, qty=100)
+    res_reversal = engine.validate_order(
+        reversal_order, balance, positions, current_market_price=1000.0
+    )
+    assert res_reversal.passed is False
+    assert res_reversal.reason == RiskRejectionReason.MARGIN_LIMIT_EXCEEDED
+
+
+def test_risk_engine_position_reversal_lot_limit() -> None:
+    """Verify position reversal order that exceeds maximum concurrent lots is rejected."""
+    limits = RiskLimits(max_concurrent_lots=20)
+    engine = RiskEngine(limits=limits)
+    balance = AccountBalance(
+        total_capital=1_000_000.0,
+        available_margin=900_000.0,
+        used_margin=100_000.0,
+        unrealized_pnl=0.0,
+        realized_pnl=0.0,
+    )
+    existing = {"STOCK_A": Position(symbol="STOCK_A", qty=15, buy_avg_price=100.0, updated_at=_NOW)}
+
+    # Pure close: SELL 15 -> PASSES
+    close_order = _create_order(symbol="STOCK_A", side=OrderSide.SELL, qty=15)
+    assert (
+        engine.validate_order(close_order, balance, existing, current_market_price=100.0).passed
+        is True
+    )
+
+    # Reversal: SELL 40 -> closes 15, opens 25 short.
+    # Projected lots: 0 + 25 = 25 > 20 allowable!
+    reversal_order = _create_order(symbol="STOCK_A", side=OrderSide.SELL, qty=40)
+    res_reversal = engine.validate_order(
+        reversal_order, balance, existing, current_market_price=100.0
+    )
+    assert res_reversal.passed is False
+    assert res_reversal.reason == RiskRejectionReason.POSITION_LIMIT_EXCEEDED

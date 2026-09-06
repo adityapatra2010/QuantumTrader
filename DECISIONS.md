@@ -126,3 +126,29 @@ Prohibit hardcoding days of the week or static calendar rules for options expiri
 ### Consequences
 - **Positive**: Completely resilient against exchange regulatory calendar revisions across all current and future underlyings (NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX).
 - **Negative**: Backtest and historical replay fixtures must bundle valid contract master metadata records alongside historical OHLCV candles.
+
+---
+
+## ADR 010: Simulation Integrity, Portfolio Net Equity Accounting & Timeframe Annualization
+
+### Context
+Adversarial red-team testing of Phase 5 revealed critical simulation realism vulnerabilities:
+1. **Portfolio Equity Accounting Inflation**: `PaperBroker` previously calculated `total_capital = cash + used_margin + unrealized_pnl`. For short positions, turnover proceeds were added to cash while `used_margin` was also added to total capital, creating phantom capital out of thin air. For long positions, `used_margin` was marked to market, double-counting unrealized profit.
+2. **Position Reversal Circuit Breaker Bypass**: In `RiskEngine`, any sell order against a long position was flagged as a closing order (`is_closing = True`) without inspecting quantity. A trader could issue a massive reversal order (e.g., SELL 100 when Long 10) during a circuit breaker trip and open a large 90-short position, bypassing pre-trade gates.
+3. **Static Sharpe Annualization**: The performance engine defaulted to 252 periods/year for all strategies, distorting Sharpe/Sortino ratios for intraday 1m or 5m timeframes.
+4. **Options Execution Assumptions**: Multi-leg options DSL execution against underlying cash candle prices fails to model non-linear derivative Greeks, IV smile skew, and strike liquidity.
+
+### Decision
+1. **Net Portfolio Market Value Accounting**:
+   In `PaperBroker`, `portfolio_market_value = sum(pos.qty * ltp)`. Equity is strictly defined as `total_capital = cash_balance + portfolio_market_value`. Long positions (`pos.qty > 0`) add positive value; short positions (`pos.qty < 0`) introduce negative liability offsetting short sale proceeds.
+2. **Position Reversal Partitioning**:
+   In `RiskEngine.validate_order`, strictly distinguish pure closing orders (`order.qty <= abs(existing_qty)`) from position reversals (`order.qty > abs(existing_qty)`). Reversal excess (`net_new_qty = order.qty - abs(existing_qty)`) is treated as a new directional order and must pass drawdown circuit breaker, net margin utilization (factoring in released margin), and lot limit gates.
+3. **Timeframe-Aware Annualization Factor**:
+   Implement `resolve_periods_per_year` based on the 375-minute NSE regular trading session (09:15 to 15:30 IST): 1d = 252, 1h = 1,575, 15m = 6,300, 5m = 18,900, 1m = 94,500. `BacktestConfig.periods_per_year` defaults to `None`, dynamically resolving from the strategy DSL timeframe.
+4. **Options Backtesting Boundary Placeholder**:
+   Establish `OptionsBacktestRunner` in `aditrader/backtesting/options.py` as an explicit architectural placeholder raising `NotImplementedError`, preventing premature claims of derivative options backtesting until option chain tick feeds and synthetic IV surface modeling are implemented in Phase 7/8.
+
+### Consequences
+- **Positive**: Eliminates phantom equity inflation; guarantees 100% mathematical consistency in equity tracking; prevents circuit breaker and margin limit evasion on position flips; ensures accurate risk-adjusted performance metrics across intraday timeframes.
+- **Negative**: Backtest results for high-frequency intraday strategies will reflect accurate (often lower) annualized Sharpe ratios compared to uncalibrated daily scaling.
+

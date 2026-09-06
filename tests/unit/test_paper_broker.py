@@ -363,3 +363,122 @@ def test_short_and_long_total_capital_accounting(broker: PaperBroker) -> None:
     assert bal_favorable.total_capital == pytest.approx(
         bal1.total_capital + bal_favorable.unrealized_pnl, abs=1.0
     )
+
+
+def test_long_position_gain_equity_exact(broker: PaperBroker) -> None:
+    """Scenario 1: Long position price increases -> equity increases exactly once (no double counting)."""
+    now = datetime.now(UTC)
+    order = broker.create_order(
+        symbol="SBIN", side=OrderSide.BUY, order_type=OrderType.MARKET, qty=100, timestamp=now
+    )
+    filled = broker.submit_order(order, current_market_price=500.0, timestamp=now)
+    entry_fill = filled.average_fill_price
+    bal_entry = broker.get_account_balance()
+
+    # Price moves up from 500 to 550 (+50 per share * 100 shares = +5,000 gross gain)
+    broker.on_tick("SBIN", ltp=550.0, timestamp=now)
+    bal_up = broker.get_account_balance()
+
+    expected_unrealized = round((550.0 - entry_fill) * 100, 2)
+    assert bal_up.unrealized_pnl == pytest.approx(expected_unrealized, abs=0.01)
+    # Total capital must equal cash + current market value (100 * 550)
+    expected_total_cap = round(broker.cash_balance + (100 * 550.0), 2)
+    assert bal_up.total_capital == expected_total_cap
+    # Exact delta between entry equity and current equity must match unrealized PnL exactly
+    assert bal_up.total_capital - bal_entry.total_capital == pytest.approx(
+        expected_unrealized, abs=0.01
+    )
+
+
+def test_long_position_loss_equity_exact(broker: PaperBroker) -> None:
+    """Scenario 2: Long position price decreases -> equity decreases correctly."""
+    now = datetime.now(UTC)
+    order = broker.create_order(
+        symbol="TATAMOTORS", side=OrderSide.BUY, order_type=OrderType.MARKET, qty=50, timestamp=now
+    )
+    filled = broker.submit_order(order, current_market_price=1000.0, timestamp=now)
+    entry_fill = filled.average_fill_price
+    bal_entry = broker.get_account_balance()
+
+    # Price drops from 1000 to 900 (-100 per share * 50 = -5,000 gross loss)
+    broker.on_tick("TATAMOTORS", ltp=900.0, timestamp=now)
+    bal_down = broker.get_account_balance()
+
+    expected_unrealized = round((900.0 - entry_fill) * 50, 2)
+    assert bal_down.unrealized_pnl == pytest.approx(expected_unrealized, abs=0.01)
+    assert bal_down.total_capital == round(broker.cash_balance + (50 * 900.0), 2)
+    assert bal_down.total_capital - bal_entry.total_capital == pytest.approx(
+        expected_unrealized, abs=0.01
+    )
+
+
+def test_short_position_liability_and_cash_isolation(broker: PaperBroker) -> None:
+    """Scenario 3: Open short -> sales proceeds do NOT inflate equity; short liability is accounted."""
+    now = datetime.now(UTC)
+    init_cap = broker.initial_capital
+    order = broker.create_order(
+        symbol="INFY_SHORT",
+        side=OrderSide.SELL,
+        order_type=OrderType.MARKET,
+        qty=100,
+        timestamp=now,
+    )
+    broker.submit_order(order, current_market_price=1500.0, timestamp=now)
+    bal = broker.get_account_balance()
+
+    # Cash increased by sales proceeds minus charges
+    assert broker.cash_balance > init_cap
+    # BUT total capital does NOT increase: liability (100 * fill_price) offsets received cash!
+    assert bal.total_capital <= init_cap
+    assert bal.total_capital > init_cap - 500.0  # friction only (charges + taxes + slippage)
+
+
+def test_short_position_adverse_move_equity_exact(broker: PaperBroker) -> None:
+    """Scenario 4: Short position price increases (adverse move) -> equity decreases correctly."""
+    now = datetime.now(UTC)
+    order = broker.create_order(
+        symbol="HDFCBANK_SHORT",
+        side=OrderSide.SELL,
+        order_type=OrderType.MARKET,
+        qty=50,
+        timestamp=now,
+    )
+    filled = broker.submit_order(order, current_market_price=1600.0, timestamp=now)
+    entry_fill = filled.average_fill_price
+    bal_entry = broker.get_account_balance()
+
+    # Adverse price rise from 1600 to 1700 (+100 loss per share * 50 = -5,000 loss)
+    broker.on_tick("HDFCBANK_SHORT", ltp=1700.0, timestamp=now)
+    bal_adverse = broker.get_account_balance()
+
+    expected_unrealized = round((entry_fill - 1700.0) * 50, 2)
+    assert bal_adverse.unrealized_pnl == pytest.approx(expected_unrealized, abs=0.01)
+    assert bal_adverse.total_capital == round(broker.cash_balance + (-50 * 1700.0), 2)
+    assert bal_adverse.total_capital - bal_entry.total_capital == pytest.approx(
+        expected_unrealized, abs=0.01
+    )
+
+
+def test_mixed_portfolio_long_and_short_equity_exact(broker: PaperBroker) -> None:
+    """Scenario 5: Mixed portfolio with simultaneous Long and Short positions."""
+    now = datetime.now(UTC)
+    # 1. Long 100 Asset A @ 100.0
+    o_long = broker.create_order(
+        symbol="ASSET_A", side=OrderSide.BUY, order_type=OrderType.MARKET, qty=100, timestamp=now
+    )
+    broker.submit_order(o_long, current_market_price=100.0, timestamp=now)
+
+    # 2. Short 50 Asset B @ 200.0
+    o_short = broker.create_order(
+        symbol="ASSET_B", side=OrderSide.SELL, order_type=OrderType.MARKET, qty=50, timestamp=now
+    )
+    broker.submit_order(o_short, current_market_price=200.0, timestamp=now)
+
+    # Price updates: Asset A rises to 120 (+2,000 profit), Asset B rises to 230 (-1,500 loss)
+    broker.on_tick("ASSET_A", ltp=120.0, timestamp=now)
+    broker.on_tick("ASSET_B", ltp=230.0, timestamp=now)
+
+    bal = broker.get_account_balance()
+    # Portfolio market value: + (100 * 120.0) + (-50 * 230.0) = 12,000 - 11,500 = +500
+    expected_mkt_value = (100 * 120.0) - (50 * 230.0)
+    assert bal.total_capital == round(broker.cash_balance + expected_mkt_value, 2)

@@ -110,8 +110,9 @@ class RiskEngine:
 
         # Gate 3: Maximum Margin Utilization (85% Ceiling)
         if not is_pure_closing:
+            released_margin = float(existing_qty_abs) * current_market_price if is_opposite else 0.0
             order_margin = float(net_new_qty) * current_market_price
-            projected_used_margin = balance.used_margin + order_margin
+            projected_used_margin = max(0.0, balance.used_margin - released_margin) + order_margin
             total_cap = (
                 balance.total_capital if balance.total_capital > 0.0 else self.initial_capital
             )

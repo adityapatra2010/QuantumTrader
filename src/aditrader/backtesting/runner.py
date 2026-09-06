@@ -14,7 +14,11 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from aditrader.backtesting.analytics.metrics import PerformanceReport, generate_performance_report
+from aditrader.backtesting.analytics.metrics import (
+    PerformanceReport,
+    generate_performance_report,
+    resolve_periods_per_year,
+)
 from aditrader.core.broker import PaperBroker
 from aditrader.core.costs import SlippageModel
 from aditrader.core.models.enums import OrderSide, OrderStatus, OrderType, SignalDirection
@@ -45,8 +49,10 @@ class BacktestConfig(BaseModel):
     risk_free_rate: float = Field(
         default=0.065, ge=0.0, description="Annualized benchmark risk-free rate"
     )
-    periods_per_year: int = Field(
-        default=252, gt=0, description="Frequency scaling factor for Sharpe/Sortino"
+    periods_per_year: int | None = Field(
+        default=None,
+        gt=0,
+        description="Frequency scaling factor for Sharpe/Sortino (defaults to timeframe-resolved factor)",
     )
     slippage_model: SlippageModel | None = Field(
         default=None, description="Custom slippage model configuration"
@@ -188,12 +194,18 @@ class BacktestRunner:
         executed_trades = broker.get_trades()
         roundtrip_pnls = self._calculate_roundtrip_pnls(executed_trades)
 
+        effective_periods_per_year = (
+            self.config.periods_per_year
+            if self.config.periods_per_year is not None
+            else resolve_periods_per_year(strategy.dsl.timeframe)
+        )
+
         performance = generate_performance_report(
             starting_equity=self.config.initial_capital,
             equity_curve=equity_curve,
             trade_pnls=roundtrip_pnls,
             risk_free_rate=self.config.risk_free_rate,
-            periods_per_year=self.config.periods_per_year,
+            periods_per_year=effective_periods_per_year,
         )
 
         all_orders = broker.get_orders()

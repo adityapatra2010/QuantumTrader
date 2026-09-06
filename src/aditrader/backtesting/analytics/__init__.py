@@ -10,6 +10,7 @@ from aditrader.backtesting.analytics.metrics import (
     calculate_sortino_ratio,
     calculate_sqn,
     generate_performance_report,
+    resolve_periods_per_year,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "calculate_sortino_ratio",
     "calculate_sqn",
     "generate_performance_report",
+    "resolve_periods_per_year",
 ]

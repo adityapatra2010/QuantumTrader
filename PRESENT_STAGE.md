@@ -1,15 +1,15 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-06 17:35 IST  
-**Current Phase**: Phase 5 — COMPLETE & AUDITED ✅ | Preparing Phase 6 (Validation Engine & Institutional Mode)  
-**Last Verified By**: AGY CLI Phase 5 Test & Tooling Suite (Ruff, Mypy Strict, Pytest 126/126)  
+**Last Updated**: 2026-09-06 17:55 IST  
+**Current Phase**: Phase 5.5 — COMPLETE & AUDITED ✅ | Preparing Phase 6 (Validation Engine & Institutional Mode)  
+**Last Verified By**: AGY CLI Phase 5.5 Hardening Suite (Ruff, Mypy Strict, Pytest 136/136)  
 
 ---
 
 ## Repository State
 
 - **Branch**: `main`
-- **Working Tree**: Core domain entities, order state machine, paper broker, local SQLite ledger persistence, market data feeds, Kotak Neo adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine, walk-forward analysis & OOS splitters, pre-trade risk engine, and quantitative performance analytics implemented and verified.
+- **Working Tree**: Core domain entities, order state machine, paper broker with net equity accounting, local SQLite ledger persistence, market data feeds, Kotak Neo adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine, walk-forward analysis & OOS splitters, hardened pre-trade risk engine with reversal protection, timeframe-aware performance analytics, and options backtesting boundary placeholders implemented and verified.
 
 ---
 
@@ -29,7 +29,7 @@ Until Phase 6 sign-off:
 ## Architecture Status
 
 - **Documentation**: `██████████` 100%
-- **Implementation**: `██████░░░░` 60% (Phases 0, 1, 2, 3, 4, and 5 Complete)
+- **Implementation**: `██████░░░░` 62% (Phases 0, 1, 2, 3, 4, 5, and 5.5 Complete)
 
 ---
 
@@ -56,10 +56,22 @@ Until Phase 6 sign-off:
 - Plotly Dash multi-page architecture chosen for quantitative research over client-side frameworks (ADR 003).
 - SQLite WAL mode and in-memory ring buffer for low-latency concurrency (ADR 008).
 - Dynamic contract expiry discovery from broker scrip master (ADR 009).
+- Simulation integrity, portfolio net equity accounting & timeframe annualization (ADR 010).
 
 ---
 
 ## Completed
+
+### Phase 5.5: Simulation Integrity Hardening & Post-Red-Team Remediation
+**Status**: COMPLETE & AUDITED ✅
+- **Portfolio Equity Net Accounting (`core.broker`)**: Locked `PaperBroker.get_account_balance()` where equity strictly equals `cash_balance + sum(pos.qty * ltp)`. Long positions contribute positive holdings value; short positions contribute negative liability offset by short cash turnover. Eliminates phantom capital and double counting of gains. Verified with 5 explicit regression scenarios.
+- **Risk Engine Position Reversal Hardening (`core.risk.engine`)**: Differentiated pure closing orders (`qty <= abs(existing_qty)`) from reversals (`qty > abs(existing_qty)`). Reversal excess is partitioned as new exposure, properly releasing margin from closed positions and enforcing circuit breaker halts, margin utilization ceiling, and lot limit gates.
+- **Dynamic Timeframe Frequency Scaling (`backtesting.analytics.metrics`)**: Implemented `resolve_periods_per_year` mapping timeframes to annual periods based on the 375-minute regular NSE session (1m: 94,500, 5m: 18,900, 15m: 6,300, 1h: 1,575, 1d: 252). `BacktestConfig.periods_per_year` defaults to `None`, dynamically scaling Sharpe and Sortino ratios based on the strategy's declared timeframe.
+- **Options Backtesting Boundary Placeholder (`backtesting.options`)**: Documented the underlying candle execution boundary and provided `OptionsBacktestRunner` and `OptionsBacktestConfig` placeholders raising `NotImplementedError` until dedicated option-chain feeds and synthetic IV surface modeling arrive in Phase 7/8.
+- **Automated Verification**:
+  - `ruff check .` and `ruff format --check .` passing with 0 warnings/errors (Python 3.11 target).
+  - `mypy src tests` passing in strict mode across all source files with 0 errors (Python 3.11 target).
+  - `pytest` suite passing 136/136 unit and integration tests (100% pass rate).
 
 ### Phase 5: Backtesting Engine & Anti-Overfitting Controls
 **Status**: COMPLETE & AUDITED ✅

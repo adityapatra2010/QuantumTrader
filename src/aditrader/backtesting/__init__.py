@@ -11,6 +11,7 @@ from aditrader.backtesting.analytics.metrics import (
     calculate_sqn,
     generate_performance_report,
 )
+from aditrader.backtesting.options import OptionsBacktestConfig, OptionsBacktestRunner
 from aditrader.backtesting.runner import BacktestConfig, BacktestResult, BacktestRunner
 from aditrader.backtesting.splitters import (
     WalkForwardWindow,
@@ -24,6 +25,8 @@ __all__ = [
     "BacktestResult",
     "BacktestRunner",
     "DrawdownResult",
+    "OptionsBacktestConfig",
+    "OptionsBacktestRunner",
     "PerformanceReport",
     "WalkForwardWindow",
     "calculate_expectancy",

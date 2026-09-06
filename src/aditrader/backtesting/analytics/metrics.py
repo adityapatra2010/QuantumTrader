@@ -11,6 +11,7 @@ Computes uniform statistical metrics across backtests and paper simulations:
 """
 
 import math
+import re
 from typing import NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -146,6 +147,54 @@ def calculate_max_drawdown(equity_curve: list[float]) -> DrawdownResult:
             max_dd_pct = dd_pct
 
     return DrawdownResult(max_drawdown_amount=max_dd_amount, max_drawdown_pct=max_dd_pct)
+
+
+def resolve_periods_per_year(timeframe: str, trading_days_per_year: int = 252) -> int:
+    """Resolve annualization frequency scaling factor from bar timeframe string.
+
+    Standard NSE regular market session duration: 375 minutes (09:15 to 15:30 IST).
+
+    Supported timeframe formats:
+    - Daily: '1d', 'd', 'daily' -> 252 periods/year
+    - Weekly: '1w', 'w', 'weekly' -> 52 periods/year
+    - Monthly: '1mo', 'monthly', 'month' -> 12 periods/year
+    - Intraday Minutes: '1m', '3m', '5m', '10m', '15m', '30m', '75m' -> 252 * (375 / minutes)
+    - Intraday Hours: '1h', '2h', '4h' -> 252 * (375 / (hours * 60))
+
+    Args:
+        timeframe: Case-insensitive timeframe string.
+        trading_days_per_year: Annual trading sessions (defaults to 252 for NSE).
+
+    Returns:
+        Integer annualization factor representing bars per year.
+    """
+    tf = timeframe.strip().lower()
+    if tf in ("1d", "d", "daily", "day"):
+        return trading_days_per_year
+    if tf in ("1w", "w", "weekly", "week"):
+        return 52
+    if tf in ("1mo", "monthly", "month"):
+        return 12
+
+    session_minutes = 375.0
+
+    # Match hour patterns: e.g. '1h', '2hr', '4hours', '1.5h'
+    match_hour = re.match(r"^(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)$", tf)
+    if match_hour:
+        hours = float(match_hour.group(1))
+        minutes = max(1.0, hours * 60.0)
+        bars_per_day = session_minutes / minutes
+        return max(1, round(trading_days_per_year * bars_per_day))
+
+    # Match minute patterns: e.g. '1m', '5m', '15min', '30mins', '75minute'
+    match_min = re.match(r"^(\d+(?:\.\d+)?)\s*(?:m|min|mins|minute|minutes)$", tf)
+    if match_min:
+        minutes = max(1.0, float(match_min.group(1)))
+        bars_per_day = session_minutes / minutes
+        return max(1, round(trading_days_per_year * bars_per_day))
+
+    # Default to trading_days_per_year if unrecognized
+    return trading_days_per_year
 
 
 def calculate_sharpe_ratio(
