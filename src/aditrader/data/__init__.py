@@ -10,6 +10,19 @@ from aditrader.data.feeds import (
     SyntheticDataFeed,
     TickAggregator,
 )
+from aditrader.data.forward import (
+    ForwardTestAssumptions,
+    ForwardTestObservation,
+    ForwardTestRecorder,
+    ForwardTestSession,
+    ForwardTestStatus,
+)
+from aditrader.data.forward_runner import (
+    ForwardTestConfig,
+    ForwardTestResult,
+    ForwardTestRunner,
+    resolve_strategy,
+)
 from aditrader.data.instruments import (
     DerivativesHierarchy,
     InstrumentFilter,
@@ -17,6 +30,12 @@ from aditrader.data.instruments import (
     InstrumentSearchService,
     MatchQuality,
     SearchResult,
+)
+from aditrader.data.quality import (
+    DataQualityError,
+    DataQualityReport,
+    DataQualityWarning,
+    MarketDataQualityValidator,
 )
 from aditrader.data.session import (
     EXCHANGE_TIMEZONE,
@@ -37,13 +56,25 @@ __all__ = [
     "ContractMetadata",
     "DataFeed",
     "DataFeedStreamer",
+    "DataQualityError",
+    "DataQualityReport",
+    "DataQualityWarning",
     "DerivativesHierarchy",
+    "ForwardTestAssumptions",
+    "ForwardTestConfig",
+    "ForwardTestObservation",
+    "ForwardTestRecorder",
+    "ForwardTestResult",
+    "ForwardTestRunner",
+    "ForwardTestSession",
+    "ForwardTestStatus",
     "InstrumentFilter",
     "InstrumentIndex",
     "InstrumentSearchService",
     "KotakNeoAdapter",
     "LocalDataCache",
     "MarketClosedError",
+    "MarketDataQualityValidator",
     "MarketSessionStatus",
     "MatchQuality",
     "RingBuffer",
@@ -55,5 +86,6 @@ __all__ = [
     "is_market_open",
     "is_weekend",
     "normalize_to_ist",
+    "resolve_strategy",
     "validate_session_time",
 ]

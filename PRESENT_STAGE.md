@@ -1,15 +1,15 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-06 19:40 IST  
-**Current Phase**: Phase 7A (AI Infrastructure, Registry & Configuration Foundation) — COMPLETE & VERIFIED ✅ | Ready for Phase 7B  
-**Last Verified By**: AGY CLI Quality Verification Suite (Ruff Clean, Mypy Strict Clean across 130 files, Pytest 257/257)  
+**Last Updated**: 2026-09-06 20:50 IST  
+**Current Phase**: Runnable Forward-Testing & Paper-Trading Workflow — COMPLETE & VERIFIED ✅  
+**Last Verified By**: AGY CLI Quality Verification Suite (Ruff Clean, Mypy Strict Clean across 148 files, Pytest 324 passed, 5 skipped)  
 
 ---
 
 ## Repository State
 
 - **Branch**: `main`
-- **Working Tree**: Core domain entities, order state machine, paper broker with net equity accounting, local SQLite ledger persistence, market data feeds, Kotak Neo adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine with options air-gap guards and volume participation constraints, walk-forward analysis & OOS splitters, hardened pre-trade risk engine with lot-aware position limits and session-boundary resets, finite performance analytics with strict timeframe resolution, static AST structural validation, institutional historical statistical validation for linear assets, theoretical payoff/Greek risk validation for multi-leg option strategies, and high-performance Instrument Search & Selection Subsystem with hierarchical derivatives resolution and Parquet scrip caching sealed and verified.
+- **Working Tree**: Core domain entities, order state machine, paper broker with net equity accounting, local SQLite ledger persistence, market data feeds, Kotak Neo adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine with options air-gap guards and volume participation constraints, walk-forward analysis & OOS splitters, hardened pre-trade risk engine with lot-aware position limits and session-boundary resets, finite performance analytics with strict timeframe resolution, static AST structural validation, institutional historical statistical validation for linear assets, theoretical payoff/Greek risk validation for multi-leg option strategies, high-performance Instrument Search & Selection Subsystem with hierarchical derivatives resolution, and the runnable air-gapped ForwardTestRunner orchestrating live/rehearsal market data, quality validation, bar aggregation, strategy evaluation, pre-trade risk checks, quote-aware fills, and audit persistence sealed and verified.
 
 ---
 
@@ -59,6 +59,52 @@
 ---
 
 ## Completed
+
+### Runnable Forward-Testing & Paper-Trading Workflow
+**Status**: COMPLETE & VERIFIED ✅
+- **Application Orchestrator (`src/aditrader/data/forward_runner.py`)**: Built `ForwardTestRunner` connecting canonical market-data ingestion (Kotak Neo live feed or deterministic rehearsal), `MarketDataQualityValidator`, `TickAggregator`, compiled `ExecutableStrategy`, `RiskEngine` pre-trade gates, and strictly air-gapped `PaperBroker`.
+- **Quote-Aware Execution**: Fills market orders against real liquidity quotes (BUY against ask + slippage, SELL against bid - slippage); cleanly falls back to LTP when quotes are absent and flags `MISSING_BID_ASK`.
+- **Audit Persistence (`ForwardTestRecorder`)**: Exports full JSON dossiers (`export_dossier()`, `save_to_json()`) and writes transactional ledger records to local SQLite (`orders`, `trades`, `account_balances`).
+- **Runnable CLI Subcommand (`aditrader forward-test`)**: Fully operational subcommand with `--strategy`, `--instrument`, `--timeframe`, `--capital`, `--slippage-bps`, `--mock`, `--ticks`, `--bars`, `--duration`, `--output`, and `--strict-quality`.
+- **Comprehensive Offline Test Suite (`tests/unit/test_forward_runner.py`)**: 15 unit and integration tests covering runner startup, strategy resolution, canonical tick flow, quote-aware fills, LTP fallback, pre-trade risk rejections, strict quality aborts, max ticks/bars/duration limits, SIGINT clean shutdown, dossier export, ledger persistence, air-gap boundary isolation guard, and opt-in live Kotak smoke test.
+- **Automated Verification**:
+  - `ruff check src tests` and `ruff format --check src tests` passing cleanly (Python 3.11 target).
+  - `mypy src tests` passing in strict mode across 148 source files with 0 errors (Python 3.11 target).
+  - `pytest` suite passing 324/324 unit and integration tests (100% pass rate) + 5 skipped opt-in smoke tests.
+
+### Developer Experience & Local Startup Workflow
+**Status**: COMPLETE & VERIFIED ✅
+- **Canonical CLI Entrypoints (`src/aditrader/cli/`)**: Created unified command router exposed via `quantumvalidator`, `aditrader`, and `neopaper` binaries (as well as `python -m aditrader.cli`). Implemented comprehensive commands:
+  - `doctor`: Comprehensive local system, dependency, configuration, storage writeability, and credentials diagnostics reporting `[READY]`, `[OPTIONAL/MISSING]`, or `[ERROR]` without leaking secrets.
+  - `status`: Displays active environment mode, timezone, database connection, table counts, scrip cache status, and registered strategy templates.
+  - `init-db`: Idempotently initializes SQLite transactional ledger tables (`orders`, `trades`, `positions`, `account_balances`).
+  - `strategies`: Lists built-in institutional templates and inspects full Strategy DNA vectors (`--detail <name>`).
+  - `search`: Fast scrip discovery over cached Parquet or mock broker contracts (`aditrader search <query>`).
+  - `validate`: Evaluates strategy definitions against institutional, moderate, or research validation policies.
+  - `backtest`: Executes deterministic backtest simulation for linear assets on historical/synthetic data with explicit simulation assumptions; strictly enforces ADR 011 air-gap guard rejecting options proxy backtests.
+  - `dashboard` & `forward-test`: Accurately document roadmap boundaries and current domain infrastructure status without pretending unimplemented daemons or UIs are running.
+- **Root Documentation & Getting Started Walkthrough (`README.md`)**: Documented the canonical workflow answering all 10 essential developer questions (installation, environment, env vars, database, verification, running, UI status, forward-test status, storage locations, stopping).
+- **Configuration Template (`.env.example`)**: Added comprehensive `.env.example` defining runtime defaults and clearly delineating required vs. optional keys.
+- **Deterministic Offline Smoke Test (`tests/unit/test_local_startup_smoke.py`)**: Added 12 deterministic unit and integration tests verifying all CLI commands, parser routing, database initialization, error guards, and subprocess execution.
+- **Automated Verification**:
+  - `ruff check src tests` and `ruff format --check src tests` passing cleanly (Python 3.11 target).
+  - `mypy src tests` passing in strict mode across 146 source files with 0 errors (Python 3.11 target).
+  - `pytest` suite passing 310/310 unit and integration tests (100% pass rate) + 4 skipped opt-in smoke tests.
+
+### Market-Data Fidelity, Replay Parity & Forward Testing Infrastructure
+**Status**: COMPLETE & VERIFIED ✅
+- **Canonical Market-Data Models (`src/aditrader/core/models/market_data.py`)**: Enhanced `Tick` and `Bar` models to capture genuinely available quote, depth, open interest, VWAP, tick count, and exchange metadata without fabricating values. Implemented crossed-market validation (`bid <= ask`) and physical OHLC envelope verification (`low <= open, close <= high`). Added typed `MarketDataSourceType` and `MarketDataProvenance`.
+- **Kotak Neo Quote Packet Parsing (`src/aditrader/data/adapters/kotak_neo.py`)**: Built `KotakNeoAdapter.parse_quote_packet()` to parse raw WebSocket or quote dictionaries into canonical `Tick` events, preserving available quotes and depth quantities while cleanly leaving absent fields as `None`.
+- **Tick Aggregator Hardening (`src/aditrader/data/feeds/aggregator.py`)**: Added support for configurable volume modes (`TICK_COUNT`, `INCREMENTAL`, `CUMULATIVE` session volume deltas), deterministic out-of-order drop/rejection (`OutOfOrderTickError`), duplicate tick rejection/ignoring (`DuplicateTickError`), dynamic VWAP calculation, tick count tracking, and diagnostic `quality_stats`.
+- **Deterministic Data Quality Auditing (`src/aditrader/data/quality.py`)**: Implemented `MarketDataQualityValidator`, `DataQualityReport`, `DataQualityError`, and `DataQualityWarning` auditing chronological monotonicity, session alignment, and crossed quotes.
+- **Quote-Aware Paper Broker Execution (`src/aditrader/core/broker.py`)**: Enhanced `PaperBroker.submit_order()`, `on_tick()`, and `on_market_tick()` to evaluate market and limit orders against real bid/ask quotes when present (BUY against ask, SELL against bid), falling back to LTP when quotes are absent.
+- **Explicit Simulation Assumptions Recording (`src/aditrader/backtesting/runner.py`)**: Defined typed `SimulationAssumptions` model and added `BacktestResult.simulation_assumptions` recording data resolution, quote presence, fill timing (`NEXT_BAR_OPEN` vs. `SAME_BAR_CLOSE`), slippage model/bps, statutory charge schedule, volume participation constraints, and data source provenance.
+- **Forward-Testing Observation & Latency Auditing (`src/aditrader/data/forward.py`)**: Built `ForwardTestRecorder`, `ForwardTestObservation`, `ForwardTestAssumptions`, and `ForwardTestSession` auditing live tick latency (`received_at - timestamp`), session compliance, quote presence ratio, and execution fidelity.
+- **Parquet Cache Extended Schema (`src/aditrader/data/cache.py`)**: Extended `LocalDataCache` to serialize and deserialize extended optional fields (`vwap`, `tick_count`, `source`, `timeframe`, `is_synthetic`, `bid_qty`, `ask_qty`, `exchange`, `instrument_token`) with 100% backward compatibility.
+- **Automated Verification**:
+  - `ruff check src tests` and `ruff format --check src tests` passing cleanly (Python 3.11 target).
+  - `mypy src tests` passing in strict mode across 143 source files with 0 errors (Python 3.11 target).
+  - `pytest` suite passing 298/298 unit and integration tests (100% pass rate) + 4 skipped opt-in smoke tests.
 
 ### Instrument Search & Selection Subsystem
 **Status**: COMPLETE & AUDITED ✅
@@ -222,27 +268,29 @@
 
 ## Current Work
  
-**Status**: PHASE 7A (AI INFRASTRUCTURE, REGISTRY & CONFIGURATION FOUNDATION) COMPLETE & VERIFIED ✅ | Ready for Phase 7B
+**Status**: PHASE 7 (CONTROLLED AI RUNTIME INTEGRATION: GEMINI VISION, OCR.SPACE, OPENROUTER MULTIMODAL & VISION+OCR PIPELINE) COMPLETE & VERIFIED ✅
  
 ### Baseline Verification Summary:
-- **Test Suite**: 257/257 unit and integration tests passing (100% pass rate in 1.70s) — including all 233 original Phase 6 tests, 11 Phase 7 contract tests, plus 13 Phase 7A infrastructure tests.
-- **Static Analysis**: Strict `mypy` clean (130 source files, 0 errors, Python 3.11 target).
-- **Linter & Formatting**: `ruff check` and `ruff format` clean (0 warnings, 0 errors).
-- **Phase 7A Components Completed**:
-  1. `AIProviderRegistry` (`ai/registry.py`): Dynamic, provider-agnostic registry (`AIProvider`, `BaseAIProvider`) supporting registration, case-insensitive lookup, collision rejection, and deterministic listing.
-  2. `ModelCatalog` (`ai/catalog.py`): Typed model metadata catalog (`ModelMetadata`) with explicit enum-typed capabilities (`AICapability`), context limits (`ModelContextLimits`), and pricing metadata (`ModelPricing`).
-  3. `AISubsystemsConfig` & `AIServiceConfig` (`ai/config.py`): Independent model and provider routing across all five subsystems (vision, forecasting, strategy_suggestor, strategy_reviewer, ocr) with immutability.
-  4. `AIBudgetConfig` (`ai/config.py`): Typed usage limits and spend threshold configurations (`ModelUsageLimit`).
-  5. `AICredentialResolver` (`ai/credentials.py`): Local secret resolution (`EnvCredentialResolver`, `DictCredentialResolver`) with explicit typed errors (`AICredentialError`) on missing keys.
-  6. `AIServiceResolver` (`ai/service.py`): Subsystem resolution, capability validation, and engine instantiation without network dependencies.
-  7. Failure semantics & hierarchy (`ai/errors.py`): `AIUnsupportedCapabilityError`, `AICredentialError`, `AIModelNotFoundError`, `AIProviderNotFoundError`.
-- **Phase 7 Implementation Status**: No AI providers, runtime model inference, network API clients, or live execution code have been added. The system remains strictly air-gapped and fully operational offline.
- 
+- **Test Suite**: 282 passed, 3 skipped (explicit opt-in real smoke tests) in 1.70s across 25 test modules (100% pass rate).
+- **Static Analysis**: Strict `mypy` clean (140 source files, 0 errors, Python 3.11 target).
+- **Linter & Formatting**: `ruff check` clean (0 errors) and `ruff format --check` clean (140 files checked, 0 changes).
+- **Phase 7 AI Runtime Components Completed**:
+  1. `GoogleAIProvider` (`ai/providers/google.py`) & `GeminiVisionEngine` (`ai/vision/gemini.py`): Concrete multimodal vision adapter for Google Gemini models with JSON mode, mock transport injection, bounded execution, and ADR 012 provenance.
+  2. `OCRSpaceProvider` (`ai/providers/ocrspace.py`) & `OCRSpaceEngine` (`ai/ocr/ocrspace.py`): Concrete OCR adapter integrating OCR.Space cloud REST API via standard library `urllib`. Normalizes text lines, bounding boxes (`OCRBoundingBox`), and attaches `ProvenanceRecord` with `AISourceType.OCR_EXTRACTION`.
+  3. `OpenRouterProvider` (`ai/providers/openrouter.py`) & `OpenRouterVisionEngine` (`ai/vision/openrouter.py`): Concrete multimodal provider adapter integrating OpenRouter OpenAI-compatible completions API with base64 data URLs, JSON mode, and Gemma 4 26B A4B support.
+  4. `ModelCatalog` Defaults (`ai/catalog.py`): Default catalog populated with `ocrspace` (`ocr-engine-2`), `openrouter` (`google/gemma-4-26b-a4b-it`, `google/gemma-4-26b-a4b-it:free`), and `google` (`gemini-2.0-flash`, `gemini-1.5-flash`, `gemini-1.5-pro`, `text-embedding-004`).
+  5. Vision + OCR Decoupled Pipeline (`ai/base.py`, `ai/vision/`): Vision engines accept optional `ocr_engine: OCREngine | None` and `ocr_result: OCRResult | None`. If OCR fails or is unconfigured, Vision proceeds on image bytes directly without crashing. Auxiliary OCR text is passed to vision model prompt as unverified context, marked explicitly with `STATUS: AVAILABLE` or `STATUS: NOT AVAILABLE`, and stored in `VisionResult.ocr_text`.
+  6. Configuration & Credential Resolution (`ai/credentials.py`, `ai/service.py`): `EnvCredentialResolver` supports `OPENROUTER_API_KEY` and `OCRSPACE_API_KEY` / `OCR_SPACE_API_KEY`. `AIServiceResolver` supports independent configuration and resolution of `resolve_vision_engine(with_ocr=True)` and `resolve_ocr_engine()`.
+  7. Comprehensive Unit & Smoke Tests (`tests/unit/test_phase7b_gemini_vision.py`, `tests/unit/test_phase7b_ocr_and_openrouter.py`): 25 offline unit tests verifying request construction, response normalization, empty handling, malformed responses, credential resolution, timeouts, rate limits, capability enforcement, vision+OCR integration, and provenance integrity; plus 3 opt-in real network smoke tests guarded by `RUN_REAL_AI_TESTS=1`.
+
 ---
  
 ## Not Implemented Yet (Do NOT Hallucinate)
  
 The following components do **NOT** exist in code:
-- No concrete AI provider runtime integrations (Gemini API client, Kronos/Chronos inference, OCR engine) (`ai/`)
+- No concrete time-series foundation model runtime integrations (Kronos, Chronos) (`ai/forecasting/`)
+- No Strategy Suggestor runtime (`ai/suggestor/`)
+- No Strategy Reviewer runtime (`ai/reviewer/`)
+- No Research Dossier runtime (`research/`)
 - No Plotly Dash web interface or interactive CLI handlers (`ui/`, `cli/`)
 

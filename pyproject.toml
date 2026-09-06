@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "aditrader"
 version = "0.1.0"
 description = "Institutional-grade paper-trading and research operating system for Indian equity and derivatives"
-readme = "SPEC.md"
+readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Proprietary" }
 authors = [
@@ -33,6 +33,7 @@ dev = [
 [project.scripts]
 aditrader = "aditrader.cli:main"
 neopaper = "aditrader.cli:main"
+quantumvalidator = "aditrader.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/aditrader"]
