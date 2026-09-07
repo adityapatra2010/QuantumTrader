@@ -1,7 +1,8 @@
 """Immutable market data models for ticks, aggregated OHLCV bars, and data provenance."""
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -126,3 +127,114 @@ class Bar(BaseModel):
         if self.low > min(self.open, self.close):
             raise ValueError(f"Low price ({self.low}) must be <= open and close")
         return self
+
+
+class DerivativeQuoteRecord(BaseModel):
+    """Normalized daily observation record for exchange-traded derivative contracts.
+
+    Faithfully captures all 15 fields of the official NSE derivative quote/download schema:
+    Date, Expiry Date, Option Type, Strike Price, Open Price, High Price, Low Price,
+    Close Price, Last Price, Settlement Price, Volume, Value (₹ Lakhs), Premium Value (₹ Lakhs),
+    Open Interest, Change in OI.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    timestamp: datetime = Field(..., description="Observation / session date-time in Asia/Kolkata")
+    symbol: str = Field(..., min_length=1, description="Root underlying symbol (e.g. 'RELIANCE')")
+    trading_symbol: str = Field(
+        ...,
+        min_length=1,
+        description="Composite derivative contract identifier (e.g. 'RELIANCE 29-Sep-2026 CE 1370')",
+    )
+    expiry_date: date = Field(..., description="Contract expiration date")
+    option_type: Literal["CE", "PE", "XX"] = Field(
+        ..., description="Option type ('CE', 'PE') or 'XX' for futures"
+    )
+    strike_price: float | None = Field(
+        default=None, description="Strike price in INR (None for futures)"
+    )
+    open: float | None = Field(default=None, gt=0.0, description="Daily open price if traded")
+    high: float | None = Field(default=None, gt=0.0, description="Daily high price if traded")
+    low: float | None = Field(default=None, gt=0.0, description="Daily low price if traded")
+    close: float | None = Field(default=None, gt=0.0, description="Daily close price if available")
+    last_price: float | None = Field(
+        default=None, gt=0.0, description="Last traded price (LTP) if available"
+    )
+    settlement_price: float | None = Field(
+        default=None, gt=0.0, description="Daily official settlement price if available"
+    )
+    volume: int = Field(default=0, ge=0, description="Traded contracts / volume")
+    value_lakhs: float | None = Field(
+        default=None, ge=0.0, description="Notional turnover value in Lakhs"
+    )
+    premium_value_lakhs: float | None = Field(
+        default=None, ge=0.0, description="Premium turnover value in Lakhs"
+    )
+    oi: int | None = Field(default=None, ge=0, description="Total open interest contracts")
+    change_in_oi: int | None = Field(default=None, description="Net change in open interest")
+    vwap: float | None = Field(
+        default=None, ge=0.0, description="Volume-weighted average price if available"
+    )
+    source: str = Field(default="NSE_DERIVATIVE_QUOTE", description="Origin data source identifier")
+
+    @model_validator(mode="after")
+    def validate_derivative_record(self) -> "DerivativeQuoteRecord":
+        """Validate price envelopes when traded, and enforce strike requirements for options."""
+        if (
+            self.open is not None
+            and self.high is not None
+            and self.low is not None
+            and self.close is not None
+        ):
+            if self.high < self.low:
+                raise ValueError(
+                    f"High price ({self.high}) cannot be lower than Low price ({self.low})"
+                )
+            if self.high < max(self.open, self.close):
+                raise ValueError(f"High price ({self.high}) must be >= open and close")
+            if self.low > min(self.open, self.close):
+                raise ValueError(f"Low price ({self.low}) must be <= open and close")
+
+        if self.option_type in ("CE", "PE") and (
+            self.strike_price is None or self.strike_price <= 0.0
+        ):
+            raise ValueError(
+                f"Option contract '{self.trading_symbol}' ({self.option_type}) requires a positive strike price"
+            )
+        return self
+
+    @property
+    def underlying(self) -> str:
+        """Root underlying symbol alias."""
+        return self.symbol
+
+    @property
+    def open_price(self) -> float | None:
+        """Daily open price alias."""
+        return self.open
+
+    @property
+    def high_price(self) -> float | None:
+        """Daily high price alias."""
+        return self.high
+
+    @property
+    def low_price(self) -> float | None:
+        """Daily low price alias."""
+        return self.low
+
+    @property
+    def close_price(self) -> float | None:
+        """Daily close price alias."""
+        return self.close
+
+    @property
+    def open_interest(self) -> int | None:
+        """Open interest alias."""
+        return self.oi
+
+    @property
+    def contract_symbol(self) -> str:
+        """Composite contract symbol identifier alias."""
+        return self.trading_symbol

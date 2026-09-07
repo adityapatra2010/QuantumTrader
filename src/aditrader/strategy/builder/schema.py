@@ -107,6 +107,14 @@ class ConditionNode(BaseModel):
         default_factory=dict, description="Parameters for compare indicator"
     )
 
+    @field_validator("category", mode="before")
+    @classmethod
+    def normalize_category(cls, v: Any) -> Any:
+        """Normalize category strings to lowercase enum values."""
+        if isinstance(v, str):
+            return v.lower()
+        return v
+
     @field_validator("operator")
     @classmethod
     def validate_leaf_operator(cls, op: ASTOperator) -> ASTOperator:

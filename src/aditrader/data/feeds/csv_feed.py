@@ -47,6 +47,27 @@ class CSVDataFeed(DataFeed):
         if not self.file_path.is_file():
             raise FileNotFoundError(f"CSV historical file not found: {self.file_path}")
 
+        import csv
+
+        from aditrader.data.feeds.nse_csv import NSECSVFormat, _clean_header
+
+        with open(self.file_path, encoding="utf-8-sig", errors="replace") as f:
+            reader = csv.reader(f)
+            first_line = next(reader, [])
+            header_cols = [_clean_header(c) for c in first_line if c.strip()]
+            fmt = NSECSVParser.detect_format(header_cols)
+
+        if fmt == NSECSVFormat.DERIVATIVE_QUOTE and not any(
+            k in self.symbol.upper() for k in (" CE ", " PE ", " FUT")
+        ):
+            raise ValueError(
+                f"CSV dataset '{self.file_path.name}' is classified as NSE_DERIVATIVE_QUOTE. "
+                "Multi-contract daily derivative quote series cannot be replayed as a linear candle feed; "
+                "options execution is air-gapped per ADR 011 and ADR 002. "
+                "Silent proxy execution of option contracts against underlying spot or linear state machines is prohibited. "
+                "Use 'aditrader inspect-data' to analyze this dataset."
+            )
+
         bars, warnings = NSECSVParser.parse_file(
             file_path=self.file_path,
             symbol=self.symbol,

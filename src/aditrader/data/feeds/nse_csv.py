@@ -20,15 +20,16 @@ from __future__ import annotations
 import csv
 import io
 import re
+from collections.abc import Sequence
 from datetime import date, datetime
 from datetime import time as dt_time
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from aditrader.core.models.market_data import Bar
+from aditrader.core.models.market_data import Bar, DerivativeQuoteRecord
 from aditrader.data.session import is_market_open, normalize_to_ist
 
 
@@ -39,6 +40,7 @@ class NSECSVFormat(StrEnum):
     CM_BHAVCOPY = "NSE_CM_BHAVCOPY"
     FO_BHAVCOPY = "NSE_FO_BHAVCOPY"
     INDEX_HISTORY = "NSE_INDEX_HISTORY"
+    DERIVATIVE_QUOTE = "NSE_DERIVATIVE_QUOTE"
     GENERIC_OHLCV = "GENERIC_OHLCV"
     UNKNOWN = "UNKNOWN"
 
@@ -70,11 +72,67 @@ class CSVInspectionReport(BaseModel):
     is_valid_replayable: bool = Field(
         ..., description="True if file satisfies minimum bar count and schema requirements"
     )
+    underlying_symbols: list[str] = Field(
+        default_factory=list,
+        description="Root underlying symbols discovered in derivative datasets",
+    )
+    expiries_found: list[str] = Field(
+        default_factory=list, description="Derivative expiration dates discovered"
+    )
+    option_types: list[str] = Field(
+        default_factory=list, description="Option types discovered (e.g. 'CE', 'PE', 'XX')"
+    )
+    derivative_fields: list[str] = Field(
+        default_factory=list, description="Recognized derivative specific fields"
+    )
+    total_derivative_rows: int | None = Field(
+        default=None,
+        description="Total derivative observation rows including untraded contracts",
+    )
+    replay_ineligibility_reason: str | None = Field(
+        default=None,
+        description="Explanation why dataset cannot be replayed directly in linear paper runner",
+    )
+
+    @property
+    def is_replayable(self) -> bool:
+        """Convenience alias for is_valid_replayable."""
+        return self.is_valid_replayable
+
+    @property
+    def warnings(self) -> list[str]:
+        """Convenience alias for quality_warnings."""
+        return self.quality_warnings
 
 
 def _clean_header(header: str) -> str:
-    """Normalize CSV header by stripping whitespace, angle brackets, and lowercase."""
-    return re.sub(r"[<>]", "", header).strip().lower()
+    """Normalize CSV header by stripping BOM, excess whitespace, angle brackets, and lowercase."""
+    s = re.sub(r"[\ufeff<>]", "", header)
+    s = re.sub(r"\s+", " ", s)
+    return s.strip().lower()
+
+
+def _extract_underlying_from_filename(filename: str) -> str | None:
+    """Attempt to extract root underlying symbol from standard NSE file naming patterns."""
+    clean_name = Path(filename).name
+    # Pattern 1: Quote-Derivative-RELIANCE-07-03-2026-07-09-2026.csv
+    # Pattern 2: Quote-Equity-RELIANCE-07-03-2026-07-09-2026.csv
+    m = re.match(
+        r"^Quote-(?:Derivative|Equity)-([A-Za-z0-9_&]+)(?:-\d{2}-\d{2}-\d{4}.*)?",
+        clean_name,
+        re.IGNORECASE,
+    )
+    if m:
+        return m.group(1).upper()
+    # Pattern 3: RELIANCE_derivative.csv or RELIANCE-derivatives.csv
+    m2 = re.match(
+        r"^([A-Za-z0-9_&]+)[_-](?:derivative|derivatives|options|futures)",
+        clean_name,
+        re.IGNORECASE,
+    )
+    if m2:
+        return m2.group(1).upper()
+    return None
 
 
 def _parse_float(val: Any) -> float | None:
@@ -230,9 +288,36 @@ class NSECSVParser:
     """
 
     @classmethod
-    def detect_format(cls, columns: list[str]) -> NSECSVFormat:
-        """Classify CSV format based on header column signature."""
-        cols = {_clean_header(c) for c in columns}
+    def detect_format(cls, columns_or_path: Sequence[str] | str | Path) -> NSECSVFormat:
+        """Classify CSV format based on header column signature or file path."""
+        if isinstance(columns_or_path, (str, Path)):
+            path = Path(columns_or_path)
+            if not path.is_file():
+                return NSECSVFormat.UNKNOWN
+            try:
+                with open(path, encoding="utf-8-sig", errors="replace") as f:
+                    sample = f.read(4096)
+                    f.seek(0)
+                    try:
+                        dialect = csv.Sniffer().sniff(sample, delimiters=",\t;|")
+                        delimiter = dialect.delimiter
+                    except Exception:
+                        delimiter = ","
+                    reader = csv.reader(f, delimiter=delimiter)
+                    first_row = next(reader, [])
+                    cols = {_clean_header(c) for c in first_row if c.strip()}
+            except Exception:
+                return NSECSVFormat.UNKNOWN
+        else:
+            cols = {_clean_header(c) for c in columns_or_path if c}
+
+        # NSE Derivative Quote download (Quote-Derivative-*.csv)
+        if (
+            {"expiry date", "option type", "strike price"}.issubset(cols)
+            or {"strike price", "settlement price"}.issubset(cols)
+            or {"option type", "settlement price", "change in oi"}.issubset(cols)
+        ):
+            return NSECSVFormat.DERIVATIVE_QUOTE
 
         # NSE FO Bhavcopy signature
         if {"instrument", "symbol", "strike_pr", "option_typ"}.issubset(cols) or {
@@ -323,20 +408,77 @@ class NSECSVParser:
                 row_idx += 1
                 row = {_clean_header(k): v.strip() for k, v in raw_row.items() if k}
 
+                underlying_candidate = _extract_underlying_from_filename(path.name)
                 # Extract symbol
                 row_symbol = (
                     row.get("symbol")
                     or row.get("ticker")
                     or row.get("scrip")
+                    or underlying_candidate
                     or symbol
                     or "UNKNOWN"
                 ).strip()
 
-                # Bhavcopy filtering
-                if csv_format == NSECSVFormat.CM_BHAVCOPY:
+                # Format-specific symbol resolution and filtering
+                if csv_format == NSECSVFormat.DERIVATIVE_QUOTE:
+                    underlying = (
+                        (
+                            row.get("symbol")
+                            or row.get("underlying")
+                            or underlying_candidate
+                            or (
+                                symbol
+                                if symbol
+                                and not any(k in symbol.upper() for k in (" CE ", " PE ", " FUT"))
+                                else None
+                            )
+                            or "UNKNOWN"
+                        )
+                        .strip()
+                        .upper()
+                    )
+
+                    opt_typ_raw = row.get("option type", "").strip().upper()
+                    strike_raw = row.get("strike price", "").strip()
+                    expiry_raw = row.get("expiry date", "").strip()
+
+                    if opt_typ_raw in ("CE", "CALL"):
+                        opt_typ = "CE"
+                    elif opt_typ_raw in ("PE", "PUT"):
+                        opt_typ = "PE"
+                    elif opt_typ_raw in ("XX", "FUT", "FUTURES", "-"):
+                        opt_typ = "XX"
+                    else:
+                        warnings.append(f"Row {row_idx}: Invalid option type '{opt_typ_raw}'.")
+                        continue
+
+                    if opt_typ in ("CE", "PE"):
+                        strike_val = _parse_float(strike_raw)
+                        if strike_val is None or strike_val <= 0:
+                            warnings.append(
+                                f"Row {row_idx}: Missing or malformed strike price '{strike_raw}' for option type {opt_typ}."
+                            )
+                            continue
+                        strike_str = f"{strike_val:g}"
+                        row_symbol = f"{underlying} {expiry_raw} {opt_typ} {strike_str}"
+                    else:
+                        row_symbol = f"{underlying} {expiry_raw} FUT"
+
+                    if symbol:
+                        clean_target = symbol.strip().upper()
+                        if (
+                            clean_target != underlying
+                            and clean_target != row_symbol.upper()
+                            and clean_target not in row_symbol.upper()
+                        ):
+                            continue
+
+                elif csv_format == NSECSVFormat.CM_BHAVCOPY:
                     # By default accept 'EQ' series if series column exists
                     series = row.get("series", "EQ").strip()
                     if series not in ("EQ", "") and symbol and symbol != row_symbol:
+                        continue
+                    if symbol and row_symbol.upper() != symbol.upper():
                         continue
                 elif csv_format == NSECSVFormat.FO_BHAVCOPY:
                     # Construct composite symbol if available (e.g., NIFTY24DEC24000CE)
@@ -344,12 +486,14 @@ class NSECSVParser:
                     opt_typ = row.get("option_typ", "").strip()
                     if strike and opt_typ and opt_typ != "XX":
                         composite = f"{row_symbol}{strike}{opt_typ}"
-                        if symbol and symbol not in (row_symbol, composite):
+                        if symbol and symbol.upper() not in (row_symbol.upper(), composite.upper()):
                             continue
                         row_symbol = composite
-
-                if symbol and row_symbol.upper() != symbol.upper():
-                    continue
+                    elif symbol and row_symbol.upper() != symbol.upper():
+                        continue
+                else:
+                    if symbol and row_symbol.upper() != symbol.upper():
+                        continue
 
                 # Extract timestamp
                 ts_raw = (
@@ -374,10 +518,21 @@ class NSECSVParser:
                     continue
 
                 # Parse OHLC
-                o_val = _parse_float(row.get("open") or row.get("<open>"))
-                h_val = _parse_float(row.get("high") or row.get("<high>"))
-                l_val = _parse_float(row.get("low") or row.get("<low>"))
-                c_val = _parse_float(row.get("close") or row.get("<close>"))
+                o_val = _parse_float(row.get("open price") or row.get("open") or row.get("<open>"))
+                h_val = _parse_float(row.get("high price") or row.get("high") or row.get("<high>"))
+                l_val = _parse_float(row.get("low price") or row.get("low") or row.get("<low>"))
+                c_val = _parse_float(
+                    row.get("close price") or row.get("close") or row.get("<close>")
+                )
+
+                if (
+                    csv_format == NSECSVFormat.DERIVATIVE_QUOTE
+                    and o_val is None
+                    and h_val is None
+                    and l_val is None
+                ):
+                    # Benign untraded derivative contract on this date
+                    continue
 
                 if o_val is None or h_val is None or l_val is None or c_val is None:
                     warnings.append(f"Row {row_idx}: Missing or invalid OHLC prices.")
@@ -404,6 +559,16 @@ class NSECSVParser:
                     or _parse_int(row.get("shares traded"))
                     or 0
                 )
+                vol_raw = row.get("volume") or row.get("vol")
+                if (
+                    vol_raw is not None
+                    and vol_raw.strip()
+                    and vol_raw.strip() not in ("-", "null", "none")
+                ):
+                    vol_num = _parse_float(vol_raw)
+                    if vol_num is not None and vol_num < 0:
+                        warnings.append(f"Row {row_idx}: Negative volume encountered: {vol_raw}.")
+                        continue
 
                 # Open Interest resolution
                 oi_val = (
@@ -413,6 +578,18 @@ class NSECSVParser:
                     or _parse_int(row.get("open_interest"))
                     or 0
                 )
+                oi_raw = row.get("open interest") or row.get("open_int") or row.get("oi")
+                if (
+                    oi_raw is not None
+                    and oi_raw.strip()
+                    and oi_raw.strip() not in ("-", "null", "none")
+                ):
+                    oi_num = _parse_float(oi_raw)
+                    if oi_num is not None and oi_num < 0:
+                        warnings.append(
+                            f"Row {row_idx}: Negative open interest encountered: {oi_raw}."
+                        )
+                        continue
 
                 # Tick Count resolution
                 tc_val = (
@@ -425,12 +602,43 @@ class NSECSVParser:
                 # VWAP resolution
                 vwap_val = _parse_float(row.get("vwap"))
                 if vwap_val is None and vol_val > 0:
-                    tottrdval = _parse_float(row.get("tottrdval"))
-                    if tottrdval is not None and tottrdval > 0:
-                        vwap_val = round(tottrdval / vol_val, 2)
+                    if csv_format == NSECSVFormat.DERIVATIVE_QUOTE:
+                        prem_val = _parse_float(
+                            row.get("premium value (₹ lakhs)") or row.get("premium value")
+                        )
+                        val_lakhs = _parse_float(row.get("value (₹ lakhs)") or row.get("value"))
+                        opt_typ_check = row.get("option type", "").strip().upper()
+                        if (
+                            opt_typ_check in ("CE", "PE", "CALL", "PUT")
+                            and prem_val is not None
+                            and prem_val > 0
+                        ):
+                            candidate = prem_val / vol_val
+                            if l_val <= candidate <= h_val:
+                                vwap_val = round(candidate, 4)
+                        elif opt_typ_check in ("XX", "FUT", "FUTURES", "-") and (
+                            val_lakhs is not None or prem_val is not None
+                        ):
+                            turnover = (
+                                val_lakhs if val_lakhs is not None and val_lakhs > 0 else prem_val
+                            )
+                            if turnover is not None and turnover > 0:
+                                candidate = turnover / vol_val
+                                if l_val <= candidate <= h_val:
+                                    vwap_val = round(candidate, 4)
+                    else:
+                        tottrdval = _parse_float(row.get("tottrdval"))
+                        if tottrdval is not None and tottrdval > 0:
+                            candidate = tottrdval / vol_val
+                            if l_val <= candidate <= h_val:
+                                vwap_val = round(candidate, 2)
 
                 # Monotonic ordering check
-                if last_ts is not None and ts < last_ts:
+                if (
+                    csv_format != NSECSVFormat.DERIVATIVE_QUOTE
+                    and last_ts is not None
+                    and ts < last_ts
+                ):
                     has_seen_out_of_order = True
                 last_ts = ts
 
@@ -441,11 +649,15 @@ class NSECSVParser:
                     low=round(l_val, 4),
                     close=round(c_val, 4),
                     volume=max(0, vol_val),
-                    oi=max(0, oi_val) if oi_val is not None else None,
+                    oi=max(0, oi_val) if oi_val is not None else 0,
                     symbol=row_symbol,
                     vwap=round(vwap_val, 4) if vwap_val is not None and vwap_val > 0 else None,
                     tick_count=tc_val if tc_val is not None and tc_val >= 0 else None,
-                    source="CSV_HISTORICAL",
+                    source=(
+                        "NSE_DERIVATIVE_QUOTE"
+                        if csv_format == NSECSVFormat.DERIVATIVE_QUOTE
+                        else "CSV_HISTORICAL"
+                    ),
                     timeframe=timeframe,
                     is_synthetic=False,
                 )
@@ -454,17 +666,18 @@ class NSECSVParser:
         if has_seen_out_of_order:
             warnings.append("Dataset contained out-of-order timestamps; chronologically sorted.")
 
-        # Strict ascending sort by timestamp
-        bars.sort(key=lambda b: b.timestamp)
+        # Strict ascending sort by timestamp, then symbol
+        bars.sort(key=lambda b: (b.timestamp, b.symbol or ""))
 
-        # Deduplication
+        # Deduplication using composite key (symbol, timestamp)
         deduped: list[Bar] = []
-        seen_ts: set[datetime] = set()
+        seen_keys: set[tuple[str | None, datetime]] = set()
         duplicate_count = 0
         for b in bars:
-            if b.timestamp not in seen_ts:
+            key = (b.symbol, b.timestamp)
+            if key not in seen_keys:
                 deduped.append(b)
-                seen_ts.add(b.timestamp)
+                seen_keys.add(key)
             else:
                 duplicate_count += 1
 
@@ -472,6 +685,224 @@ class NSECSVParser:
             warnings.append(f"Deduplicated {duplicate_count} bars with duplicate timestamps.")
 
         return deduped, warnings
+
+    @classmethod
+    def parse_derivative_quotes(
+        cls,
+        file_path: str | Path,
+        symbol: str | None = None,
+    ) -> tuple[list[DerivativeQuoteRecord], list[str]]:
+        """
+        Parse NSE derivative quote CSV into canonical DerivativeQuoteRecord objects.
+
+        Faithfully normalizes all 15 official NSE columns:
+        Date, Expiry Date, Option Type, Strike Price, Open Price, High Price, Low Price,
+        Close Price, Last Price, Settlement Price, Volume, Value, Premium Value,
+        Open Interest, Change in OI.
+        """
+        path = Path(file_path)
+        if not path.is_file():
+            raise FileNotFoundError(f"Market data CSV not found: {path}")
+
+        extracted_underlying = _extract_underlying_from_filename(path.name)
+
+        with open(path, encoding="utf-8-sig", errors="replace") as f:
+            sample = f.read(4096)
+            f.seek(0)
+            try:
+                dialect = csv.Sniffer().sniff(sample, delimiters=",\t;|")
+                delimiter = dialect.delimiter
+            except Exception:
+                delimiter = ","
+
+            f.seek(0)
+            dict_reader = csv.DictReader(f, delimiter=delimiter)
+
+            records: list[DerivativeQuoteRecord] = []
+            warnings: list[str] = []
+            row_idx = 1
+
+            for raw_row in dict_reader:
+                row_idx += 1
+                row = {_clean_header(k): v.strip() for k, v in raw_row.items() if k}
+
+                underlying = (
+                    (
+                        row.get("symbol")
+                        or row.get("underlying")
+                        or extracted_underlying
+                        or (
+                            symbol
+                            if symbol
+                            and not any(k in symbol.upper() for k in (" CE ", " PE ", " FUT"))
+                            else None
+                        )
+                        or "UNKNOWN"
+                    )
+                    .strip()
+                    .upper()
+                )
+
+                opt_typ_raw = row.get("option type", "").strip().upper()
+                if opt_typ_raw in ("CE", "CALL"):
+                    opt_typ: Literal["CE", "PE", "XX"] = "CE"
+                elif opt_typ_raw in ("PE", "PUT"):
+                    opt_typ = "PE"
+                elif opt_typ_raw in ("XX", "FUT", "FUTURES", "-"):
+                    opt_typ = "XX"
+                else:
+                    warnings.append(f"Row {row_idx}: Invalid option type '{opt_typ_raw}'.")
+                    continue
+
+                expiry_raw = row.get("expiry date", "").strip()
+                exp_date = _parse_date_only(expiry_raw)
+                if exp_date is None:
+                    warnings.append(f"Row {row_idx}: Failed to parse expiry date '{expiry_raw}'.")
+                    continue
+
+                strike_raw = row.get("strike price", "").strip()
+                strike_val: float | None = None
+                if opt_typ in ("CE", "PE"):
+                    strike_val = _parse_float(strike_raw)
+                    if strike_val is None or strike_val <= 0:
+                        warnings.append(
+                            f"Row {row_idx}: Missing or malformed strike price '{strike_raw}' for option type {opt_typ}."
+                        )
+                        continue
+                    strike_str = f"{strike_val:g}"
+                    trading_symbol = f"{underlying} {expiry_raw} {opt_typ} {strike_str}"
+                else:
+                    trading_symbol = f"{underlying} {expiry_raw} FUT"
+
+                # Symbol filtering if target symbol was requested
+                if symbol:
+                    clean_target = symbol.strip().upper()
+                    if (
+                        clean_target != underlying
+                        and clean_target != trading_symbol.upper()
+                        and clean_target not in trading_symbol.upper()
+                    ):
+                        continue
+
+                date_raw = row.get("date", "").strip()
+                if not date_raw:
+                    warnings.append(f"Row {row_idx}: Missing observation date.")
+                    continue
+
+                try:
+                    ts = parse_flexible_timestamp(date_raw)
+                except Exception as exc:
+                    warnings.append(
+                        f"Row {row_idx}: Failed to parse observation date '{date_raw}' ({exc})."
+                    )
+                    continue
+
+                o_val = _parse_float(row.get("open price") or row.get("open"))
+                h_val = _parse_float(row.get("high price") or row.get("high"))
+                l_val = _parse_float(row.get("low price") or row.get("low"))
+                c_val = _parse_float(row.get("close price") or row.get("close"))
+                ltp_val = _parse_float(row.get("last price") or row.get("ltp"))
+                settle_val = _parse_float(row.get("settlement price"))
+
+                # Envelope check when fully traded
+                if (
+                    o_val is not None
+                    and h_val is not None
+                    and l_val is not None
+                    and c_val is not None
+                ):
+                    if o_val <= 0 or h_val <= 0 or l_val <= 0 or c_val <= 0:
+                        warnings.append(f"Row {row_idx}: Non-positive OHLC price encountered.")
+                        continue
+                    if h_val < l_val or h_val < max(o_val, c_val) or l_val > min(o_val, c_val):
+                        warnings.append(
+                            f"Row {row_idx} ({ts.isoformat()}): Invalid OHLC price envelope "
+                            f"O={o_val} H={h_val} L={l_val} C={c_val}."
+                        )
+                        continue
+                elif o_val is not None or h_val is not None or l_val is not None:
+                    warnings.append(f"Row {row_idx}: Incomplete OHLC prices on traded contract.")
+                    continue
+
+                # Volume check
+                vol_val = _parse_int(row.get("volume")) or 0
+                vol_num = _parse_float(row.get("volume"))
+                if vol_num is not None and vol_num < 0:
+                    warnings.append(
+                        f"Row {row_idx}: Negative volume encountered: {row.get('volume')}."
+                    )
+                    continue
+
+                # Open interest check
+                oi_val = _parse_int(row.get("open interest"))
+                oi_num = _parse_float(row.get("open interest"))
+                if oi_num is not None and oi_num < 0:
+                    warnings.append(
+                        f"Row {row_idx}: Negative open interest encountered: {row.get('open interest')}."
+                    )
+                    continue
+
+                chg_oi_val = _parse_int(row.get("change in oi"))
+
+                # Turnover values
+                val_lakhs = _parse_float(row.get("value (₹ lakhs)") or row.get("value"))
+                prem_val_lakhs = _parse_float(
+                    row.get("premium value (₹ lakhs)") or row.get("premium value")
+                )
+
+                # Authentic VWAP calculation
+                vwap_val: float | None = None
+                if vol_val > 0:
+                    if (
+                        opt_typ in ("CE", "PE")
+                        and prem_val_lakhs is not None
+                        and prem_val_lakhs > 0
+                    ):
+                        candidate = prem_val_lakhs / vol_val
+                        if l_val is not None and h_val is not None and l_val <= candidate <= h_val:
+                            vwap_val = round(candidate, 4)
+                    elif opt_typ == "XX" and (val_lakhs is not None or prem_val_lakhs is not None):
+                        turnover = (
+                            val_lakhs if val_lakhs is not None and val_lakhs > 0 else prem_val_lakhs
+                        )
+                        if turnover is not None and turnover > 0:
+                            candidate = turnover / vol_val
+                            if (
+                                l_val is not None
+                                and h_val is not None
+                                and l_val <= candidate <= h_val
+                            ):
+                                vwap_val = round(candidate, 4)
+
+                try:
+                    record = DerivativeQuoteRecord(
+                        timestamp=ts,
+                        symbol=underlying,
+                        trading_symbol=trading_symbol,
+                        expiry_date=exp_date,
+                        option_type=opt_typ,
+                        strike_price=strike_val,
+                        open=round(o_val, 4) if o_val is not None else None,
+                        high=round(h_val, 4) if h_val is not None else None,
+                        low=round(l_val, 4) if l_val is not None else None,
+                        close=round(c_val, 4) if c_val is not None else None,
+                        last_price=round(ltp_val, 4) if ltp_val is not None else None,
+                        settlement_price=round(settle_val, 4) if settle_val is not None else None,
+                        volume=max(0, vol_val),
+                        value_lakhs=val_lakhs,
+                        premium_value_lakhs=prem_val_lakhs,
+                        oi=max(0, oi_val) if oi_val is not None else None,
+                        change_in_oi=chg_oi_val,
+                        vwap=vwap_val,
+                        source="NSE_DERIVATIVE_QUOTE",
+                    )
+                    records.append(record)
+                except Exception as exc:
+                    warnings.append(f"Row {row_idx}: Validation error ({exc}).")
+
+            # Sort ascending chronologically, then by contract trading symbol
+            records.sort(key=lambda r: (r.timestamp, r.trading_symbol))
+            return records, warnings
 
 
 class NSECSVInspector:
@@ -521,54 +952,110 @@ class NSECSVInspector:
 
         detected_fmt = NSECSVParser.detect_format(header_cols)
 
-        # Parse bars
-        bars, warnings = NSECSVParser.parse_file(
-            path,
-            symbol=target_symbol,
-            timeframe="1m" if detected_fmt == NSECSVFormat.INTRADAY else "1d",
-            session_filter=False,
-        )
+        underlying_symbols: list[str] = []
+        expiries_found: list[str] = []
+        option_types: list[str] = []
+        derivative_fields: list[str] = []
+        total_derivative_rows: int | None = None
+        replay_ineligibility_reason: str | None = None
+        bars: list[Bar] = []
+        warnings: list[str] = []
 
-        symbols_found = sorted(list({str(b.symbol) for b in bars if b.symbol is not None}))
-        has_volume = any(b.volume > 0 for b in bars)
-        has_oi = any((b.oi or 0) > 0 for b in bars)
-        has_vwap = any(b.vwap is not None for b in bars)
-        has_tc = any(b.tick_count is not None for b in bars)
+        if detected_fmt == NSECSVFormat.DERIVATIVE_QUOTE:
+            quotes, warnings = NSECSVParser.parse_derivative_quotes(path, symbol=target_symbol)
 
-        # Infer timeframe if intraday
-        timeframe_detected = "1d"
-        if detected_fmt == NSECSVFormat.INTRADAY and len(bars) >= 2:
-            # Measure median delta between first few consecutive bars on the same day
-            deltas: list[float] = []
-            for i in range(min(50, len(bars) - 1)):
-                if bars[i].timestamp.date() == bars[i + 1].timestamp.date():
-                    dt_sec = (bars[i + 1].timestamp - bars[i].timestamp).total_seconds()
-                    if 0 < dt_sec <= 86400:
-                        deltas.append(dt_sec)
-            if deltas:
-                deltas.sort()
-                median_sec = deltas[len(deltas) // 2]
-                if 55 <= median_sec <= 65:
-                    timeframe_detected = "1m"
-                elif 290 <= median_sec <= 310:
-                    timeframe_detected = "5m"
-                elif 890 <= median_sec <= 910:
-                    timeframe_detected = "15m"
-                elif 3500 <= median_sec <= 3700:
-                    timeframe_detected = "1h"
-                else:
-                    timeframe_detected = f"{int(median_sec)}s"
+            total_derivative_rows = len(quotes)
+            parsed_bars_count = sum(
+                1
+                for q in quotes
+                if q.open is not None
+                and q.high is not None
+                and q.low is not None
+                and q.close is not None
+            )
+            underlying_symbols = sorted(list({q.symbol for q in quotes}))
+            unique_expiries = {q.expiry_date for q in quotes}
+            expiries_found = [d.strftime("%d-%b-%Y") for d in sorted(unique_expiries)]
+            option_types = sorted(list({q.option_type for q in quotes}))
+            derivative_field_candidates = [
+                "expiry date",
+                "option type",
+                "strike price",
+                "last price",
+                "settlement price",
+                "premium value (₹ lakhs)",
+                "change in oi",
+                "value (₹ lakhs)",
+            ]
+            derivative_fields = [c for c in header_cols if c in derivative_field_candidates]
 
-        start_time_iso = bars[0].timestamp.isoformat() if bars else None
-        end_time_iso = bars[-1].timestamp.isoformat() if bars else None
-        is_replayable = len(bars) > 0 and detected_fmt != NSECSVFormat.UNKNOWN
+            has_volume = any(q.volume > 0 for q in quotes)
+            has_oi = any((q.oi or 0) > 0 for q in quotes)
+            has_vwap = any(q.vwap is not None for q in quotes)
+            has_tc = False
+
+            # Derivative datasets contain multi-contract quotes across expiries and strikes;
+            # options trading execution is strictly air-gapped per ADR 011 and ADR 002.
+            is_replayable = False
+            replay_ineligibility_reason = (
+                "Daily derivative quotes contain multi-expiry/strike contracts; "
+                "options execution is air-gapped per ADR 011 and ADR 002."
+            )
+            start_time_iso = quotes[0].timestamp.isoformat() if quotes else None
+            end_time_iso = quotes[-1].timestamp.isoformat() if quotes else None
+            timeframe_detected = "1d"
+            symbols_found = sorted(list({q.trading_symbol for q in quotes}))
+            parsed_bars = parsed_bars_count
+        else:
+            bars, warnings = NSECSVParser.parse_file(
+                path,
+                symbol=target_symbol,
+                timeframe="1m" if detected_fmt == NSECSVFormat.INTRADAY else "1d",
+                session_filter=False,
+            )
+            symbols_found = sorted(list({str(b.symbol) for b in bars if b.symbol is not None}))
+            has_volume = any(b.volume > 0 for b in bars)
+            has_oi = any((b.oi or 0) > 0 for b in bars)
+            has_vwap = any(b.vwap is not None for b in bars)
+            has_tc = any(b.tick_count is not None for b in bars)
+            parsed_bars = len(bars)
+            has_vwap = any(b.vwap is not None for b in bars)
+            has_tc = any(b.tick_count is not None for b in bars)
+
+            # Infer timeframe if intraday
+            timeframe_detected = "1d"
+            if detected_fmt == NSECSVFormat.INTRADAY and len(bars) >= 2:
+                # Measure median delta between first few consecutive bars on the same day
+                deltas: list[float] = []
+                for i in range(min(50, len(bars) - 1)):
+                    if bars[i].timestamp.date() == bars[i + 1].timestamp.date():
+                        dt_sec = (bars[i + 1].timestamp - bars[i].timestamp).total_seconds()
+                        if 0 < dt_sec <= 86400:
+                            deltas.append(dt_sec)
+                if deltas:
+                    deltas.sort()
+                    median_sec = deltas[len(deltas) // 2]
+                    if 55 <= median_sec <= 65:
+                        timeframe_detected = "1m"
+                    elif 290 <= median_sec <= 310:
+                        timeframe_detected = "5m"
+                    elif 890 <= median_sec <= 910:
+                        timeframe_detected = "15m"
+                    elif 3500 <= median_sec <= 3700:
+                        timeframe_detected = "1h"
+                    else:
+                        timeframe_detected = f"{int(median_sec)}s"
+
+            start_time_iso = bars[0].timestamp.isoformat() if bars else None
+            end_time_iso = bars[-1].timestamp.isoformat() if bars else None
+            is_replayable = len(bars) > 0 and detected_fmt != NSECSVFormat.UNKNOWN
 
         return CSVInspectionReport(
             file_path=str(path),
             file_size_bytes=file_size,
             detected_format=detected_fmt,
             total_lines=total_lines,
-            parsed_bars=len(bars),
+            parsed_bars=parsed_bars,
             symbols=symbols_found,
             timeframe_detected=timeframe_detected,
             start_time=start_time_iso,
@@ -580,4 +1067,10 @@ class NSECSVInspector:
             has_tick_count=has_tc,
             quality_warnings=warnings,
             is_valid_replayable=is_replayable,
+            underlying_symbols=underlying_symbols,
+            expiries_found=expiries_found,
+            option_types=option_types,
+            derivative_fields=derivative_fields,
+            total_derivative_rows=total_derivative_rows,
+            replay_ineligibility_reason=replay_ineligibility_reason,
         )

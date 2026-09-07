@@ -111,8 +111,10 @@ aditrader validate --strategy iron_condor
 # Validate linear strategy under Moderate policy
 aditrader validate --strategy test_ma_crossover --policy moderate
 
-# Validate custom JSON strategy AST file
+# Validate custom JSON, YAML, or Pine Script strategy file
 aditrader validate --file path/to/strategy.json --policy institutional
+aditrader validate --file path/to/strategy.yaml --policy institutional
+aditrader validate --file path/to/strategy.pine --policy institutional
 ```
 
 ### 7. Deterministic Backtesting (`backtest`)
@@ -123,6 +125,10 @@ aditrader backtest --strategy test_ma_crossover --bars 100
 
 # Backtest using historical CSV dataset
 aditrader backtest --strategy test_ma_crossover --csv tests/fixtures/nifty_sample.csv --capital 1000000 --slippage-bps 2.5
+
+# Backtest using custom multi-format strategy file (YAML or translated Pine Script)
+aditrader backtest --file path/to/strategy.yaml --csv tests/fixtures/nifty_sample.csv
+aditrader backtest --file path/to/strategy.pine --bars 100
 ```
 
 ### 8. Dataset Discovery & Quality Inspection (`inspect-data`)
@@ -172,6 +178,19 @@ aditrader dashboard --serve --port 8050
 ```
 Open `http://127.0.0.1:8050` in your web browser (desktop, tablet, or smartphone).
 
+### 12. Strategy Compatibility & Safety Inspector (`inspect-strategy`)
+Inspect any strategy script or file without executing it. Automatically classifies format (JSON AST, YAML AST, TradingView Pine Script v4-v6, EasyLanguage, AmiBroker AFL, thinkScript, MetaTrader MQL4/MQL5, NinjaScript, LEAN, Backtrader, vectorbt, Freqtrade), checks lookahead bias (`barmerge.lookahead_on`), identifies multi-leg options air-gaps, and assesses translation fidelity:
+```bash
+# Inspect native JSON or YAML AST strategy
+aditrader inspect-strategy strategy.yaml
+
+# Inspect and audit TradingView Pine Script for lookahead risks and indicator constructs
+aditrader inspect-strategy strategy.pine
+
+# Inspect external Python or MetaTrader scripts safely (read-only AST parsing, zero execution)
+aditrader inspect-strategy backtrader_model.py
+```
+
 ---
 
 ## Responsive Web GUI Architecture
@@ -197,8 +216,28 @@ The high-fidelity `NSECSVParser` and `NSECSVInspector` natively recognize and no
 | **NSE Intraday (1m / 5m / 15m)** | `Date`, `Time` (or `timestamp`), `Open`, `High`, `Low`, `Close`, `Volume`, `OI` | Auto-combines separate date & time columns; infers bar interval; preserves trade counts. |
 | **NSE Capital Market Bhavcopy** | `SYMBOL`, `SERIES`, `OPEN`, `HIGH`, `LOW`, `CLOSE`, `TOTTRDQTY`, `TOTTRDVAL`, `TIMESTAMP`, `TOTALTRADES` | Parses `dd-MMM-yyyy` dates; filters series (e.g. `EQ`); derives authentic volume-weighted VWAP. |
 | **NSE F&O Derivatives Bhavcopy** | `INSTRUMENT`, `SYMBOL`, `EXPIRY_DT`, `STRIKE_PR`, `OPTION_TYP`, `OPEN`, `HIGH`, `LOW`, `CLOSE`, `CONTRACTS`, `OPEN_INT` | Resolves composite contract symbols; normalizes contract counts and open interest. |
+| **NSE Derivative Quotes (Daily F&O)** | `Instrument`, `Underlying`, `Expiry Date`, `Option Type`, `Strike Price`, `Open`, `High`, `Low`, `Close`, `Contracts`, `Open Int` | Official NSE derivatives archive format; multi-expiry option/future contract rows. Dedicated audit & inspection via `inspect-data`. |
 | **NSE Historical Index CSV** | `Date`, `Open`, `High`, `Low`, `Close`, `Shares Traded`, `Turnover (Rs. Cr)` | Cleans comma-formatted numbers (`"21,500.50"`); parses turnover and volume safely. |
 | **Generic OHLCV CSV** | `timestamp`, `open`, `high`, `low`, `close`, `volume` | Standard CSV candle replay with strict Asia/Kolkata timezone localization. |
+
+---
+
+## Strategy Normalization & Compatibility Engine
+
+QuantumValidator enforces a **Single Normalized Intermediate Representation (IR)**: the declarative `StrategyDSL` AST (`schema_version: "1.0"`). External strategies normalize into `StrategyDSL` rather than executing arbitrary imperative code:
+
+| Strategy Format / Ecosystem | Detection & Inspection | Execution / Simulation Status | Normalization & Safety Policy |
+| :--- | :--- | :--- | :--- |
+| **Declarative JSON AST** | `JSON_DSL` | Full Backtest & Forward Paper | Native institutional representation; validated against Pydantic schema v1.0. |
+| **Declarative YAML AST** | `YAML_DSL` | Full Backtest & Forward Paper | Human-authored declarative AST parsed strictly via `yaml.safe_load`. |
+| **TradingView Pine Script (v4–v6)** | `PINE_SCRIPT` | Translatable to StrategyDSL | Deterministic subset translated (SMA, EMA, RSI, ATR, BB, Supertrend, crossovers). **Explicitly rejects look-ahead bias (`barmerge.lookahead_on`).** |
+| **TradeStation EasyLanguage** | `EASYLANGUAGE` | Inspect-Only | Static AST detection of inputs, vars, and order directives without runtime execution. |
+| **AmiBroker AFL** | `AMIBROKER_AFL` | Inspect-Only | Static token detection of `_SECTION_BEGIN`, `Buy`, `Sell`, and indicator logic. |
+| **ThinkOrSwim thinkScript** | `THINKSCRIPT` | Inspect-Only | Static token detection of `AddOrder`, study declarations, and lower plots. |
+| **MetaTrader MQL4 / MQL5** | `METATRADER_MQL4/5` | Inspect-Only | Static classification of `#property`, `OnInit`, `OnTick`, `OrderSend`. |
+| **NinjaTrader NinjaScript (C#)** | `NINJATRADER` | Inspect-Only | Static C# AST detection of `OnBarUpdate` and `Strategy` inheritance. |
+| **QuantConnect LEAN** | `QUANTCONNECT_LEAN` | Inspect-Only | Static detection of `QCAlgorithm`, `Initialize`, and resolution handlers. |
+| **Python (Backtrader, vectorbt, Freqtrade)** | `PYTHON_*` | Inspect-Only (Safe AST Parse) | Read-only `ast.parse` inspection of classes and methods. **Raw code execution is strictly prohibited (ADR 007).** |
 
 ---
 

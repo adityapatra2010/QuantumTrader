@@ -2,7 +2,6 @@
 
 import argparse
 import importlib
-import json
 import os
 import random
 import sys
@@ -474,9 +473,13 @@ def cmd_validate(args: argparse.Namespace) -> int:
         if not path.is_file():
             print(f"[ERROR] Strategy file not found: {path}")
             return 1
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-            dsl = StrategyDSL.model_validate(data)
+        from aditrader.strategy.loader import load_strategy_file
+
+        try:
+            dsl = load_strategy_file(path)
+        except Exception as exc:
+            print(f"[ERROR] Failed to load strategy from '{path.name}': {exc}")
+            return 1
     else:
         print("[ERROR] Please specify either --strategy <name> or --file <path>")
         return 1
@@ -542,9 +545,13 @@ def cmd_backtest(args: argparse.Namespace) -> int:
         if not path.is_file():
             print(f"[ERROR] Strategy file not found: {path}")
             return 1
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-            dsl = StrategyDSL.model_validate(data)
+        from aditrader.strategy.loader import load_strategy_file
+
+        try:
+            dsl = load_strategy_file(path)
+        except Exception as exc:
+            print(f"[ERROR] Failed to load strategy from '{path.name}': {exc}")
+            return 1
     else:
         print("[ERROR] Please specify either --strategy <name> or --file <path>")
         return 1
@@ -658,7 +665,9 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
 
 def cmd_inspect_data(args: argparse.Namespace) -> int:
     """Inspect CSV market data file compatibility, columns, schema, and quality prior to replay."""
-    file_path = getattr(args, "file", None)
+    file_path = (
+        getattr(args, "file", None) or getattr(args, "csv", None) or getattr(args, "csv_file", None)
+    )
     if not file_path:
         print("[ERROR] Please provide a path to a CSV file to inspect.")
         return 1
@@ -687,15 +696,32 @@ def cmd_inspect_data(args: argparse.Namespace) -> int:
         return 1
 
     print(f"Detected Format:  {report.detected_format.value}")
-    print(
-        f"Replay Ready:     {'YES - VALID' if report.is_valid_replayable else 'NO - NOT REPLAYABLE'}"
-    )
+    replay_status = "YES - VALID" if report.is_valid_replayable else "NO - NOT REPLAYABLE"
+    if not report.is_valid_replayable and report.replay_ineligibility_reason:
+        replay_status += f" ({report.replay_ineligibility_reason})"
+    print(f"Replay Ready:     {replay_status}")
     print(f"Total Lines:      {report.total_lines:,}")
     print(f"Parsed Bars:      {report.parsed_bars:,}")
+    if report.total_derivative_rows is not None:
+        print(f"Derivative Quotes: {report.total_derivative_rows:,}")
     print(f"Timeframe:        {report.timeframe_detected}")
     if report.start_time and report.end_time:
-        print(f"Date Range:       {report.start_time} to {report.end_time}")
-    if report.symbols:
+        start_fmt = report.start_time[:10] if len(report.start_time) >= 10 else report.start_time
+        end_fmt = report.end_time[:10] if len(report.end_time) >= 10 else report.end_time
+        print(f"Date Range:       {start_fmt} to {end_fmt}")
+    if getattr(report, "underlying_symbols", None):
+        print(f"Underlying:       {', '.join(report.underlying_symbols)}")
+    if getattr(report, "expiries_found", None):
+        exp_disp = ", ".join(report.expiries_found[:6])
+        if len(report.expiries_found) > 6:
+            exp_disp += f" (+{len(report.expiries_found) - 6} more)"
+        print(f"Expiries ({len(report.expiries_found)}):     {exp_disp}")
+    if getattr(report, "option_types", None):
+        opt_types_disp = [f"{t} (Futures)" if t == "XX" else t for t in report.option_types]
+        print(f"Option Types:     {', '.join(opt_types_disp)}")
+    if getattr(report, "derivative_fields", None):
+        print(f"Derivative Fields: {', '.join(report.derivative_fields)}")
+    if report.symbols and not getattr(report, "underlying_symbols", None):
         top_syms = ", ".join(report.symbols[:8])
         if len(report.symbols) > 8:
             top_syms += f" (+{len(report.symbols) - 8} more)"
@@ -720,7 +746,101 @@ def cmd_inspect_data(args: argparse.Namespace) -> int:
         print("Quality Check:    CLEAN - Zero anomalies detected.")
 
     print("=" * 68)
-    return 0 if report.is_valid_replayable else 1
+    from aditrader.data.feeds.nse_csv import NSECSVFormat
+
+    inspection_success = report.detected_format != NSECSVFormat.UNKNOWN and (
+        report.parsed_bars > 0 or getattr(report, "total_derivative_rows", 0) > 0
+    )
+    return 0 if inspection_success else 1
+
+
+def cmd_inspect_strategy(args: argparse.Namespace) -> int:
+    """Inspect strategy file syntax, language, constructs, lookahead safety, and compatibility."""
+    file_path = (
+        getattr(args, "file", None)
+        or getattr(args, "strategy_file", None)
+        or getattr(args, "path", None)
+    )
+    if not file_path:
+        print("[ERROR] Please provide a path to a strategy file to inspect.")
+        return 1
+
+    path = Path(file_path)
+    if not path.is_file():
+        print(f"[ERROR] Strategy file not found: {file_path}")
+        return 1
+
+    from aditrader.strategy.inspector import StrategyInspector
+
+    print("=" * 68)
+    print("      AdiTrader / QuantumValidator — Strategy Compatibility Inspector")
+    print("=" * 68)
+    print(f"File Path:          {path.resolve()}")
+    print(f"File Size:          {path.stat().st_size:,} bytes")
+
+    try:
+        report = StrategyInspector.inspect_file(path)
+    except Exception as exc:
+        print(f"[ERROR] Strategy inspection failed: {exc}")
+        return 1
+
+    print("-" * 68)
+    print(f"Detected Format:    {report.detected_format.value}")
+    lang_display = report.language
+    if report.version_detected:
+        lang_display += f" ({report.version_detected})"
+    print(f"Language:           {lang_display}")
+    print(f"Script Type:        {report.script_type.value}")
+    if report.strategy_name:
+        print(f"Strategy Title:     {report.strategy_name}")
+    if report.underlying_detected:
+        print(f"Target Symbol:      {report.underlying_detected}")
+    if report.timeframe_detected:
+        print(f"Target Timeframe:   {report.timeframe_detected}")
+
+    print(f"Translation Status: {report.translation_status.value}")
+    print(f"Semantic Fidelity:  {report.fidelity_level.value}")
+    print(f"Validation Ready:   {'YES' if report.validation_ready else 'NO'}")
+    print(f"Simulation Ready:   {'YES' if report.simulation_ready else 'NO'}")
+    print(f"Forward-Test Ready: {'YES' if report.forward_test_ready else 'NO'}")
+
+    if report.supported_constructs:
+        print(f"Supported Rules:    {', '.join(report.supported_constructs)}")
+    if report.unsupported_constructs:
+        print(f"Unsupported Rules:  {', '.join(report.unsupported_constructs)}")
+
+    print("-" * 68)
+    if report.has_lookahead_risk:
+        print(
+            "[ALERT] LOOKAHEAD / REPAINTING RISK DETECTED! Strategy violates point-in-time rules."
+        )
+    if report.has_intrabar_risk:
+        print("[WARN] Intrabar tick calculation detected. Simulating bar-close only.")
+    if report.has_options_legs:
+        print("[AIR-GAP] Multi-leg options detected. Protected by ADR 011 options air gap.")
+
+    if report.rejection_reasons:
+        print("\nRejection Reasons / Limitations:")
+        for r in report.rejection_reasons:
+            print(f"  [REJECT] {r}")
+
+    if report.warnings:
+        print("\nDiagnostic Warnings:")
+        for w in report.warnings:
+            print(f"  [WARN] {w}")
+
+    if not report.rejection_reasons and not report.warnings and not report.has_lookahead_risk:
+        print("Quality Check:      CLEAN - Fully compatible with QuantumValidator AST.")
+
+    print("=" * 68)
+    return (
+        0
+        if (
+            report.validation_ready
+            or report.translation_status.value in ("SUPPORTED", "TRANSLATABLE")
+        )
+        else 1
+    )
 
 
 def cmd_forward_test(args: argparse.Namespace) -> int:
@@ -820,6 +940,18 @@ def cmd_forward_test(args: argparse.Namespace) -> int:
         csv_file = Path(csv_path)
         if not csv_file.is_file():
             print(f"[ERROR] CSV dataset not found: {csv_path}")
+            return 1
+        from aditrader.data.feeds.nse_csv import NSECSVFormat, NSECSVInspector
+
+        csv_report = NSECSVInspector.inspect_file(csv_file)
+        if csv_report.detected_format == NSECSVFormat.DERIVATIVE_QUOTE:
+            print(
+                f"[ERROR] CSV dataset '{csv_file.name}' is classified as NSE_DERIVATIVE_QUOTE.\n"
+                "        Multi-contract daily derivative quote series cannot be replayed as a linear candle feed;\n"
+                "        options execution is air-gapped per ADR 011 and ADR 002.\n"
+                "        Silent proxy execution of option contracts against underlying spot or linear state machines is prohibited.\n"
+                "        Use 'aditrader inspect-data' to analyze this dataset."
+            )
             return 1
         csv_feed = CSVDataFeed(
             file_path=csv_file,

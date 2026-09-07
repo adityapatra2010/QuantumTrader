@@ -11,6 +11,7 @@ from aditrader.cli.commands import (
     cmd_forward_test,
     cmd_init_db,
     cmd_inspect_data,
+    cmd_inspect_strategy,
     cmd_search,
     cmd_smoke_feed,
     cmd_status,
@@ -286,6 +287,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Filter/target symbol to evaluate (optional)",
     )
     p_inspect.set_defaults(handler=cmd_inspect_data)
+
+    # 12. inspect-strategy
+    p_insp_strat = subparsers.add_parser(
+        "inspect-strategy",
+        help="Inspect strategy file syntax, language, constructs, lookahead safety, and compatibility",
+    )
+    p_insp_strat.add_argument("file", type=str, help="Path to strategy file to inspect")
+    p_insp_strat.set_defaults(handler=cmd_inspect_strategy)
 
     return parser
 

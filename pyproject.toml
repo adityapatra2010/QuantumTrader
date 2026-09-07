@@ -21,6 +21,7 @@ dependencies = [
     "pyarrow>=15.0.0",
     "polars>=1.0.0",
     "kotakneoapi>=3.0.0",
+    "pyyaml>=6.0.0",
 ]
 
 [project.optional-dependencies]
