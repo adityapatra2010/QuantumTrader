@@ -239,9 +239,14 @@ def check_options_replay_readiness(
             if hedge_leg.contract_selector and hedge_leg.contract_selector.target_ltp is not None
             else 5.0
         )
+        tol = (
+            hedge_leg.contract_selector.tolerance
+            if hedge_leg.contract_selector and hedge_leg.contract_selector.tolerance is not None
+            else 2.0
+        )
         hedge_desc = (
-            f"BUY {hedge_leg.lots} dynamically selected {opt_t}\n"
-            f"  Target premium: configurable around ₹{tgt:.0f}"
+            f"BUY {hedge_leg.lots} dynamically selected {opt_t} | "
+            f"Target: ₹{tgt:.2f} | Tolerance: ±₹{tol:.2f} (₹{max(0.0, tgt - tol):.2f}–₹{tgt + tol:.2f})"
         )
 
     has_ts = any(leg_item.trailing_stop is not None for leg_item in strategy.legs)

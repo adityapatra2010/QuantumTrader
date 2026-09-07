@@ -8,6 +8,11 @@ from aditrader.strategy.builder.schema import (
     ConditionCategory,
     ConditionGroup,
     ConditionNode,
+    ContractSelector,
+    ContractSelectorType,
+    PremiumBand,
+    PremiumTrailingStopConfig,
+    SelectorTieBreaker,
     StrategyDSL,
     StrategyLegDefinition,
 )
@@ -177,6 +182,88 @@ def create_nifty_bull_call_spread_dsl() -> StrategyDSL:
     )
 
 
+def create_nifty_ce_premium_ladder_dsl() -> StrategyDSL:
+    """Construct NIFTY CE Premium Ladder declarative DSL."""
+    return StrategyDSL(
+        schema_version="1.0",
+        name="NIFTY CE Premium Ladder",
+        underlying="NIFTY",
+        timeframe="5m",
+        entry_conditions=ConditionGroup(
+            operator=ASTOperator.AND,
+            conditions=[
+                ConditionNode(
+                    category=ConditionCategory.TIME,
+                    field="time_of_day",
+                    operator=ASTOperator.WITHIN_RANGE,
+                    range_min="09:20",
+                    range_max="15:00",
+                ),
+            ],
+        ),
+        exit_conditions=ConditionGroup(
+            operator=ASTOperator.OR,
+            conditions=[
+                ConditionNode(
+                    category=ConditionCategory.TIME,
+                    field="time_of_day",
+                    operator=ASTOperator.GREATER_THAN,
+                    threshold="15:15",
+                ),
+            ],
+        ),
+        legs=[
+            # Short CE Leg (Band 1 default: 50.0 - 59.5)
+            StrategyLegDefinition(
+                contract_type="CE",
+                side=OrderSide.SELL,
+                lots=1,
+                contract_selector=ContractSelector(
+                    type=ContractSelectorType.PREMIUM_RANGE,
+                    min_ltp=50.0,
+                    max_ltp=59.5,
+                    target_ltp=54.75,
+                    underlying="NIFTY",
+                    option_type="CE",
+                    tolerance=5.0,
+                    tie_breaker=SelectorTieBreaker.CLOSEST_PREMIUM,
+                ),
+                trailing_stop=PremiumTrailingStopConfig(
+                    type="premium_trailing",
+                    initial_gap=5.0,
+                    trail_step=5.0,
+                    ratchet=True,
+                ),
+            ),
+            # Independent Hedge: BUY 4 CE around ₹5.00 (±₹2.00, i.e. ₹3.00–₹7.00)
+            StrategyLegDefinition(
+                contract_type="CE",
+                side=OrderSide.BUY,
+                lots=4,
+                contract_selector=ContractSelector(
+                    type=ContractSelectorType.PREMIUM_TARGET,
+                    target_ltp=5.0,
+                    tolerance=2.0,
+                    underlying="NIFTY",
+                    option_type="CE",
+                    tie_breaker=SelectorTieBreaker.CLOSEST_PREMIUM,
+                ),
+                trailing_stop=None,
+            ),
+        ],
+        premium_bands=[
+            PremiumBand(min_ltp=50.0, max_ltp=59.5),
+            PremiumBand(min_ltp=60.0, max_ltp=69.5),
+            PremiumBand(min_ltp=70.0, max_ltp=79.5),
+            PremiumBand(min_ltp=80.0, max_ltp=89.5),
+            PremiumBand(min_ltp=90.0, max_ltp=99.5),
+            PremiumBand(min_ltp=100.0, max_ltp=109.5),
+        ],
+        target_regime="Intraday Volatility Harvesting",
+        metadata={"author": "AdiTrader Quantitative Engineering", "tier": "Institutional"},
+    )
+
+
 def build_template_record(
     dsl: StrategyDSL,
     template_id: str,
@@ -203,6 +290,7 @@ def get_builtin_templates() -> dict[str, StrategyRecord]:
     iron_condor_dsl = create_nifty_iron_condor_dsl()
     long_straddle_dsl = create_nifty_long_straddle_dsl()
     bull_call_spread_dsl = create_nifty_bull_call_spread_dsl()
+    nifty_ce_premium_ladder_dsl = create_nifty_ce_premium_ladder_dsl()
 
     return {
         "iron_condor": build_template_record(
@@ -222,5 +310,11 @@ def get_builtin_templates() -> dict[str, StrategyRecord]:
             template_id="tpl-bull-call-spread-v1",
             version="1.0.0",
             validation_score=92.0,
+        ),
+        "nifty_ce_premium_ladder": build_template_record(
+            nifty_ce_premium_ladder_dsl,
+            template_id="tpl-nifty-ce-premium-ladder-v1",
+            version="1.0.0",
+            validation_score=95.0,
         ),
     }

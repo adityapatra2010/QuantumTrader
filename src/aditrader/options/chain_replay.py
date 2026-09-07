@@ -526,6 +526,7 @@ class PointInTimeOptionChain:
         min_volume: int = 0,
         min_oi: int = 0,
         fail_on_ambiguity: bool = False,
+        max_age_seconds: float | None = None,
     ) -> PointInTimeOptionContract:
         """Convenience method to resolve a single contract directly within an explicit PremiumBand."""
         selector = ContractSelector(
@@ -540,4 +541,4 @@ class PointInTimeOptionChain:
             min_oi=min_oi,
             fail_on_ambiguity=fail_on_ambiguity,
         )
-        return self.resolve(selector, underlying=underlying)
+        return self.resolve(selector, underlying=underlying, max_age_seconds=max_age_seconds)

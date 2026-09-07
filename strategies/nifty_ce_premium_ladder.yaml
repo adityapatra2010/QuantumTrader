@@ -1,0 +1,69 @@
+# ==============================================================================
+# Canonical Strategy Definition: NIFTY CE Premium Ladder
+# Institutional Multi-Band Dynamic Options Architecture (ADR 016)
+# ==============================================================================
+
+schema_version: "1.0"
+name: "NIFTY CE Premium Ladder"
+underlying: "NIFTY"
+timeframe: "5m"
+
+# ------------------------------------------------------------------------------
+# Explicit Premium Entry Bands (Inclusive Option LTP Ranges)
+# ------------------------------------------------------------------------------
+# The values below represent option LTP premium bands, NOT underlying strikes.
+# At each band, the point-in-time option chain is dynamically searched for an
+# eligible NIFTY CE contract whose observed LTP falls within the band.
+# ------------------------------------------------------------------------------
+premium_bands:
+  - min_ltp: 50.0
+    max_ltp: 59.5
+  - min_ltp: 60.0
+    max_ltp: 69.5
+  - min_ltp: 70.0
+    max_ltp: 79.5
+  - min_ltp: 80.0
+    max_ltp: 89.5
+  - min_ltp: 90.0
+    max_ltp: 99.5
+  - min_ltp: 100.0
+    max_ltp: 109.5
+
+# ------------------------------------------------------------------------------
+# Short Leg Definition: SELL 1 NIFTY CE
+# Dynamically selected inside the active premium band range
+# ------------------------------------------------------------------------------
+short:
+  action: "SELL"
+  quantity: 1
+  option_type: "CE"
+  selector:
+    type: "premium_range"
+    min_ltp: 50.0
+    max_ltp: 59.5
+    option_type: "CE"
+
+# ------------------------------------------------------------------------------
+# Hedge Leg Definition: BUY 4 NIFTY CE
+# Dynamically selected around ₹5.00 with explicit ±₹2.00 tolerance (₹3.00–₹7.00)
+# Independent ratio hedge (4x), CE only, zero trailing stop inheritance
+# ------------------------------------------------------------------------------
+hedge:
+  action: "BUY"
+  quantity: 4
+  option_type: "CE"
+  target_ltp: 5.0
+  tolerance: 2.0
+
+# ------------------------------------------------------------------------------
+# Per-Contract Trailing Stop Configuration (Short Leg Only)
+# Strict ratchet state machine:
+#   Entry 50 -> Price 40 => SL 45
+#   Price 35 => SL 40
+#   Price 30 => SL 35
+# Ratchet strictly never loosens. Stop hit triggers group exit.
+# ------------------------------------------------------------------------------
+stop:
+  initial_gap: 5.0
+  trail_step: 5.0
+  ratchet: true

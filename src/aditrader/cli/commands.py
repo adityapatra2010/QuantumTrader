@@ -385,10 +385,20 @@ def cmd_strategies(args: argparse.Namespace) -> int:
             if leg.strike_offset is not None:
                 spec_str = f"offset={leg.strike_offset}"
             elif leg.contract_selector is not None:
-                spec_str = f"selector={leg.contract_selector.type.value}(ltp={leg.contract_selector.target_ltp})"
+                sel = leg.contract_selector
+                if sel.min_ltp is not None and sel.max_ltp is not None:
+                    spec_str = f"selector=range(₹{sel.min_ltp:.1f}–₹{sel.max_ltp:.1f})"
+                elif sel.target_ltp is not None:
+                    spec_str = f"selector={sel.type.value}(target=₹{sel.target_ltp:.1f}±₹{sel.tolerance:.1f})"
+                else:
+                    spec_str = f"selector={sel.type.value}"
             else:
                 spec_str = "dynamic"
             print(f"  Leg {i + 1}: {leg.side.value} {c_type} {spec_str} lots={leg.lots}")
+        if dsl.premium_bands:
+            print("Premium Bands:")
+            for b in dsl.premium_bands:
+                print(f"  • ₹{b.min_ltp:.2f}–₹{b.max_ltp:.2f}")
         print("Strategy DNA:")
         print(f"  Direction:      {dna.directionality.value}")
         print(f"  Target Regime:  {dna.target_regime.value}")

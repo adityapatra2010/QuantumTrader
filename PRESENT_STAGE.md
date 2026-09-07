@@ -1,15 +1,15 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-07 20:15 IST  
-**Current Phase**: Options Chain Replay Foundation, Dynamic Contract Selection & Trailing Stop State Machine — COMPLETE & VERIFIED ✅  
-**Last Verified By**: AGY CLI Quality Verification Suite (Ruff Clean, Mypy Strict Clean across 178 files, Pytest 466 passed, 6 skipped)  
+**Last Updated**: 2026-09-07 20:40 IST  
+**Current Phase**: NIFTY CE Premium-Ladder Vertical Slice & Options Chain Replay Foundation — COMPLETE & VERIFIED ✅  
+**Last Verified By**: AGY CLI Quality Verification Suite (Ruff Clean, Mypy Strict Clean across 179 files, Pytest 494 passed, 6 skipped)  
 
 ---
 
 ## Repository State
 
 - **Branch**: `main`
-- **Working Tree**: Core domain entities, order state machine, paper broker with net equity accounting, local SQLite ledger persistence, market data feeds, multi-format NSE CSV parser (intraday split date/time, CM Bhavcopy, FO Bhavcopy, Index Historical), pre-replay dataset inspector (`NSECSVInspector`), zero-dependency responsive Web Dashboard (`DashboardServer` and `aditrader dashboard --serve`), official Kotak Neo async SFeed market data adapter (`kotakneoapi>=3.0.0`), Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine with options air-gap guards and volume participation constraints, walk-forward analysis & OOS splitters, hardened pre-trade risk engine with lot-aware position limits and session-boundary resets, finite performance analytics with strict timeframe resolution, static AST structural validation, institutional historical statistical validation for linear assets, theoretical payoff/Greek risk validation for multi-leg option strategies, high-performance Instrument Search & Selection Subsystem with hierarchical derivatives resolution, runnable ForwardTestRunner with options air-gap enforcement, point-in-time timestamp causality, exchange limit-order clamping, symmetrical margin checks, instrument-aware cost resolution, safe partial-bar shutdown, truthful feed status reporting, traded-volume VWAP aggregation, atomic JSON persistence, and UTC ledger normalization sealed and verified.
+- **Working Tree**: Core domain entities, order state machine, paper broker with net equity accounting, local SQLite ledger persistence, market data feeds, multi-format NSE CSV parser (intraday split date/time, CM Bhavcopy, FO Bhavcopy, Index Historical), pre-replay dataset inspector (`NSECSVInspector`), zero-dependency responsive Web Dashboard (`DashboardServer` and `aditrader dashboard --serve`), official Kotak Neo async SFeed market data adapter (`kotakneoapi>=3.0.0`), Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine with options air-gap guards and volume participation constraints, walk-forward analysis & OOS splitters, hardened pre-trade risk engine with lot-aware position limits and session-boundary resets, finite performance analytics with strict timeframe resolution, static AST structural validation, institutional historical statistical validation for linear assets, theoretical payoff/Greek risk validation for multi-leg option strategies, high-performance Instrument Search & Selection Subsystem with hierarchical derivatives resolution, runnable ForwardTestRunner with options air-gap enforcement, point-in-time timestamp causality, exchange limit-order clamping, symmetrical margin checks, instrument-aware cost resolution, safe partial-bar shutdown, truthful feed status reporting, traded-volume VWAP aggregation, atomic JSON persistence, UTC ledger normalization, canonical NIFTY CE Premium Ladder strategy specification, and deterministic point-in-time option chain replay vertical slice sealed and verified.
 
 ---
 
@@ -26,7 +26,7 @@
 ## Architecture Status
 
 - **Documentation**: `██████████` 100%
-- **Implementation**: `█████████░` 90% (Phases 0-6, Search, Forward-Testing Remediation, Live Kotak Neo Adapter, NSE CSV Engine, Dataset Discovery UX, Web Dashboard, and Options Chain Replay Foundation Complete)
+- **Implementation**: `█████████░` 92% (Phases 0-6, Search, Forward-Testing Remediation, Live Kotak Neo Adapter, NSE CSV Engine, Dataset Discovery UX, Web Dashboard, Options Chain Replay Foundation, and NIFTY CE Premium Ladder Vertical Slice Complete)
 
 ---
 
@@ -61,6 +61,18 @@
 ---
 
 ## Completed
+
+### NIFTY CE Premium-Ladder Declarative Vertical Slice
+**Status**: COMPLETE & VERIFIED ✅
+- **Canonical Strategy Specification (`strategies/nifty_ce_premium_ladder.yaml`)**: Declares all 6 explicit premium bands (₹50.00–₹59.50, ₹60.00–₹69.50, ₹70.00–₹79.50, ₹80.00–₹89.50, ₹90.00–₹99.50, ₹100.00–₹109.50), dynamically selected short CE leg (`PREMIUM_RANGE`), independent 4x CE ratio hedge (`PREMIUM_TARGET` at ₹5.00 ± ₹2.00, i.e. ₹3.00–₹7.00), and contract-bound trailing ratchet stop (`initial_gap=5.0`, `trail_step=5.0`, `ratchet=True`).
+- **Built-in Strategy Template (`src/aditrader/strategy/library/templates.py`)**: Registered `tpl-nifty-ce-premium-ladder-v1` with computed Strategy DNA (low gamma risk, high margin efficiency, intraday trading style). Accessible directly via `aditrader strategies --detail nifty_ce_premium_ladder` and `aditrader validate --strategy nifty_ce_premium_ladder`.
+- **Multi-Leg Position Group Coordination (`src/aditrader/options/position_group.py`)**: Added `band` and `band_id` tracking to `OptionPositionGroup`, preserving immutable contract identities, net credit cash flow accounting, and isolated lifecycle state without cross-band pollution.
+- **Enhanced Replay Readiness Diagnostics (`src/aditrader/validation/service.py`, `src/aditrader/cli/commands.py`)**: Surfaces explicit tolerance ranges for ratio hedges (`BUY 4 dynamically selected CE | Target: ₹5.00 | Tolerance: ±₹2.00 (₹3.00–₹7.00)`) and formats dynamic selector ranges.
+- **End-to-End Vertical Slice Test Suite (`tests/unit/test_nifty_ce_premium_ladder_slice.py`)**: 21 unit and integration tests verifying canonical YAML loading, AST validation, template registry lookup, synthetic option chain resolution, tie-breaking policies, position group accounting, exact ratchet stepping (`50 -> 40 => SL 45 -> 35 => SL 40 -> 30 => SL 35`), cross-contract isolation, adversarial boundaries across all 6 bands, CE-only enforcement, fail-closed ambiguity checks, and stale quote rejection.
+- **Automated Verification**:
+  - `ruff check src tests` and `ruff format --check src tests` passing cleanly.
+  - `mypy src tests` passing in strict mode across 179 source files with 0 errors.
+  - `pytest` suite passing 494/494 unit and integration tests (100% pass rate) + 6 skipped opt-in tests.
 
 ### Options Chain Replay Foundation, Dynamic Contract Selection & Trailing Stop State Machine
 **Status**: COMPLETE & VERIFIED ✅

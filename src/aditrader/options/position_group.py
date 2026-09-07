@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from aditrader.core.models.enums import OrderSide
 from aditrader.options.trailing_stop import PremiumTrailingStop, TrailingStopEvent
+from aditrader.strategy.builder.schema import PremiumBand
 
 
 class PositionGroupStatus(StrEnum):
@@ -124,6 +125,8 @@ class OptionPositionGroup:
         created_at: datetime,
         legs: list[PositionGroupLeg],
         target_premium_level: float | None = None,
+        band: PremiumBand | None = None,
+        band_id: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
         if not group_id or not group_id.strip():
@@ -140,7 +143,15 @@ class OptionPositionGroup:
         self._underlying = underlying.strip()
         self._created_at = created_at
         self._legs = list(legs)
-        self._target_premium_level = target_premium_level
+        self._band = band
+        self._band_id = band_id
+        self._target_premium_level: float | None
+        if target_premium_level is not None:
+            self._target_premium_level = target_premium_level
+        elif band is not None:
+            self._target_premium_level = (band.min_ltp + band.max_ltp) / 2.0
+        else:
+            self._target_premium_level = None
         self._metadata = dict(metadata or {})
         self._status = PositionGroupStatus.ACTIVE
 
@@ -163,6 +174,16 @@ class OptionPositionGroup:
     def created_at(self) -> datetime:
         """Creation timestamp."""
         return self._created_at
+
+    @property
+    def band(self) -> PremiumBand | None:
+        """Associated explicit premium band if laddered."""
+        return self._band
+
+    @property
+    def band_id(self) -> str | None:
+        """Identifier of the active band (e.g. 'Band 1 (₹50.00–₹59.50)')."""
+        return self._band_id
 
     @property
     def legs(self) -> list[PositionGroupLeg]:
