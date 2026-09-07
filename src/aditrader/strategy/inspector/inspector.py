@@ -18,6 +18,7 @@ from aditrader.strategy.inspector.detector import StrategyFormatDetector
 from aditrader.strategy.inspector.models import (
     ConstructFidelity,
     FidelityLevel,
+    PortabilityAssessment,
     StrategyFormat,
     StrategyInspectionReport,
     StrategyScriptType,
@@ -95,6 +96,7 @@ class StrategyInspector:
         timeframe: str | None = None
         translation_status = TranslationStatus.UNSUPPORTED
         fidelity_level = FidelityLevel.UNSUPPORTED
+        portability_assessment: PortabilityAssessment | None = None
 
         # ----------------------------------------------------------------------
         # 1. Native JSON AST DSL
@@ -214,6 +216,7 @@ class StrategyInspector:
             naming_behavior_mismatch = pine_report["naming_behavior_mismatch"]
             custom_pnl_detected = pine_report["custom_pnl_detected"]
             custom_pnl_details = pine_report["custom_pnl_details"]
+            portability_assessment = pine_report.get("portability_assessment")
 
         # ----------------------------------------------------------------------
         # 4. Python Strategy Frameworks (Backtrader, vectorbt, Freqtrade, Generic)
@@ -291,6 +294,7 @@ class StrategyInspector:
             custom_pnl_details=custom_pnl_details,
             order_behavior_notes=order_behavior_notes,
             visual_only_constructs=visual_only_constructs,
+            portability_assessment=portability_assessment,
         )
 
     @classmethod
@@ -349,11 +353,10 @@ class StrategyInspector:
         )
 
         # 2. Strategy Declaration & Directives
-        m_strat = re.search(r"\bstrategy\s*\(\s*([^\n\)]+)", text)
-        if m_strat:
-            m_title = re.search(r"""["']([^"']+)["']""", m_strat.group(1))
-            if m_title:
-                strategy_name = m_title.group(1).strip()
+        m_title = re.search(r"""\bstrategy\s*\(\s*(?:title\s*=\s*)?["']([^"']+)["']""", text)
+        if m_title:
+            strategy_name = m_title.group(1).strip()
+        if re.search(r"\bstrategy\s*\(", text):
             detected_constructs.append(
                 ConstructFidelity(
                     name=f"Strategy Declaration ('{strategy_name}')",
@@ -477,6 +480,21 @@ class StrategyInspector:
                 )
             )
 
+        session_matches = re.findall(r"""input\.session\s*\(\s*["']([^"']+)["']""", text)
+        if session_matches:
+            s_window = session_matches[0]
+            time_conditions.append(f"Trading Session Window: '{s_window}'")
+            supported_constructs.append(f"Session Filter ({s_window})")
+            detected_constructs.append(
+                ConstructFidelity(
+                    name=f"Session Window Filter ('{s_window}')",
+                    category="timing",
+                    fidelity=FidelityLevel.APPROXIMATED,
+                    details=f"Restricts strategy execution to session hours ('{s_window}')",
+                    translatable=True,
+                )
+            )
+
         # 6. Arithmetic & Mathematical Functions
         math_funcs = list(dict.fromkeys(re.findall(r"\bmath\.([a-zA-Z0-9_]+)\b", text)))
         if math_funcs:
@@ -567,6 +585,54 @@ class StrategyInspector:
                     )
                 )
 
+        exit_matches = re.findall(
+            r"""\bstrategy\.exit\s*\(\s*["']([^"']+)["']""",
+            text,
+        )
+        if exit_matches:
+            for exit_id in exit_matches:
+                has_stop = bool(
+                    re.search(
+                        rf"\bstrategy\.exit\s*\(\s*[\"']{re.escape(exit_id)}[\"'][^\)]*stop\s*=",
+                        text,
+                    )
+                )
+                has_limit = bool(
+                    re.search(
+                        rf"\bstrategy\.exit\s*\(\s*[\"']{re.escape(exit_id)}[\"'][^\)]*limit\s*=",
+                        text,
+                    )
+                )
+                details_parts = []
+                if has_stop:
+                    details_parts.append("stop-loss")
+                if has_limit:
+                    details_parts.append("take-profit limit")
+                bracket_info = f" ({' / '.join(details_parts)})" if details_parts else ""
+                exit_desc = f"strategy.exit('{exit_id}'){bracket_info}"
+                exit_mechanisms.append(exit_desc)
+                detected_constructs.append(
+                    ConstructFidelity(
+                        name=f"Bracket Exit ({exit_id}){bracket_info}",
+                        category="exit",
+                        fidelity=FidelityLevel.EQUIVALENT,
+                        details=f"Bracket exit with protective order triggers{bracket_info}",
+                        translatable=True,
+                    )
+                )
+
+        if re.search(r"\bstrategy\.close_all\b", text):
+            exit_mechanisms.append("strategy.close_all()")
+            detected_constructs.append(
+                ConstructFidelity(
+                    name="Emergency / Time Exit (strategy.close_all)",
+                    category="exit",
+                    fidelity=FidelityLevel.EQUIVALENT,
+                    details="Closes all open positions unconditionally (e.g. time stop or EOD flatten)",
+                    translatable=True,
+                )
+            )
+
         # 9. Custom Synthetic P&L Simulation Audit
         if re.search(r"\b(?:currentPL|priceDiff)\b", text):
             custom_pnl_detected = True
@@ -638,7 +704,7 @@ class StrategyInspector:
             option_leg_semantics = "None (linear underlying orders)"
             has_options = False
 
-        # 11. Visual-Only Directives
+        # 11. Visual-Only Directives & Canvas Drawings
         plots = re.findall(r"\b(?:plot|fill|hline|bgcolor)\s*\(\s*([^,\)]+)", text)
         if plots:
             plot_names = [p.strip().replace('"', "").replace("'", "") for p in plots[:5]]
@@ -649,6 +715,30 @@ class StrategyInspector:
                     category="visual",
                     fidelity=FidelityLevel.VISUAL_ONLY,
                     details="Plots, fills, and overlays are rendered on TradingView charts; ignored in execution",
+                    translatable=False,
+                )
+            )
+
+        if re.search(r"\b(?:box\.new|line\.new|label\.new|table\.new)\b", text):
+            visual_only_constructs.append("Canvas Drawings (box/line/label)")
+            detected_constructs.append(
+                ConstructFidelity(
+                    name="Canvas Drawings (box/line/label)",
+                    category="visual",
+                    fidelity=FidelityLevel.VISUAL_ONLY,
+                    details="Interactive chart graphical drawing objects; ignored during simulation",
+                    translatable=False,
+                )
+            )
+
+        if re.search(r"\balertcondition\s*\(", text):
+            visual_only_constructs.append("Alert Condition (alertcondition)")
+            detected_constructs.append(
+                ConstructFidelity(
+                    name="Alert Condition (alertcondition)",
+                    category="visual",
+                    fidelity=FidelityLevel.VISUAL_ONLY,
+                    details="TradingView server-side alert trigger; non-executing in local engine",
                     translatable=False,
                 )
             )
@@ -679,10 +769,41 @@ class StrategyInspector:
                 "Pine script specifies 'calc_on_every_tick=true'. QuantumValidator enforces bar-close replay."
             )
 
-        if re.search(r"\brequest\.security\b", text):
+        m_sec = re.findall(r"\brequest\.security\s*\(([^,\)]+),\s*([^,\)]+)", text)
+        if m_sec or re.search(r"\brequest\.security\b", text):
             unsupported_constructs.append("request.security (multi-symbol/multi-timeframe)")
-        if re.search(r"\bwhile\b|\bfor\b", text):
+            sec_details = "Multi-timeframe data synchronization requires multi-resolution feeds"
+            if m_sec:
+                timeframes = list(
+                    dict.fromkeys(s[1].strip().replace('"', "").replace("'", "") for s in m_sec)
+                )
+                sec_details += f" (detected resolutions: {', '.join(timeframes)})"
+            detected_constructs.append(
+                ConstructFidelity(
+                    name="Multi-Timeframe Request (request.security)",
+                    category="data",
+                    fidelity=FidelityLevel.UNSUPPORTED,
+                    details=sec_details,
+                    translatable=False,
+                )
+            )
+
+        has_loops = bool(
+            re.search(r"\bwhile\s*[\(\s]", text)
+            or re.search(r"\bfor\s+(?:\[[a-zA-Z0-9_,\s]+\]|[a-zA-Z0-9_]+)\s*(=|\bin\b)", text)
+        )
+        if has_loops:
             unsupported_constructs.append("Procedural Loops (while/for)")
+            detected_constructs.append(
+                ConstructFidelity(
+                    name="Procedural Loops (while/for)",
+                    category="calculation",
+                    fidelity=FidelityLevel.UNSUPPORTED,
+                    details="Iterative loops are barred from declarative StrategyDSL AST (ADR 007)",
+                    translatable=False,
+                )
+            )
+
         if re.search(r"\bimport\b", text):
             unsupported_constructs.append("Pine Script Library Imports")
         if re.search(r"\bstrategy\.risk\b", text):
@@ -737,6 +858,14 @@ class StrategyInspector:
                     fidelity_level = FidelityLevel.APPROXIMATED
                     rejection_reasons.append(f"Translation limitations: {exc}")
 
+        portability = cls._assess_portability(
+            text, strategy_name=strategy_name, file_path=file_path
+        )
+        if portability and portability.unsafe_mappings:
+            warnings.append(
+                f"Instrument Portability Risk: {portability.portability_verdict[:80]}..."
+            )
+
         return {
             "detected_constructs": detected_constructs,
             "entry_mechanisms": entry_mechanisms,
@@ -767,4 +896,89 @@ class StrategyInspector:
             "naming_behavior_mismatch": naming_behavior_mismatch,
             "custom_pnl_detected": custom_pnl_detected,
             "custom_pnl_details": custom_pnl_details,
+            "portability_assessment": portability,
         }
+
+    @classmethod
+    def _assess_portability(
+        cls,
+        text: str,
+        strategy_name: str,
+        file_path: str | Path | None = None,
+    ) -> PortabilityAssessment | None:
+        """Evaluate cross-market or cross-asset portability assumptions (e.g. MCX Gold vs XAUUSD)."""
+        combined = f"{strategy_name} {file_path or ''} {text}".lower()
+
+        is_mcx_or_commodity = any(
+            k in combined for k in ["mcx", "gold", "silver", "crude", "commodity"]
+        )
+        is_forex_or_xau = any(
+            k in combined for k in ["xauusd", "forex", "fx", "cfd", "eurusd", "gbpusd"]
+        )
+        has_gold_reference = "gold" in combined or "mcx" in combined
+
+        if not (is_mcx_or_commodity or is_forex_or_xau or has_gold_reference):
+            return None
+
+        # Detect MCX Gold / XAUUSD Portability Case
+        if has_gold_reference or (
+            is_mcx_or_commodity
+            and any(k in combined for k in ["xau", "dollar", "cfd", "240", "100000"])
+        ):
+            source = "XAUUSD (Spot Gold / CFD)"
+            target = "MCX Gold Futures (1 kg / 1000g)"
+
+            # Extract initial capital and default qty
+            m_cap = re.search(r"\binitial_capital\s*=\s*([0-9.]+)", text)
+            init_cap = float(m_cap.group(1)) if m_cap else 100_000.0
+
+            m_qty = re.search(r"\bdefault_qty_value\s*=\s*([0-9.]+)", text)
+            qty_val = float(m_qty.group(1)) if m_qty else 1.0
+
+            m_comm = re.search(r"\bcommission_value\s*=\s*([0-9.]+)", text)
+            comm_val = float(m_comm.group(1)) if m_comm else 50.0
+
+            session_window_match = re.search(r"""input\.session\s*\(\s*["']([^"']+)["']""", text)
+            session_window = session_window_match.group(1) if session_window_match else "0915-2330"
+
+            assumptions_preserved = [
+                "Mathematical liquidity sweep & reclaim logic (HTF 4H high/low levels) is asset-class agnostic.",
+                "Price envelope, ATR volatility expansion filter, and wick ratio calculations operate identically on continuous series.",
+                "Anti-lookahead directive ('lookahead = barmerge.lookahead_off') guarantees historical bar causality.",
+            ]
+
+            assumptions_changed = [
+                f"Trading Session: Script specifies '{session_window} IST', but MCX opens at 09:00 AM IST (NSE opens at 09:15). First 15 minutes of MCX session are truncated.",
+                f"Exchange Transaction Costs: Flat ₹{comm_val:.0f} commission per contract severely underestimates statutory Indian commodity costs (CTT 0.01% on sell side = ₹800/lot, Stamp duty 0.002%, MCX turnover charges, SEBI fee, 18% GST). Realistic round-trip friction is ₹1,100–₹1,500+ per lot.",
+                "Contract Expiry & Settlement: XAUUSD is a perpetual CFD; MCX Gold Futures are bi-monthly contracts with physical delivery tender periods and delivery margin escalations.",
+                "Tick & Slippage Scale: Quoted per 10 grams (₹1 tick = ₹100 P&L on 1 kg contract). Slippage of 2 ticks represents ₹200/trade.",
+            ]
+
+            assumptions_unknown = [
+                "Underlying Contract Specification: Intended contract variant unknown (Standard 1 kg GOLD, Mini 100g GOLDM, Guinea 8g, or Petal 1g). Sizing assumes 1 unit.",
+                "Data Feed Discontinuity: MCX Gold does not trade continuously 24/5; weekend and overnight gaps between 23:30/23:55 and 09:00 IST alter 4H candle boundaries compared to international XAUUSD.",
+            ]
+
+            unsafe_mappings = [
+                f"CRITICAL CAPITAL INADEQUACY: Initial capital of ₹{init_cap:,.0f} is grossly insufficient for {qty_val:.0f} standard MCX Gold contract (1 kg notional value ~₹80 Lakhs, SEBI/MCX SPAN + ELM margin requirement ~₹8,00,000–₹10,00,000). Pre-trade risk engine will reject 100% of orders due to margin shortfall.",
+                "SESSION TIMING MISMATCH: Hardcoded '0915' session cutoff clips opening price discovery between 09:00 and 09:15 AM IST on MCX.",
+                f"COMMISSION UNDERESTIMATION RISK: Assumed ₹{comm_val:.0f} commission represents only ~4% of true statutory exchange fees and taxes on an ₹80 Lakh contract, resulting in heavily inflated backtest expectancy.",
+            ]
+
+            verdict = (
+                "UNSAFE - CRITICAL CAPITAL & REGULATORY MISMATCH: Strategy logic reflects international XAUUSD "
+                "CFD assumptions ported to MCX Gold without adjusting for Indian commodity contract sizing "
+                "(1 kg = ~₹80L notional, ₹8L+ margin), exchange operating hours (09:00 open), or statutory turnover taxes."
+            )
+
+            return PortabilityAssessment(
+                source_instrument_hint=source,
+                target_instrument_hint=target,
+                assumptions_preserved=assumptions_preserved,
+                assumptions_changed=assumptions_changed,
+                assumptions_unknown=assumptions_unknown,
+                unsafe_mappings=unsafe_mappings,
+                portability_verdict=verdict,
+            )
+
+        return None

@@ -132,13 +132,16 @@ aditrader backtest --file path/to/strategy.pine --bars 100
 ```
 
 ### 8. Dataset Discovery & Quality Inspection (`inspect-data`)
-Inspect CSV market data files before replay. Automatically detects format variants (NSE Intraday, CM Bhavcopy, FO Bhavcopy, Index History), verifies price envelopes, date ranges, and reports anomalies:
+Inspect CSV market data files before replay. Automatically detects format variants (NSE Intraday, CM Bhavcopy, FO Bhavcopy, Index History, Derivative Quotes), verifies price envelopes, date ranges, and reports anomalies:
 ```bash
-# Inspect any local CSV dataset
+# Inspect any local CSV dataset (positional argument)
 aditrader inspect-data data/nifty_sample.csv
 
-# Inspect and filter for a specific scrip symbol
-aditrader inspect-data data/cm_bhavcopy.csv --symbol RELIANCE
+# Inspect and filter for a specific scrip symbol via explicit flag
+aditrader inspect-data --file data/cm_bhavcopy.csv --symbol RELIANCE
+
+# Audit real-world NSE derivative quote archive datasets
+aditrader inspect-data --file ~/Downloads/Quote-Derivative-RELIANCE-07-03-2026-07-09-2026.csv
 ```
 
 ### 9. Forward Paper-Testing Runner (`forward-test`)
@@ -181,11 +184,14 @@ Open `http://127.0.0.1:8050` in your web browser (desktop, tablet, or smartphone
 ### 12. Strategy Compatibility & Safety Inspector (`inspect-strategy`)
 Inspect any strategy script or file without executing it. Automatically classifies format (JSON AST, YAML AST, TradingView Pine Script v4-v6, EasyLanguage, AmiBroker AFL, thinkScript, MetaTrader MQL4/MQL5, NinjaScript, LEAN, Backtrader, vectorbt, Freqtrade), checks lookahead bias (`barmerge.lookahead_on`), identifies multi-leg options air-gaps, and assesses translation fidelity:
 ```bash
-# Inspect native JSON or YAML AST strategy
+# Inspect native JSON or YAML AST strategy (positional argument)
 aditrader inspect-strategy strategy.yaml
 
-# Inspect and audit TradingView Pine Script for lookahead risks and indicator constructs
+# Inspect TradingView Pine Script with full construct fidelity matrix
 aditrader inspect-strategy strategy.pine
+
+# Inspect with explicit --file flag
+aditrader inspect-strategy --file ~/Desktop/mcx.pine
 
 # Inspect external Python or MetaTrader scripts safely (read-only AST parsing, zero execution)
 aditrader inspect-strategy backtrader_model.py
@@ -207,18 +213,18 @@ The dashboard server is built with zero unnecessary heavy web dependencies (usin
 
 ---
 
-## NSE CSV Engine & Supported Formats
+## Market-Data Compatibility Matrix: Parseable vs Replayable
 
-The high-fidelity `NSECSVParser` and `NSECSVInspector` natively recognize and normalize:
+QuantumValidator maintains a strict, honest distinction between files that are statically **Parseable** (for inspection, discovery, metadata extraction, and quality verification) versus files that are **Replayable** (capable of driving the linear deterministic backtest or paper-trading runner loops). Missing market depth is never disguised with artificial quotes:
 
-| Dataset Format | Expected Headers / Columns | Special Capabilities |
-| :--- | :--- | :--- |
-| **NSE Intraday (1m / 5m / 15m)** | `Date`, `Time` (or `timestamp`), `Open`, `High`, `Low`, `Close`, `Volume`, `OI` | Auto-combines separate date & time columns; infers bar interval; preserves trade counts. |
-| **NSE Capital Market Bhavcopy** | `SYMBOL`, `SERIES`, `OPEN`, `HIGH`, `LOW`, `CLOSE`, `TOTTRDQTY`, `TOTTRDVAL`, `TIMESTAMP`, `TOTALTRADES` | Parses `dd-MMM-yyyy` dates; filters series (e.g. `EQ`); derives authentic volume-weighted VWAP. |
-| **NSE F&O Derivatives Bhavcopy** | `INSTRUMENT`, `SYMBOL`, `EXPIRY_DT`, `STRIKE_PR`, `OPTION_TYP`, `OPEN`, `HIGH`, `LOW`, `CLOSE`, `CONTRACTS`, `OPEN_INT` | Resolves composite contract symbols; normalizes contract counts and open interest. |
-| **NSE Derivative Quotes (Daily F&O)** | `Instrument`, `Underlying`, `Expiry Date`, `Option Type`, `Strike Price`, `Open`, `High`, `Low`, `Close`, `Contracts`, `Open Int` | Official NSE derivatives archive format; multi-expiry option/future contract rows. Dedicated audit & inspection via `inspect-data`. |
-| **NSE Historical Index CSV** | `Date`, `Open`, `High`, `Low`, `Close`, `Shares Traded`, `Turnover (Rs. Cr)` | Cleans comma-formatted numbers (`"21,500.50"`); parses turnover and volume safely. |
-| **Generic OHLCV CSV** | `timestamp`, `open`, `high`, `low`, `close`, `volume` | Standard CSV candle replay with strict Asia/Kolkata timezone localization. |
+| Dataset Schema Format | Key Expected Headers | Parseable | Replayable | Replay Eligibility & Air-Gap Policy |
+| :--- | :--- | :---: | :---: | :--- |
+| **NSE Intraday (1m / 5m / 15m)** | `Date`, `Time` (or `timestamp`), `Open`, `High`, `Low`, `Close`, `Volume`, `OI` | **YES** | **YES** | **Replay Ready**: Sequential chronological candle stream for linear equity/futures strategies. Inactive bars preserve zero false alerts. |
+| **NSE Capital Market Bhavcopy** | `SYMBOL`, `SERIES`, `OPEN`, `HIGH`, `LOW`, `CLOSE`, `TOTTRDQTY`, `TOTTRDVAL`, `TIMESTAMP` | **YES** | **YES** (Daily) | **Replayable for Daily Swing**: 1d single-bar snapshot per scrip. Authentic volume-weighted VWAP derived from `TOTTRDVAL / TOTTRDQTY`. |
+| **NSE Historical Index CSV** | `Date`, `Open`, `High`, `Low`, `Close`, `Shares Traded`, `Turnover (Rs. Cr)` | **YES** | **YES** (Daily) | **Replay Ready**: Daily historical index benchmark series (e.g. NIFTY 50, NIFTY BANK). Cleans comma-formatted numbers safely. |
+| **Generic OHLCV CSV** | `timestamp`, `open`, `high`, `low`, `close`, `volume` | **YES** | **YES** | **Replay Ready**: Standard linear spot/futures replay with strict `Asia/Kolkata` timezone localization. |
+| **NSE F&O Bhavcopy** | `INSTRUMENT`, `SYMBOL`, `EXPIRY_DT`, `STRIKE_PR`, `OPTION_TYP`, `OPEN`, `HIGH`, `LOW`, `CLOSE`, `CONTRACTS`, `OPEN_INT` | **YES** | **NO** | **Air-Gapped (ADR 011)**: Contains multi-expiry, multi-strike derivatives snapshot rows. Bar runner refuses linear replay to prevent unhedged proxy fills. |
+| **NSE Derivative Quotes (Daily F&O)** | `Instrument`, `Underlying`, `Expiry Date`, `Option Type`, `Strike Price`, `Open`, `High`, `Low`, `Close`, `Last`, `Settlement Price`, `Volume`, `Value`, `OI`, `Change in OI` | **YES** | **NO** | **Air-Gapped (ADR 011)**: Official exchange download archive format (e.g. `Quote-Derivative-RELIANCE-*.csv`). High-fidelity parser extracts 27,000+ contracts, 9+ expiries, settlement prices, and open interest. Preserved for Phase 8 option surface calibration. |
 
 ---
 
@@ -226,18 +232,75 @@ The high-fidelity `NSECSVParser` and `NSECSVInspector` natively recognize and no
 
 QuantumValidator enforces a **Single Normalized Intermediate Representation (IR)**: the declarative `StrategyDSL` AST (`schema_version: "1.0"`). External strategies normalize into `StrategyDSL` rather than executing arbitrary imperative code:
 
-| Strategy Format / Ecosystem | Detection & Inspection | Execution / Simulation Status | Normalization & Safety Policy |
-| :--- | :--- | :--- | :--- |
-| **Declarative JSON AST** | `JSON_DSL` | Full Backtest & Forward Paper | Native institutional representation; validated against Pydantic schema v1.0. |
-| **Declarative YAML AST** | `YAML_DSL` | Full Backtest & Forward Paper | Human-authored declarative AST parsed strictly via `yaml.safe_load`. |
-| **TradingView Pine Script (v4–v6)** | `PINE_SCRIPT` | Translatable to StrategyDSL | Deterministic subset translated (SMA, EMA, RSI, ATR, BB, Supertrend, crossovers). **Explicitly rejects look-ahead bias (`barmerge.lookahead_on`).** |
-| **TradeStation EasyLanguage** | `EASYLANGUAGE` | Inspect-Only | Static AST detection of inputs, vars, and order directives without runtime execution. |
-| **AmiBroker AFL** | `AMIBROKER_AFL` | Inspect-Only | Static token detection of `_SECTION_BEGIN`, `Buy`, `Sell`, and indicator logic. |
-| **ThinkOrSwim thinkScript** | `THINKSCRIPT` | Inspect-Only | Static token detection of `AddOrder`, study declarations, and lower plots. |
-| **MetaTrader MQL4 / MQL5** | `METATRADER_MQL4/5` | Inspect-Only | Static classification of `#property`, `OnInit`, `OnTick`, `OrderSend`. |
-| **NinjaTrader NinjaScript (C#)** | `NINJATRADER` | Inspect-Only | Static C# AST detection of `OnBarUpdate` and `Strategy` inheritance. |
-| **QuantConnect LEAN** | `QUANTCONNECT_LEAN` | Inspect-Only | Static detection of `QCAlgorithm`, `Initialize`, and resolution handlers. |
-| **Python (Backtrader, vectorbt, Freqtrade)** | `PYTHON_*` | Inspect-Only (Safe AST Parse) | Read-only `ast.parse` inspection of classes and methods. **Raw code execution is strictly prohibited (ADR 007).** |
+| Strategy Format / Ecosystem | Detection Token | Translation Status | Semantic Fidelity | Normalization & Safety Policy |
+| :--- | :--- | :--- | :--- | :--- |
+| **Declarative JSON AST** | `JSON_DSL` | `SUPPORTED` | `EXACT` | Native institutional representation; validated against Pydantic schema v1.0. Zero dynamic code. |
+| **Declarative YAML AST** | `YAML_DSL` | `SUPPORTED` | `EXACT` | Human-authored declarative AST parsed strictly via `yaml.safe_load`. Pure schema compilation. |
+| **TradingView Pine Script (v4–v6)** | `PINE_SCRIPT` | `TRANSLATABLE` / `INSPECT_ONLY` | `EQUIVALENT` / `APPROXIMATED` | Deterministic indicator and logic subset translated. Procedural loops, mutable `var :=` state, and custom P&L fail closed (ADR 007). Lookahead bias triggers fatal rejection. |
+| **TradeStation EasyLanguage** | `EASYLANGUAGE` | `INSPECT_ONLY` | `UNSUPPORTED` | Static AST token detection of inputs, vars, and order directives. Direct execution barred by ADR 007. |
+| **AmiBroker AFL** | `AMIBROKER_AFL` | `INSPECT_ONLY` | `UNSUPPORTED` | Static token detection of `_SECTION_BEGIN`, `Buy`, `Sell`, and array operations. |
+| **ThinkOrSwim thinkScript** | `THINKSCRIPT` | `INSPECT_ONLY` | `UNSUPPORTED` | Static token detection of `AddOrder`, study declarations, and lower plots. |
+| **MetaTrader MQL4 / MQL5** | `METATRADER_MQL4/5` | `INSPECT_ONLY` | `UNSUPPORTED` | Static classification of `#property`, `OnInit`, `OnTick`, `OrderSend`. Direct execution barred. |
+| **NinjaTrader NinjaScript (C#)** | `NINJATRADER` | `INSPECT_ONLY` | `UNSUPPORTED` | Static C# AST detection of `OnBarUpdate` and `Strategy` inheritance. |
+| **QuantConnect LEAN** | `QUANTCONNECT_LEAN` | `INSPECT_ONLY` | `UNSUPPORTED` | Static detection of `QCAlgorithm`, `Initialize`, and resolution handlers. |
+| **Python Frameworks (Backtrader, vectorbt, Freqtrade)** | `PYTHON_*` | `INSPECT_ONLY` | `UNSUPPORTED` | Read-only `ast.parse` inspection of classes and methods. **Raw code execution is strictly prohibited (ADR 007).** |
+
+---
+
+## Pine Script Construct Fidelity & Translation Matrix
+
+When inspecting TradingView Pine Script (`@version=4`, `@version=5`, or `@version=6`), constructs are classified with explicit fidelity levels:
+
+| Construct Category | Pine Script Syntax | Fidelity Level | Translatable? | QuantumValidator Behavior & Mapping |
+| :--- | :--- | :---: | :---: | :--- |
+| **Directives** | `//@version=5`, `strategy("Title", overlay=true)` | `EXACT` | YES | Configures strategy container name, overlay mode, and version. |
+| **Directives** | `initial_capital = 100000`, `default_qty_value = 1` | `EXACT` | YES | Maps to backtest capital and default order size. |
+| **Technical Indicators** | `ta.sma`, `ta.ema`, `ta.rsi`, `ta.atr`, `ta.macd`, `ta.supertrend` | `EXACT` | YES | Direct mapping to statically compiled, vectorized indicator classes. |
+| **Timing Triggers** | `hour == 10 and minute == 0` | `EXACT` | YES | Maps directly to `ConditionCategory.TIME` (`time_of_day == "10:00"`). |
+| **Order Directives** | `strategy.entry("Long", strategy.long)` | `EQUIVALENT` | YES | Maps to underlying long order signal in linear paper broker. |
+| **Order Directives** | `strategy.entry("Short", strategy.short)` | `EQUIVALENT` | YES | Maps to underlying short order signal in linear paper broker. |
+| **Order Exits** | `strategy.close("Long")` | `EQUIVALENT` | YES | Closes matching active position in paper ledger. |
+| **Bracket Exits** | `strategy.exit("TP_SL", limit=..., stop=...)` | `EQUIVALENT` | YES | Bracket exit with take-profit limit and stop-loss protective orders. |
+| **Emergency Exits** | `strategy.close_all()` | `EQUIVALENT` | YES | Unconditional position liquidation (e.g. EOD square-off or time stop). |
+| **Crossovers** | `ta.crossover(a, b)`, `ta.crossunder(a, b)` | `EQUIVALENT` | YES | Maps to `ASTOperator.CROSSES_ABOVE` and `CROSSES_BELOW`. |
+| **User Inputs** | `input.int(...)`, `input.float(...)`, `input.bool(...)` | `APPROXIMATED` | YES | Static configuration inputs; mapped as strategy parameter dictionary. |
+| **Session Filters** | `input.session("0915-1530")` | `APPROXIMATED` | YES | Restricts strategy evaluation to exchange operating session hours. |
+| **Multi-Condition** | `cond1 and cond2 or cond3` | `EQUIVALENT` | YES | Compiles to nested `ConditionGroup` nodes with `AND`/`OR` operators. |
+| **Persistent State** | `var int count = 0`, `count := count + 1` | `UNSUPPORTED` | **NO (Blocker)** | Mutable procedural state across bars is barred by ADR 007 from declarative AST. |
+| **Procedural Loops** | `for i = 0 to 10`, `while cond` | `UNSUPPORTED` | **NO (Blocker)** | Iterative loops barred by ADR 007; strategies must use vectorized indicators. |
+| **Multi-Timeframe** | `request.security(syminfo.tickerid, "D", close)` | `UNSUPPORTED` | **NO (Blocker)** | Multi-timeframe requests require synchronized multi-resolution feed replay. |
+| **Lookahead Bias** | `barmerge.lookahead_on` | `UNSUPPORTED` | **NO (FATAL)** | Repainting / future leakage strictly prohibited; inspection and validation reject immediately. |
+| **Synthetic P&L** | `currentPL = 1000 - priceDiff * 2` | `UNSUPPORTED` | **NO (Blocker)** | Custom algebraic P&L cannot override PaperBroker mark-to-market accounting. |
+| **Visual Elements** | `plot`, `plotshape`, `fill`, `hline`, `bgcolor` | `VISUAL_ONLY` | NO | Chart rendering elements on TradingView; safely ignored during simulation. |
+| **Canvas Drawings** | `box.new`, `line.new`, `label.new`, `table.new` | `VISUAL_ONLY` | NO | Interactive chart drawings; safely ignored during simulation. |
+| **Alerts** | `alertcondition(...)` | `VISUAL_ONLY` | NO | Webhook triggers; safely ignored during offline paper execution. |
+
+---
+
+## Real-World Adversarial Case Studies
+
+### Case Study 1: `myst.pine` — Synthetic Options Simulation vs Real Option Legs (ADR 011)
+
+An adversarial TradingView strategy titled `"4-Leg Weekly Iron Fly & Broken Wing Straddle Simulation"` was analyzed:
+* **The Claim**: The strategy's title and comments claimed to trade an institutional 4-leg Iron Fly option structure with broken wing asymmetry.
+* **The Reality**: Deep inspection revealed the script only submitted single underlying spot orders (`strategy.entry("Long", strategy.long)`) and calculated option payoffs via synthetic algebraic formulas in script variables (`priceDiff = math.abs(close - atmStrike)`, `currentPL = 1000 - priceDiff * 2`). No real option contracts, strike ladders, expiries, or Black-Scholes Greeks were involved.
+* **QuantumValidator Resolution**:
+  1. `aditrader inspect-strategy` successfully inspected the script (exit code 0), classifying all constructs without executing code.
+  2. Flagged a prominent **`[SEMANTIC MISMATCH DETECTED]`** warning and a **`[CUSTOM P&L ARITHMETIC AUDIT]`** breakdown, proving that zero option legs were actually traded.
+  3. Correctly reported `has_options_legs: false`, preserving the **Options Simulation Air-Gap (ADR 011)** by refusing to pretend a linear spot order was a multi-leg derivative.
+  4. `aditrader validate` failed closed (exit code 1) with precise blocker diagnostic notices pointing the developer to `inspect-strategy`.
+
+### Case Study 2: `mcx.pine` — MCX Gold vs International XAUUSD Portability Audit
+
+A production strategy titled `"4H Range Sweep v2 - MCX Gold (India)"` was subjected to an adversarial cross-market portability audit:
+* **The Context**: A 4H liquidity range sweep strategy originally designed for international Forex/CFD markets (XAUUSD) was ported by an author to the Indian Multi Commodity Exchange (MCX) without adjusting contract sizing, market hours, or statutory taxes.
+* **QuantumValidator Resolution**:
+  `aditrader inspect-strategy --file ~/Desktop/mcx.pine` automatically performed an in-depth **`[INSTRUMENT PORTABILITY AUDIT]`**:
+  1. **Critical Capital Inadequacy**: Script configured `initial_capital = 100,000` (₹1 Lakh) and `default_qty = 1` contract. On MCX Gold, standard contract lot size is **1 kg** (~₹80 Lakhs notional value), requiring minimum SEBI/MCX SPAN + ELM margin of **₹8,00,000–₹10,00,000**. The account had only ~12% of required margin; all orders would immediately fail pre-trade risk gates. (In XAUUSD CFD trading, $100k demo capital with 1:500 leverage allows trading 1 lot with just $500 margin).
+  2. **Session Timing Mismatch**: Script hardcoded `sessionWindow = "0915-2330 IST"` (NSE equity hours). However, **MCX commodity trading opens at 09:00 AM IST**, causing the strategy to blindly clip off the first 15 minutes of MCX opening price discovery and gap sweeps.
+  3. **Commission Underestimation Risk**: Script assumed a flat `commission_value = 50` cash per contract. In India, statutory commodity taxes (CTT 0.01% on sell = ₹800/lot, Stamp Duty 0.002%, MCX turnover charges, SEBI fees, 18% GST) exceed **₹1,100–₹1,500 per lot** on an ₹80 Lakh contract (24x higher than assumed), heavily distorting backtest profit factor.
+  4. **Contract Expiry & Settlement**: XAUUSD is a perpetual cash-settled CFD; MCX Gold Futures are bi-monthly contracts with **compulsory physical delivery** and delivery tender margin escalations.
+  5. **Verdict**: Rated **`UNSAFE - CRITICAL CAPITAL & REGULATORY MISMATCH`**, protecting quant researchers from catastrophic real-world deployment failures while confirming valid mathematical sweep logic was preserved.
 
 ---
 

@@ -1,0 +1,9 @@
+//@version=5
+strategy("RSI Reversal", overlay=false)
+rsi_val = ta.rsi(close, 14)
+long_cond = rsi_val < 30
+short_cond = rsi_val > 70
+if long_cond
+    strategy.entry("Long", strategy.long)
+if short_cond
+    strategy.entry("Short", strategy.short)

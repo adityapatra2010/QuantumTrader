@@ -61,7 +61,13 @@ def profile_strategy_dna(dsl: StrategyDSL) -> StrategyDNA:
     # 1. Directionality Analysis using strike-weighted delta proxy
     net_delta_sum = 0.0
     for leg in legs:
-        leg_delta = _approximate_leg_delta(leg.contract_type, leg.strike_offset)
+        c_type = (
+            leg.contract_type
+            or (leg.contract_selector.option_type if leg.contract_selector else "CE")
+            or "CE"
+        )
+        offset = leg.strike_offset if leg.strike_offset is not None else 0
+        leg_delta = _approximate_leg_delta(c_type, offset)
         signed_delta = leg_delta if leg.side == OrderSide.BUY else -leg_delta
         net_delta_sum += signed_delta * leg.lots
 
@@ -80,11 +86,19 @@ def profile_strategy_dna(dsl: StrategyDSL) -> StrategyDNA:
     if total_long_lots == total_short_lots and total_short_lots > 0:
         # Check average strike distance from ATM (abs strike offset)
         avg_short_offset = (
-            sum(abs(leg.strike_offset) for leg in legs if leg.side == OrderSide.SELL)
+            sum(
+                abs(leg.strike_offset if leg.strike_offset is not None else 0)
+                for leg in legs
+                if leg.side == OrderSide.SELL
+            )
             / total_short_lots
         )
         avg_long_offset = (
-            sum(abs(leg.strike_offset) for leg in legs if leg.side == OrderSide.BUY)
+            sum(
+                abs(leg.strike_offset if leg.strike_offset is not None else 0)
+                for leg in legs
+                if leg.side == OrderSide.BUY
+            )
             / total_long_lots
         )
 

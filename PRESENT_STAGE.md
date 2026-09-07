@@ -1,8 +1,8 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-07 18:15 IST  
-**Current Phase**: NSE CSV Replay, Dataset Discovery UX & Zero-Dependency Responsive Web Dashboard — COMPLETE & VERIFIED ✅  
-**Last Verified By**: AGY CLI Quality Verification Suite (Ruff Clean, Mypy Strict Clean across 157 files, Pytest 368 passed, 6 skipped)  
+**Last Updated**: 2026-09-07 20:15 IST  
+**Current Phase**: Options Chain Replay Foundation, Dynamic Contract Selection & Trailing Stop State Machine — COMPLETE & VERIFIED ✅  
+**Last Verified By**: AGY CLI Quality Verification Suite (Ruff Clean, Mypy Strict Clean across 178 files, Pytest 466 passed, 6 skipped)  
 
 ---
 
@@ -26,7 +26,7 @@
 ## Architecture Status
 
 - **Documentation**: `██████████` 100%
-- **Implementation**: `█████████░` 88% (Phases 0-6, Search, Forward-Testing Audit Remediation, Live Kotak Neo Adapter, NSE CSV Engine, Dataset Discovery UX, and Web Dashboard Complete)
+- **Implementation**: `█████████░` 90% (Phases 0-6, Search, Forward-Testing Remediation, Live Kotak Neo Adapter, NSE CSV Engine, Dataset Discovery UX, Web Dashboard, and Options Chain Replay Foundation Complete)
 
 ---
 
@@ -56,10 +56,25 @@
 - Forward-testing rehearsal truthfulness, symmetrical margin invariants, and point-in-time execution fidelity (ADR 013).
 - Official Kotak Neo async SFeed market-data streaming and explicit readiness handshake (ADR 014).
 - Comprehensive multi-format NSE CSV ingestion, pre-replay dataset inspection UX, and zero-dependency responsive web workstation (ADR 015).
+- Declarative dynamic contract selection, point-in-time option chain replay foundation, and per-contract trailing stop state machine (ADR 016).
 
 ---
 
 ## Completed
+
+### Options Chain Replay Foundation, Dynamic Contract Selection & Trailing Stop State Machine
+**Status**: COMPLETE & VERIFIED ✅
+- **Canonical Schema Extensions (`src/aditrader/strategy/builder/schema.py`)**: Added `ContractSelectorType` (`PREMIUM_TARGET`, `DELTA_TARGET`, `STRIKE_OFFSET`), `SelectorTieBreaker` (`CLOSEST_PREMIUM`, `HIGHER_OI`, `HIGHER_VOLUME`, `CLOSER_TO_ATM`), `ContractSelector` model, `PremiumTrailingStopConfig` model, dynamic selector attributes on `StrategyLegDefinition`, and `premium_levels` on `StrategyDSL`.
+- **Declarative YAML Pattern Translator (`src/aditrader/strategy/translators/yaml_dsl.py`)**: Shorthand YAML parser mapping dynamic options patterns (`levels`, `short`, `hedge`, `stop`) into validated canonical `StrategyDSL`.
+- **Deterministic Point-in-Time Option Chain Resolver (`src/aditrader/options/chain_replay.py`)**: `PointInTimeOptionContract` and `PointInTimeOptionChain` with multi-tier candidate filtering, tie-breaking policies, and fail-closed exceptions (`NoEligibleOptionContractError`, `AmbiguousOptionContractError`, `StaleOptionQuoteError`).
+- **Per-Contract Premium Trailing Stop Engine (`src/aditrader/options/trailing_stop.py`)**: Pure deterministic state machine with strict contract identity binding, temporal monotonic validation, and exact ratchet stepping (`50 -> 40 => SL 45`, `40 -> 35 => SL 40`, `35 -> 30 => SL 35`).
+- **Multi-Leg Position Group Container (`src/aditrader/options/position_group.py`)**: Tracks multi-leg spreads with permanent strike/expiry contract attachments, net cash flows, and per-leg/aggregate unrealized and realized P&L.
+- **Validation & Diagnostic Engine Updates (`src/aditrader/validation/`)**: `ASTValidator` verifies dynamic selector bounds and guards against contradictory legs; `OptionsPayoffValidator` matches `target_ltp` via Black-Scholes inversion; `check_options_replay_readiness()` checks strategy replay prerequisites against dataset capabilities.
+- **CLI Diagnostics (`src/aditrader/cli/commands.py`)**: Enhanced `strategies --detail`, `validate`, and `inspect-strategy` with dynamic selector metadata, strike resolution mode, and replay readiness diagnostics.
+- **Automated Verification**:
+  - `ruff check src tests` and `ruff format --check src tests` passing cleanly.
+  - `mypy src tests` passing in strict mode across 178 source files with 0 errors.
+  - `pytest` suite passing 466/466 unit and integration tests (100% pass rate) + 6 skipped opt-in tests.
 
 ### Multi-Format NSE CSV Ingestion, Pre-Replay Dataset Inspection UX, and Zero-Dependency Responsive Web Workstation
 **Status**: COMPLETE & VERIFIED ✅

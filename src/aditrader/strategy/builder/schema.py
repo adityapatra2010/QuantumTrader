@@ -44,17 +44,107 @@ class ConditionCategory(StrEnum):
     REGIME = "regime"
 
 
+class ContractSelectorType(StrEnum):
+    """Supported dynamic contract selector predicate types."""
+
+    PREMIUM_TARGET = "premium_target"
+    DELTA_TARGET = "delta_target"
+    STRIKE_OFFSET = "strike_offset"
+
+
+class SelectorTieBreaker(StrEnum):
+    """Deterministic tie-breaker policy when multiple option contracts qualify."""
+
+    CLOSEST_PREMIUM = "CLOSEST_PREMIUM"
+    HIGHER_OI = "HIGHER_OI"
+    HIGHER_VOLUME = "HIGHER_VOLUME"
+    CLOSER_TO_ATM = "CLOSER_TO_ATM"
+
+
+class ContractSelector(BaseModel):
+    """Dynamic contract selection predicate based on market criteria rather than hardcoded strikes."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    type: ContractSelectorType = Field(
+        default=ContractSelectorType.PREMIUM_TARGET,
+        description="Selector predicate classification",
+    )
+    target_ltp: float | None = Field(
+        default=None,
+        gt=0.0,
+        description="Target premium/LTP in INR for PREMIUM_TARGET",
+    )
+    tolerance: float = Field(
+        default=5.0,
+        ge=0.0,
+        description="Maximum absolute difference allowed between contract LTP and target_ltp",
+    )
+    option_type: Literal["CE", "PE"] | None = Field(
+        default=None,
+        description="Optional filter restricting selection to Call (CE) or Put (PE)",
+    )
+    expiry_offset: int = Field(
+        default=0,
+        ge=0,
+        description="Expiry index (0=near, 1=next, etc.)",
+    )
+    tie_breaker: SelectorTieBreaker = Field(
+        default=SelectorTieBreaker.CLOSEST_PREMIUM,
+        description="Deterministic tie-breaker policy when multiple contracts qualify",
+    )
+    min_volume: int = Field(
+        default=0,
+        ge=0,
+        description="Minimum volume threshold for liquidity qualification",
+    )
+    min_oi: int = Field(
+        default=0,
+        ge=0,
+        description="Minimum open interest threshold for liquidity qualification",
+    )
+    fail_on_ambiguity: bool = Field(
+        default=False,
+        description="If True, raise AmbiguousOptionContractError instead of applying deterministic tie-breaker",
+    )
+
+
+class PremiumTrailingStopConfig(BaseModel):
+    """Declarative specification for premium-based trailing stop loss on option contracts."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    type: Literal["premium_trailing"] = Field(
+        default="premium_trailing",
+        description="Trailing stop algorithm type",
+    )
+    initial_gap: float = Field(
+        ...,
+        gt=0.0,
+        description="Initial stop distance in premium points from entry price",
+    )
+    trail_step: float = Field(
+        ...,
+        gt=0.0,
+        description="Step interval in premium points for ratcheting the stop level",
+    )
+    ratchet: bool = Field(
+        default=True,
+        description="If True, stop level ratchets favorably and never loosens",
+    )
+
+
 class StrategyLegDefinition(BaseModel):
     """Option leg template in a strategy specification."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    contract_type: Literal["CE", "PE"] = Field(
-        ..., description="Option type: CE (Call) or PE (Put)"
+    contract_type: Literal["CE", "PE"] | None = Field(
+        default=None, description="Option type: CE (Call) or PE (Put)"
     )
     side: OrderSide = Field(..., description="Order side: BUY (Long) or SELL (Short)")
-    strike_offset: int = Field(
-        ...,
+    strike_offset: int | None = Field(
+        default=None,
         description="Strike ladder offset relative to ATM (0=ATM, +1=1 strike OTM Call/ITM Put, -1=1 strike ITM Call/OTM Put)",
     )
     lots: int = Field(default=1, gt=0, description="Quantity in multiples of exchange lot size")
@@ -63,6 +153,29 @@ class StrategyLegDefinition(BaseModel):
         ge=0,
         description="Expiry offset index (0=current near-week/month, 1=next expiry, etc.)",
     )
+    contract_selector: ContractSelector | None = Field(
+        default=None,
+        description="Dynamic selector predicate (e.g. premium target) for resolving the contract",
+    )
+    trailing_stop: PremiumTrailingStopConfig | None = Field(
+        default=None,
+        description="Optional premium-based trailing stop configuration for this leg",
+    )
+
+    @model_validator(mode="after")
+    def validate_leg_contract_spec(self) -> "StrategyLegDefinition":
+        """Verify either strike_offset or contract_selector is provided."""
+        if self.strike_offset is None and self.contract_selector is None:
+            raise ValueError(
+                "Strategy leg must specify either 'strike_offset' or 'contract_selector'."
+            )
+        if self.contract_type is None and (
+            self.contract_selector is None or self.contract_selector.option_type is None
+        ):
+            raise ValueError(
+                "Strategy leg must specify 'contract_type' or 'contract_selector.option_type'."
+            )
+        return self
 
 
 class ConditionNode(BaseModel):
@@ -234,6 +347,10 @@ class StrategyDSL(BaseModel):
 
     target_regime: str | None = Field(
         default=None, description="Optimal target market regime for this strategy"
+    )
+    premium_levels: list[float] | None = Field(
+        default=None,
+        description="Optional list of target premium levels for multi-level ladder strategies",
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional descriptive metadata"

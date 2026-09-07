@@ -1,0 +1,8 @@
+//@version=5
+strategy("Session Filtered Momentum", overlay=true)
+session_window = input.session("0915-1530", title="Trading Session")
+fast = ta.sma(close, 10)
+slow = ta.sma(close, 20)
+long_cond = ta.crossover(fast, slow)
+if long_cond
+    strategy.entry("Long", strategy.long)

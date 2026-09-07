@@ -1,0 +1,5 @@
+//@version=5
+strategy("Repainting Future Leak", overlay=true)
+future_close = request.security(syminfo.tickerid, "D", close, lookahead=barmerge.lookahead_on)
+if close > future_close
+    strategy.entry("Long", strategy.long)

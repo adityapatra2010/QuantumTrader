@@ -1,0 +1,5 @@
+//@version=5
+strategy("Multi-Timeframe Trend", overlay=true)
+daily_close = request.security(syminfo.tickerid, "D", close[1], lookahead=barmerge.lookahead_off)
+if close > daily_close
+    strategy.entry("Long", strategy.long)

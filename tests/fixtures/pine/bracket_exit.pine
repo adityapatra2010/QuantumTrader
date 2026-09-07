@@ -1,0 +1,7 @@
+//@version=5
+strategy("Bracket Stop Target", overlay=true)
+fast = ta.sma(close, 10)
+slow = ta.sma(close, 20)
+if ta.crossover(fast, slow)
+    strategy.entry("Long", strategy.long)
+    strategy.exit("TP_SL", from_entry="Long", limit=close * 1.02, stop=close * 0.99)

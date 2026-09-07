@@ -5,6 +5,8 @@ from aditrader.validation.institutional.historical import HistoricalStatisticalV
 from aditrader.validation.institutional.options_payoff import OptionsTheoreticalValidator
 from aditrader.validation.models import (
     GateSeverity,
+    OptionsReplayReadiness,
+    OptionsReplayStatus,
     ResearchAvailability,
     SampleSizeStatus,
     ValidationGateResult,
@@ -19,12 +21,18 @@ from aditrader.validation.policies import (
     create_moderate_policy,
     create_research_policy,
 )
-from aditrader.validation.service import StrategyValidationService, check_research_availability
+from aditrader.validation.service import (
+    StrategyValidationService,
+    check_options_replay_readiness,
+    check_research_availability,
+)
 
 __all__ = [
     "ASTValidator",
     "GateSeverity",
     "HistoricalStatisticalValidator",
+    "OptionsReplayReadiness",
+    "OptionsReplayStatus",
     "OptionsTheoreticalValidator",
     "ResearchAvailability",
     "SampleSizeStatus",
@@ -35,6 +43,7 @@ __all__ = [
     "ValidationResult",
     "ValidationScope",
     "ValidationStatus",
+    "check_options_replay_readiness",
     "check_research_availability",
     "create_institutional_policy",
     "create_moderate_policy",

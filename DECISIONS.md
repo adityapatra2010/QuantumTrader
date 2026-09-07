@@ -319,8 +319,41 @@ To transition QuantumValidator from simulated rehearsal to genuine live market-d
 - **Positive**: Native replay support for all major NSE data formats; zero lookahead leakage; 100% truthful quote semantics; immediate pre-flight visibility into data quality; zero additional external dependencies added to virtual environment; clean mobile and desktop monitoring interface.
 - **Negative**: Replaying high-frequency multi-million-row CSV files entirely in memory requires sufficient RAM (mitigated by streaming generators).
 
+---
 
+## ADR 016: Declarative Dynamic Contract Selection, Point-in-Time Option Chain Replay Foundation, and Per-Contract Trailing Stop State Machine
 
+### Context
+1. **Static vs. Dynamic Option Legs**: Strategy definitions historically required static strike offsets (e.g. ATM, OTM1, ITM1). Real-world volatility and intraday option strategies dynamically resolve contracts based on market premium/LTP (e.g. find contract where LTP $\approx$ ₹50 for short leg, find hedge where LTP $\approx$ ₹5 for 4x long hedge) or delta/Greeks.
+2. **Deterministic Resolution & Ambiguity Protection**: Resolving contracts dynamically without lookahead bias requires an immutable point-in-time option chain snapshot (`PointInTimeOptionChain`). If multiple strikes match a premium target within tolerance (e.g. equidistant strikes), an ambiguous selection without an explicit deterministic tie-breaking policy leads to non-deterministic backtests or production execution variance. The system must fail-closed when ambiguity is detected under strict policies.
+3. **Per-Contract Premium Trailing Stops**: Multi-leg strategies frequently require trailing stops that track individual contract prices rather than portfolio net equity or underlying index points. A short option premium falling from 50 to 40 tightens the stop to 45; further declining to 35 tightens the stop to 40; further declining to 30 tightens the stop to 35. This state machine must be pure, deterministic, bound to a specific contract symbol, and strictly enforce temporal monotonicity.
+4. **Preservation of Air-Gap Guarantees**: Under ADR 002 and ADR 011, options execution must remain physical paper/research/backtesting only; option strategies must never masquerade as spot simulations or bypass risk checks.
 
+### Decision
+1. **Canonical Schema Additions (`src/aditrader/strategy/builder/schema.py`)**:
+   - Introduce `ContractSelectorType` (`PREMIUM_TARGET`, `DELTA_TARGET`, `STRIKE_OFFSET`).
+   - Introduce `SelectorTieBreaker` (`CLOSEST_PREMIUM`, `HIGHER_OI`, `HIGHER_VOLUME`, `CLOSER_TO_ATM`).
+   - Introduce `ContractSelector` Pydantic model with `target_ltp`, `tolerance`, `option_type`, `expiry_offset`, `tie_breaker`, `min_volume`, `min_oi`, and `fail_on_ambiguity`.
+   - Introduce `PremiumTrailingStopConfig` model with `initial_gap`, `trail_step`, and `ratchet`.
+   - Embed `contract_selector` and `trailing_stop` optionally into `StrategyLegDefinition`.
+   - Add `premium_levels: list[float] | None` to `StrategyDSL` for multi-level laddered executions.
+2. **Declarative Pattern Translator (`src/aditrader/strategy/translators/yaml_dsl.py`)**:
+   - Provide clean translation from shorthand multi-leg YAML configurations into canonical `StrategyDSL` with full validation.
+3. **Point-in-Time Option Chain Resolver (`src/aditrader/options/chain_replay.py`)**:
+   - `PointInTimeOptionContract`: Canonical immutable snapshot of an option strike at timestamp $t$.
+   - `PointInTimeOptionChain`: Point-in-time chain snapshot with deterministic `resolve_selector()` executing hierarchical filtering (expiry, option type, minimum volume, minimum open interest, premium tolerance window) and strict tie-breaking (`CLOSEST_PREMIUM`, `HIGHER_OI`, `HIGHER_VOLUME`, `CLOSER_TO_ATM`).
+   - Fail-closed error hierarchy: `NoEligibleOptionContractError`, `AmbiguousOptionContractError`, `StaleOptionQuoteError`.
+4. **Per-Contract Premium Trailing Stop State Machine (`src/aditrader/options/trailing_stop.py`)**:
+   - Pure, deterministic `PremiumTrailingStop` tracking contract-level high-water marks (for longs) and low-water marks (for shorts).
+   - Strict contract identity validation and timestamp causality enforcement.
+   - Mathematical ratchet rule: $SL_{new} = \min(SL_{current}, mark + gap)$ for short positions.
+5. **Multi-Leg Position Group Container (`src/aditrader/options/position_group.py`)**:
+   - Tracks grouped option positions (e.g. short + hedge combo) with permanent contract identity attachments, calculating per-leg and collective unrealized/realized P&L and net entry cash flow.
+6. **Strategy Validation & Replay Readiness Diagnostics**:
+   - `ASTValidator` verifies dynamic selector bounds and guards against contradictory legs.
+   - `OptionsPayoffValidator` matches `target_ltp` via Black-Scholes inversion to compute payoff bounds.
+   - `check_options_replay_readiness()` evaluates strategy replay prerequisites against dataset capabilities, surfacing status in CLI commands (`validate`, `inspect-strategy`, `strategies --detail`).
 
-
+### Consequences
+- **Positive**: Declarative support for premium-targeted multi-leg strategies; pure deterministic replay resolution without lookahead bias; fail-closed defense against ambiguous quotes; full backward compatibility with static strike offset strategies.
+- **Negative**: Dynamic replay requires authentic point-in-time option chain snapshots with concurrent strike quotes, which daily single-contract bhavcopies cannot satisfy (rightfully rejected with clear diagnostic reporting).

@@ -72,6 +72,34 @@ class ConstructFidelity(BaseModel):
     )
 
 
+class PortabilityAssessment(BaseModel):
+    """Assessment of assumptions when porting strategies across instruments or asset classes."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source_instrument_hint: str | None = Field(
+        default=None, description="Inferred original benchmark/instrument (e.g. 'XAUUSD')"
+    )
+    target_instrument_hint: str | None = Field(
+        default=None, description="Declared target asset or market (e.g. 'MCX Gold (India)')"
+    )
+    assumptions_preserved: list[str] = Field(
+        default_factory=list, description="Mathematical/technical assumptions that remain valid"
+    )
+    assumptions_changed: list[str] = Field(
+        default_factory=list,
+        description="Contract/operational assumptions that differ significantly",
+    )
+    assumptions_unknown: list[str] = Field(
+        default_factory=list, description="Unverifiable assumptions requiring user confirmation"
+    )
+    unsafe_mappings: list[str] = Field(
+        default_factory=list,
+        description="Critical risks (e.g. capital adequacy, session hours, margin)",
+    )
+    portability_verdict: str = Field(..., description="Overall verdict on portability safety")
+
+
 class StrategyInspectionReport(BaseModel):
     """Immutable diagnostic report evaluating strategy compatibility, AST syntax, and safety."""
 
@@ -175,4 +203,8 @@ class StrategyInspectionReport(BaseModel):
     )
     visual_only_constructs: list[str] = Field(
         default_factory=list, description="Detected visualization directives (plot, fill, etc.)"
+    )
+    portability_assessment: PortabilityAssessment | None = Field(
+        default=None,
+        description="Instrument-portability audit assessing asset-class assumption mismatches",
     )

@@ -1,0 +1,5 @@
+//@version=5
+strategy("Morning Breakout Entry", overlay=true)
+time_cond = hour == 10 and minute == 0
+if time_cond
+    strategy.entry("Long", strategy.long)

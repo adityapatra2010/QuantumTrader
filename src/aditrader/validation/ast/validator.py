@@ -359,28 +359,70 @@ class ASTValidator:
         if not legs:
             return
 
-        seen_legs: dict[tuple[str, int, int], StrategyLegDefinition] = {}
+        seen_legs: dict[tuple[str, Any, int], StrategyLegDefinition] = {}
 
         for idx, leg in enumerate(legs):
             leg_ctx = f"legs[{idx}]"
 
-            # Strike Offset Range Check
-            if abs(leg.strike_offset) > 50:
-                gate_results.append(
-                    ValidationGateResult(
-                        gate_name=f"{leg_ctx}.STRIKE_OFFSET_BOUNDS",
-                        passed=False,
-                        severity=GateSeverity.HARD_FLOOR,
-                        detail=f"Absurd strike_offset {leg.strike_offset}. Must be within [-50, 50] steps of ATM.",
-                        observed_value=leg.strike_offset,
+            # 1. Strike Offset Validation
+            if leg.strike_offset is not None:
+                if abs(leg.strike_offset) > 50:
+                    gate_results.append(
+                        ValidationGateResult(
+                            gate_name=f"{leg_ctx}.STRIKE_OFFSET_BOUNDS",
+                            passed=False,
+                            severity=GateSeverity.HARD_FLOOR,
+                            detail=f"Absurd strike_offset {leg.strike_offset}. Must be within [-50, 50] steps of ATM.",
+                            observed_value=leg.strike_offset,
+                        )
                     )
-                )
-            elif abs(leg.strike_offset) > 20:
-                warnings.append(
-                    f"Leg {idx} uses deep OTM/ITM strike offset ({leg.strike_offset}). Ensure adequate liquidity in live trading."
-                )
+                elif abs(leg.strike_offset) > 20:
+                    warnings.append(
+                        f"Leg {idx} uses deep OTM/ITM strike offset ({leg.strike_offset}). Ensure adequate liquidity in live trading."
+                    )
 
-            # Quantity / Lots constraints
+            # 2. Contract Selector Validation
+            if leg.contract_selector is not None:
+                sel = leg.contract_selector
+                if sel.target_ltp is not None and sel.target_ltp <= 0.0:
+                    gate_results.append(
+                        ValidationGateResult(
+                            gate_name=f"{leg_ctx}.SELECTOR_TARGET_LTP_INVALID",
+                            passed=False,
+                            severity=GateSeverity.HARD_FLOOR,
+                            detail=f"Target LTP ({sel.target_ltp}) must be strictly positive.",
+                            observed_value=sel.target_ltp,
+                        )
+                    )
+                if sel.tolerance < 0.0:
+                    gate_results.append(
+                        ValidationGateResult(
+                            gate_name=f"{leg_ctx}.SELECTOR_TOLERANCE_INVALID",
+                            passed=False,
+                            severity=GateSeverity.HARD_FLOOR,
+                            detail=f"Tolerance ({sel.tolerance}) cannot be negative.",
+                            observed_value=sel.tolerance,
+                        )
+                    )
+
+            # 3. Trailing Stop Validation
+            if leg.trailing_stop is not None:
+                ts = leg.trailing_stop
+                if ts.initial_gap <= 0.0 or ts.trail_step <= 0.0:
+                    gate_results.append(
+                        ValidationGateResult(
+                            gate_name=f"{leg_ctx}.TRAILING_STOP_PARAMS_INVALID",
+                            passed=False,
+                            severity=GateSeverity.HARD_FLOOR,
+                            detail="Trailing stop initial_gap and trail_step must be strictly positive.",
+                            observed_value={
+                                "initial_gap": ts.initial_gap,
+                                "trail_step": ts.trail_step,
+                            },
+                        )
+                    )
+
+            # 4. Quantity / Lots constraints
             if leg.lots < 1 or leg.lots > 100:
                 gate_results.append(
                     ValidationGateResult(
@@ -392,8 +434,20 @@ class ASTValidator:
                     )
                 )
 
-            # Duplicate / Contradictory Legs Check
-            leg_key = (leg.contract_type, leg.strike_offset, leg.expiry_offset)
+            # 5. Duplicate / Contradictory Legs Check
+            c_type_str = (
+                leg.contract_type
+                or (leg.contract_selector.option_type if leg.contract_selector else "UNKNOWN")
+                or "UNKNOWN"
+            )
+            if leg.strike_offset is not None:
+                leg_spec_key: Any = leg.strike_offset
+            elif leg.contract_selector is not None:
+                leg_spec_key = (leg.contract_selector.type.value, leg.contract_selector.target_ltp)
+            else:
+                leg_spec_key = "unspecified"
+
+            leg_key = (c_type_str, leg_spec_key, leg.expiry_offset)
             if leg_key in seen_legs:
                 prior_leg = seen_legs[leg_key]
                 if prior_leg.side != leg.side and prior_leg.lots == leg.lots:
@@ -403,7 +457,7 @@ class ASTValidator:
                             passed=False,
                             severity=GateSeverity.HARD_FLOOR,
                             detail=(
-                                f"Leg {idx} ({leg.side} {leg.lots} lots {leg.contract_type} offset={leg.strike_offset}) "
+                                f"Leg {idx} ({leg.side} {leg.lots} lots {c_type_str} {leg_spec_key}) "
                                 f"directly cancels prior leg ({prior_leg.side} {prior_leg.lots} lots). "
                                 "Opposing identical legs produce zero economic position."
                             ),
@@ -411,7 +465,7 @@ class ASTValidator:
                     )
                 elif prior_leg.side == leg.side:
                     warnings.append(
-                        f"Leg {idx} duplicates existing leg with identical contract, strike offset, and expiry. Consider combining lots."
+                        f"Leg {idx} duplicates existing leg with identical contract, strike/selector, and expiry. Consider combining lots."
                     )
             else:
                 seen_legs[leg_key] = leg

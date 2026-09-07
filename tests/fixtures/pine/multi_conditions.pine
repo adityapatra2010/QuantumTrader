@@ -1,0 +1,9 @@
+//@version=5
+strategy("Multi Indicator Filter", overlay=true)
+fast_ma = ta.sma(close, 10)
+slow_ma = ta.sma(close, 50)
+rsi_val = ta.rsi(close, 14)
+bull_trend = fast_ma > slow_ma
+rsi_ok = rsi_val > 50
+if bull_trend and rsi_ok
+    strategy.entry("Long", strategy.long)

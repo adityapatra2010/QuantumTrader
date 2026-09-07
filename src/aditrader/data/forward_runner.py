@@ -1,5 +1,7 @@
 """Institutional air-gapped forward-testing and paper-trading orchestrator."""
 
+from __future__ import annotations
+
 import contextlib
 import logging
 import random
@@ -10,7 +12,7 @@ import time
 from collections.abc import Callable, Iterator
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -51,9 +53,11 @@ from aditrader.strategy.builder.schema import (
     ConditionNode,
     StrategyDSL,
 )
-from aditrader.strategy.compiler.engine import ExecutableStrategy
-from aditrader.strategy.library.models import StrategyRecord
-from aditrader.strategy.library.registry import StrategyRegistry
+
+if TYPE_CHECKING:
+    from aditrader.strategy.compiler.engine import ExecutableStrategy
+    from aditrader.strategy.library.models import StrategyRecord
+    from aditrader.strategy.library.registry import StrategyRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +197,9 @@ def resolve_strategy(
     symbol: str | None = None,
 ) -> tuple[ExecutableStrategy, StrategyDSL]:
     """Resolve strategy parameter into compiled ExecutableStrategy and source StrategyDSL."""
+    from aditrader.strategy.compiler.engine import ExecutableStrategy
+    from aditrader.strategy.library.registry import StrategyRegistry
+
     if isinstance(strategy, ExecutableStrategy):
         return strategy, strategy.dsl
 

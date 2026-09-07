@@ -10,6 +10,10 @@ from aditrader.strategy.builder.schema import (
     ConditionCategory,
     ConditionGroup,
     ConditionNode,
+    ContractSelector,
+    ContractSelectorType,
+    PremiumTrailingStopConfig,
+    SelectorTieBreaker,
     StrategyDSL,
     StrategyLegDefinition,
 )
@@ -21,7 +25,11 @@ __all__ = [
     "ConditionGroup",
     "ConditionNode",
     "ConditionValueResolver",
+    "ContractSelector",
+    "ContractSelectorType",
     "EvaluationContext",
+    "PremiumTrailingStopConfig",
+    "SelectorTieBreaker",
     "StrategyDSL",
     "StrategyLegDefinition",
 ]

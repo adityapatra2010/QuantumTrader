@@ -1,0 +1,15 @@
+//@version=5
+strategy("Iron Fly & Broken Wing Spot Simulation", overlay=true)
+var float entryPrice = na
+var float currentPL = 0.0
+var float priceDiff = 0.0
+targetProfit = input.float(500.0, title="Target Profit")
+maxLossLimit = input.float(300.0, title="Max Loss")
+if hour == 10 and minute == 0
+    entryPrice := close
+    strategy.entry("IronFlySim", strategy.long)
+if not na(entryPrice)
+    priceDiff := math.abs(close - entryPrice)
+    currentPL := 1000.0 - priceDiff * 2
+    if currentPL >= targetProfit or currentPL <= -maxLossLimit
+        strategy.close("IronFlySim", comment="Payoff Exit")

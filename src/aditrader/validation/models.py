@@ -108,3 +108,35 @@ class ResearchAvailability(BaseModel):
     status: Literal["AVAILABLE", "RESEARCH_UNAVAILABLE"]
     permitted_alternatives: list[str] = Field(default_factory=list)
     detail: str
+
+
+class OptionsReplayStatus(StrEnum):
+    """Options chain replay readiness classification."""
+
+    REPLAYABLE = "REPLAYABLE"
+    STRUCTURALLY_VALID_NOT_REPLAYABLE = "STRUCTURALLY_VALID_NOT_REPLAYABLE"
+    UNSUPPORTED = "UNSUPPORTED"
+
+
+class OptionsReplayReadiness(BaseModel):
+    """Diagnostic assessment of whether an options strategy can be replayed on available market data."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    status: OptionsReplayStatus = Field(..., description="Replay readiness classification")
+    has_option_legs: bool = Field(default=False, description="True if strategy defines option legs")
+    dynamic_selector_supported: bool = Field(
+        default=True, description="True if dynamic premium selector is supported"
+    )
+    strike_resolution: Literal[
+        "PRE_RESOLVED", "POINT_IN_TIME_DYNAMIC", "THEORETICAL_ONLY", "UNRESOLVED"
+    ] = Field(..., description="Method used to resolve actual option strike")
+    selection_policy: str = Field(
+        default="CLOSEST_PREMIUM with deterministic tie-breaker",
+        description="Active contract selection policy",
+    )
+    data_source_requirement: str = Field(
+        default="Point-in-time option chain with timestamps and contract LTP",
+        description="Dataset prerequisites for replay execution",
+    )
+    reason: str = Field(..., description="Diagnostic explanation of replay status")

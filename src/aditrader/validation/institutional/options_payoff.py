@@ -111,17 +111,56 @@ class OptionsTheoreticalValidator:
         expiry_dt = now_dt + timedelta(days=dte_days)
 
         for leg in strategy.legs:
-            leg_strike = atm_strike + float(leg.strike_offset) * step
-            side = leg.side
-
-            # Calculate Black-Scholes theoretical entry premium
-            premium = black_scholes_price(
-                spot=spot_price,
-                strike=leg_strike,
-                time_to_expiry=t_years,
-                volatility=volatility,
-                option_type=leg.contract_type,
+            opt_type = (
+                leg.contract_type
+                or (leg.contract_selector.option_type if leg.contract_selector else "CE")
+                or "CE"
             )
+
+            if leg.strike_offset is not None:
+                leg_strike = atm_strike + float(leg.strike_offset) * step
+                premium = black_scholes_price(
+                    spot=spot_price,
+                    strike=leg_strike,
+                    time_to_expiry=t_years,
+                    volatility=volatility,
+                    option_type=opt_type,
+                )
+            elif leg.contract_selector is not None and leg.contract_selector.target_ltp is not None:
+                target_p = leg.contract_selector.target_ltp
+                # Search candidate strikes [-50, 50] to find strike closest to target premium
+                best_strike = atm_strike
+                best_diff = float("inf")
+                best_prem = target_p
+                for offset in range(-50, 51):
+                    cand_k = atm_strike + offset * step
+                    if cand_k <= 0:
+                        continue
+                    p = black_scholes_price(
+                        spot=spot_price,
+                        strike=cand_k,
+                        time_to_expiry=t_years,
+                        volatility=volatility,
+                        option_type=opt_type,
+                    )
+                    diff = abs(p - target_p)
+                    if diff < best_diff:
+                        best_diff = diff
+                        best_strike = cand_k
+                        best_prem = p
+                leg_strike = best_strike
+                premium = best_prem
+            else:
+                leg_strike = atm_strike
+                premium = black_scholes_price(
+                    spot=spot_price,
+                    strike=leg_strike,
+                    time_to_expiry=t_years,
+                    volatility=volatility,
+                    option_type=opt_type,
+                )
+
+            side = leg.side
             total_qty = leg.lots * lot_size
 
             concrete_legs.append(
@@ -129,7 +168,7 @@ class OptionsTheoreticalValidator:
                     underlying=strategy.underlying,
                     expiry=expiry_dt,
                     strike=leg_strike,
-                    option_type=leg.contract_type,
+                    option_type=opt_type,
                     side=side,
                     qty=total_qty,
                     entry_price=round(premium, 2),

@@ -18,6 +18,7 @@ from aditrader.strategy.compiler import (
 from aditrader.strategy.inspector import (
     ConstructFidelity,
     FidelityLevel,
+    PortabilityAssessment,
     StrategyFormat,
     StrategyFormatDetector,
     StrategyInspectionReport,
@@ -56,6 +57,7 @@ __all__ = [
     "FidelityLevel",
     "MarketRegime",
     "PineScriptTranslator",
+    "PortabilityAssessment",
     "StrategyCategory",
     "StrategyDNA",
     "StrategyDSL",

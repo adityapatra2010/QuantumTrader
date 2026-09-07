@@ -1,0 +1,8 @@
+//@version=5
+strategy("EMA Volume Crossover", overlay=true)
+fast = ta.ema(close, 9)
+slow = ta.ema(close, 21)
+vol_sma = ta.sma(volume, 20)
+long_cond = ta.crossover(fast, slow) and volume > vol_sma
+if long_cond
+    strategy.entry("Long", strategy.long)

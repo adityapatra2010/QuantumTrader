@@ -279,7 +279,16 @@ def build_parser() -> argparse.ArgumentParser:
         "inspect-data",
         help="Inspect CSV market data file compatibility, columns, schema, and quality prior to replay",
     )
-    p_inspect.add_argument("file", type=str, help="Path to CSV file to inspect")
+    p_inspect.add_argument(
+        "file", nargs="?", type=str, default=None, help="Path to CSV file to inspect"
+    )
+    p_inspect.add_argument(
+        "--file",
+        type=str,
+        dest="file_opt",
+        default=None,
+        help="Path to CSV file to inspect (flag alternative)",
+    )
     p_inspect.add_argument(
         "--symbol",
         type=str,
@@ -293,7 +302,20 @@ def build_parser() -> argparse.ArgumentParser:
         "inspect-strategy",
         help="Inspect strategy file syntax, language, constructs, lookahead safety, and compatibility",
     )
-    p_insp_strat.add_argument("file", type=str, help="Path to strategy file to inspect")
+    p_insp_strat.add_argument(
+        "file",
+        nargs="?",
+        type=str,
+        default=None,
+        help="Path to strategy file to inspect",
+    )
+    p_insp_strat.add_argument(
+        "--file",
+        type=str,
+        dest="file_opt",
+        default=None,
+        help="Path to strategy file to inspect (flag alternative)",
+    )
     p_insp_strat.set_defaults(handler=cmd_inspect_strategy)
 
     return parser

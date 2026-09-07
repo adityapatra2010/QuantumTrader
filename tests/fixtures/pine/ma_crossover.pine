@@ -1,0 +1,10 @@
+//@version=5
+strategy("Moving Average Crossover", overlay=true)
+fast_ma = ta.sma(close, 10)
+slow_ma = ta.sma(close, 50)
+long_cond = ta.crossover(fast_ma, slow_ma)
+short_cond = ta.crossunder(fast_ma, slow_ma)
+if long_cond
+    strategy.entry("Long", strategy.long)
+if short_cond
+    strategy.entry("Short", strategy.short)

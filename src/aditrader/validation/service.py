@@ -1,6 +1,6 @@
 """Unified Strategy Validation Service orchestrating AST, Historical, and Theoretical Options paths."""
 
-from typing import Any
+from typing import Any, Literal
 
 from aditrader.backtesting.runner import BacktestResult
 from aditrader.data.instruments.specs import is_futures_symbol
@@ -10,6 +10,8 @@ from aditrader.validation.institutional.historical import HistoricalStatisticalV
 from aditrader.validation.institutional.options_payoff import OptionsTheoreticalValidator
 from aditrader.validation.models import (
     GateSeverity,
+    OptionsReplayReadiness,
+    OptionsReplayStatus,
     ResearchAvailability,
     SampleSizeStatus,
     ValidationGateResult,
@@ -159,3 +161,70 @@ class StrategyValidationService:
                 oos_result=oos_result,
                 walk_forward_results=walk_forward_results,
             )
+
+
+def check_options_replay_readiness(
+    strategy: StrategyDSL,
+    chain_available: bool = False,
+    is_intraday_data: bool = False,
+) -> OptionsReplayReadiness:
+    """Assess whether an options strategy can be replayed against available market data.
+
+    Distinguishes:
+    - REPLAYABLE: Options strategy with chain data having intraday timestamps and contract LTP.
+    - STRUCTURALLY_VALID_NOT_REPLAYABLE: Valid strategy DSL and selectors, but market data is daily EOD quote archive or missing intraday granularity.
+    - UNSUPPORTED: Strategy missing contract selectors/strikes or unhedged naked short gamma.
+    """
+    if not strategy.legs:
+        return OptionsReplayReadiness(
+            status=OptionsReplayStatus.UNSUPPORTED,
+            has_option_legs=False,
+            dynamic_selector_supported=True,
+            strike_resolution="THEORETICAL_ONLY",
+            selection_policy="N/A (Linear strategy)",
+            data_source_requirement="None (Linear asset uses OHLCV candles)",
+            reason="Strategy has no option legs.",
+        )
+
+    has_selector = any(leg.contract_selector is not None for leg in strategy.legs)
+    strike_res: Literal["PRE_RESOLVED", "POINT_IN_TIME_DYNAMIC"] = (
+        "POINT_IN_TIME_DYNAMIC" if has_selector else "PRE_RESOLVED"
+    )
+
+    if chain_available and is_intraday_data:
+        return OptionsReplayReadiness(
+            status=OptionsReplayStatus.REPLAYABLE,
+            has_option_legs=True,
+            dynamic_selector_supported=True,
+            strike_resolution=strike_res,
+            selection_policy="CLOSEST_PREMIUM with deterministic tie-breaker",
+            data_source_requirement="Intraday option-chain feed with point-in-time quotes",
+            reason="Intraday option-chain feed is available with genuine timestamps and contract identities.",
+        )
+
+    if chain_available and not is_intraday_data:
+        return OptionsReplayReadiness(
+            status=OptionsReplayStatus.STRUCTURALLY_VALID_NOT_REPLAYABLE,
+            has_option_legs=True,
+            dynamic_selector_supported=True,
+            strike_resolution=strike_res,
+            selection_policy="CLOSEST_PREMIUM with deterministic tie-breaker",
+            data_source_requirement="Intraday option-chain feed with point-in-time quotes",
+            reason=(
+                "Strategy is structurally valid with dynamic selectors, but provided market data is a daily EOD "
+                "derivative quote archive lacking intraday bar/tick granularity for continuous execution."
+            ),
+        )
+
+    return OptionsReplayReadiness(
+        status=OptionsReplayStatus.STRUCTURALLY_VALID_NOT_REPLAYABLE,
+        has_option_legs=True,
+        dynamic_selector_supported=True,
+        strike_resolution=strike_res,
+        selection_policy="CLOSEST_PREMIUM with deterministic tie-breaker",
+        data_source_requirement="Point-in-time option chain snapshot feed",
+        reason=(
+            "Strategy structure and selectors are valid, but no active option-chain feed is currently attached. "
+            "Replay requires a point-in-time option chain provider."
+        ),
+    )

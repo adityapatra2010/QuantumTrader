@@ -5,6 +5,7 @@ from aditrader.strategy.inspector.inspector import StrategyInspector
 from aditrader.strategy.inspector.models import (
     ConstructFidelity,
     FidelityLevel,
+    PortabilityAssessment,
     StrategyFormat,
     StrategyInspectionReport,
     StrategyScriptType,
@@ -14,6 +15,7 @@ from aditrader.strategy.inspector.models import (
 __all__ = [
     "ConstructFidelity",
     "FidelityLevel",
+    "PortabilityAssessment",
     "StrategyFormat",
     "StrategyFormatDetector",
     "StrategyInspectionReport",

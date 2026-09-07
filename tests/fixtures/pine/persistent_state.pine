@@ -1,0 +1,6 @@
+//@version=5
+strategy("State Machine Counter", overlay=true)
+var int bar_count = 0
+bar_count := bar_count + 1
+if bar_count > 10
+    strategy.entry("Long", strategy.long)

@@ -377,9 +377,18 @@ def cmd_strategies(args: argparse.Namespace) -> int:
         print(f"Target Regime:  {dsl.target_regime or dna.target_regime.value}")
         print(f"Option Legs:    {len(dsl.legs)} defined")
         for i, leg in enumerate(dsl.legs):
-            print(
-                f"  Leg {i + 1}: {leg.side.value} {leg.contract_type} offset={leg.strike_offset} lots={leg.lots}"
+            c_type = (
+                leg.contract_type
+                or (leg.contract_selector.option_type if leg.contract_selector else "OPT")
+                or "OPT"
             )
+            if leg.strike_offset is not None:
+                spec_str = f"offset={leg.strike_offset}"
+            elif leg.contract_selector is not None:
+                spec_str = f"selector={leg.contract_selector.type.value}(ltp={leg.contract_selector.target_ltp})"
+            else:
+                spec_str = "dynamic"
+            print(f"  Leg {i + 1}: {leg.side.value} {c_type} {spec_str} lots={leg.lots}")
         print("Strategy DNA:")
         print(f"  Direction:      {dna.directionality.value}")
         print(f"  Target Regime:  {dna.target_regime.value}")
@@ -506,6 +515,21 @@ def cmd_validate(args: argparse.Namespace) -> int:
     print(
         f"Final Verdict:         {report.status.value} (Score: {report.validation_score:.1f}/100)"
     )
+
+    if dsl.legs:
+        from aditrader.validation.service import check_options_replay_readiness
+
+        readiness = check_options_replay_readiness(dsl)
+        print("-" * 68)
+        print("Options Replay Diagnostics:")
+        print(
+            f"  Dynamic Premium Selector:   {'SUPPORTED' if readiness.dynamic_selector_supported else 'UNSUPPORTED'}"
+        )
+        print("  Historical Option Replay:   UNAVAILABLE (requires intraday option chain feed)")
+        print(f"  Exact Strike Resolution:    {readiness.strike_resolution}")
+        print(f"  Deterministic Policy:       {readiness.selection_policy}")
+        print(f"  Replay Readiness:           {readiness.status.value}")
+        print(f"  Diagnosis:                  {readiness.reason}")
 
     if report.warnings:
         print("\nWarnings:")
@@ -666,7 +690,10 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
 def cmd_inspect_data(args: argparse.Namespace) -> int:
     """Inspect CSV market data file compatibility, columns, schema, and quality prior to replay."""
     file_path = (
-        getattr(args, "file", None) or getattr(args, "csv", None) or getattr(args, "csv_file", None)
+        getattr(args, "file_opt", None)
+        or getattr(args, "file", None)
+        or getattr(args, "csv", None)
+        or getattr(args, "csv_file", None)
     )
     if not file_path:
         print("[ERROR] Please provide a path to a CSV file to inspect.")
@@ -757,7 +784,8 @@ def cmd_inspect_data(args: argparse.Namespace) -> int:
 def cmd_inspect_strategy(args: argparse.Namespace) -> int:
     """Inspect strategy file syntax, language, constructs, lookahead safety, and compatibility."""
     file_path = (
-        getattr(args, "file", None)
+        getattr(args, "file_opt", None)
+        or getattr(args, "file", None)
         or getattr(args, "strategy_file", None)
         or getattr(args, "path", None)
     )
@@ -852,6 +880,34 @@ def cmd_inspect_strategy(args: argparse.Namespace) -> int:
             if c.details:
                 print(f"    ↳ {c.details}")
 
+    # 3.5. Instrument Portability Audit
+    if report.portability_assessment:
+        print("-" * 68)
+        print("  [INSTRUMENT PORTABILITY AUDIT]")
+        pa = report.portability_assessment
+        if pa.source_instrument_hint or pa.target_instrument_hint:
+            src = pa.source_instrument_hint or "Unknown / Generic"
+            tgt = pa.target_instrument_hint or "Unspecified"
+            print(f"  Porting Path:      {src}  --->  {tgt}")
+        print(f"  Verdict:           {pa.portability_verdict}")
+
+        if pa.assumptions_preserved:
+            print("\n  Preserved Assumptions:")
+            for item in pa.assumptions_preserved:
+                print(f"    [OK] {item}")
+        if pa.assumptions_changed:
+            print("\n  Changed Assumptions:")
+            for item in pa.assumptions_changed:
+                print(f"    [CHANGED] {item}")
+        if pa.assumptions_unknown:
+            print("\n  Unknown / Discretionary Assumptions:")
+            for item in pa.assumptions_unknown:
+                print(f"    [UNKNOWN] {item}")
+        if pa.unsafe_mappings:
+            print("\n  Unsafe / Critical Risk Mappings:")
+            for item in pa.unsafe_mappings:
+                print(f"    [UNSAFE] {item}")
+
     # 4. PaperBroker Comparison Notes
     if report.order_behavior_notes:
         print("-" * 68)
@@ -868,6 +924,11 @@ def cmd_inspect_strategy(args: argparse.Namespace) -> int:
         print("[WARN] Intrabar tick calculation detected. Simulating bar-close only.")
     if report.has_options_legs:
         print("[AIR-GAP] Multi-leg options detected. Protected by ADR 011 options air gap.")
+        print("  Dynamic premium selector:       SUPPORTED")
+        print("  Historical option-chain replay: UNAVAILABLE (requires intraday option chain)")
+        print("  Exact strike resolution:        POINT_IN_TIME_DYNAMIC")
+        print("  Deterministic selection policy: CLOSEST_PREMIUM with deterministic tie-breaker")
+        print("  Replay readiness:               STRUCTURALLY_VALID_NOT_REPLAYABLE")
 
     if report.rejection_reasons:
         print("\nRejection Reasons / Limitations:")
