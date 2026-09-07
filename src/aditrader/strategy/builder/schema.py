@@ -45,9 +45,10 @@ class ConditionCategory(StrEnum):
 
 
 class ContractSelectorType(StrEnum):
-    """Supported dynamic contract selector predicate types."""
+    """Classification of dynamic contract selection criteria."""
 
     PREMIUM_TARGET = "premium_target"
+    PREMIUM_RANGE = "premium_range"
     DELTA_TARGET = "delta_target"
     STRIKE_OFFSET = "strike_offset"
 
@@ -59,6 +60,25 @@ class SelectorTieBreaker(StrEnum):
     HIGHER_OI = "HIGHER_OI"
     HIGHER_VOLUME = "HIGHER_VOLUME"
     CLOSER_TO_ATM = "CLOSER_TO_ATM"
+
+
+class PremiumBand(BaseModel):
+    """Explicit premium range boundary for dynamic option contract selection."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    min_ltp: float = Field(..., gt=0.0, description="Inclusive minimum LTP boundary (e.g. 50.0)")
+    max_ltp: float = Field(..., gt=0.0, description="Inclusive maximum LTP boundary (e.g. 59.5)")
+
+    @model_validator(mode="after")
+    def validate_band_bounds(self) -> "PremiumBand":
+        if self.min_ltp > self.max_ltp:
+            raise ValueError(f"min_ltp ({self.min_ltp}) cannot exceed max_ltp ({self.max_ltp})")
+        return self
+
+    def contains(self, ltp: float) -> bool:
+        """Evaluate if LTP falls within inclusive [min_ltp, max_ltp] range."""
+        return self.min_ltp <= ltp <= self.max_ltp
 
 
 class ContractSelector(BaseModel):
@@ -79,6 +99,20 @@ class ContractSelector(BaseModel):
         default=5.0,
         ge=0.0,
         description="Maximum absolute difference allowed between contract LTP and target_ltp",
+    )
+    min_ltp: float | None = Field(
+        default=None,
+        gt=0.0,
+        description="Inclusive lower bound for PREMIUM_RANGE selection",
+    )
+    max_ltp: float | None = Field(
+        default=None,
+        gt=0.0,
+        description="Inclusive upper bound for PREMIUM_RANGE selection",
+    )
+    underlying: str | None = Field(
+        default=None,
+        description="Optional filter restricting underlying (e.g. NIFTY)",
     )
     option_type: Literal["CE", "PE"] | None = Field(
         default=None,
@@ -107,6 +141,25 @@ class ContractSelector(BaseModel):
         default=False,
         description="If True, raise AmbiguousOptionContractError instead of applying deterministic tie-breaker",
     )
+
+    @model_validator(mode="after")
+    def validate_selector_bounds(self) -> "ContractSelector":
+        """Validate bounds consistency per selector type."""
+        if self.type == ContractSelectorType.PREMIUM_RANGE or (
+            self.min_ltp is not None and self.max_ltp is not None
+        ):
+            if self.min_ltp is None or self.max_ltp is None:
+                raise ValueError(
+                    "PREMIUM_RANGE requires both 'min_ltp' and 'max_ltp' to be defined."
+                )
+            if self.min_ltp > self.max_ltp:
+                raise ValueError(
+                    f"min_ltp ({self.min_ltp}) cannot exceed max_ltp ({self.max_ltp})."
+                )
+        elif self.type == ContractSelectorType.PREMIUM_TARGET:
+            if self.target_ltp is None and self.min_ltp is None:
+                raise ValueError("PREMIUM_TARGET requires 'target_ltp' to be defined.")
+        return self
 
 
 class PremiumTrailingStopConfig(BaseModel):
@@ -347,6 +400,10 @@ class StrategyDSL(BaseModel):
 
     target_regime: str | None = Field(
         default=None, description="Optimal target market regime for this strategy"
+    )
+    premium_bands: list[PremiumBand] | None = Field(
+        default=None,
+        description="Configured explicit premium entry bands (e.g. 50-59.5, 60-69.5) for dynamic selection",
     )
     premium_levels: list[float] | None = Field(
         default=None,

@@ -18,8 +18,19 @@ from aditrader.options.models import ChainRow
 from aditrader.strategy.builder.schema import (
     ContractSelector,
     ContractSelectorType,
+    PremiumBand,
     SelectorTieBreaker,
 )
+
+__all__ = [
+    "AmbiguousOptionContractError",
+    "NoEligibleOptionContractError",
+    "OptionsReplayError",
+    "PointInTimeOptionChain",
+    "PointInTimeOptionContract",
+    "PremiumBand",
+    "StaleOptionQuoteError",
+]
 
 
 class OptionsReplayError(ValueError):
@@ -389,6 +400,78 @@ class PointInTimeOptionChain:
 
             return candidates[0]
 
+        elif selector.type == ContractSelectorType.PREMIUM_RANGE or (
+            selector.min_ltp is not None and selector.max_ltp is not None
+        ):
+            min_p = selector.min_ltp
+            max_p = selector.max_ltp
+            if min_p is None or max_p is None:
+                raise ValueError(
+                    "ContractSelector PREMIUM_RANGE requires both 'min_ltp' and 'max_ltp' to be defined."
+                )
+
+            # Check inclusive range [min_p, max_p]
+            in_range = [c for c in candidates if min_p <= c.ltp <= max_p]
+            if not in_range:
+                best_diff = min(min(abs(c.ltp - min_p), abs(c.ltp - max_p)) for c in candidates)
+                raise NoEligibleOptionContractError(
+                    f"No contract found within premium band [₹{min_p:.2f}, ₹{max_p:.2f}]. "
+                    f"Closest available contract has difference ₹{best_diff:.2f} from band boundaries."
+                )
+            candidates = in_range
+
+            # Ranking & Tie-breaking
+            # If target_ltp is provided, use distance to target_ltp; otherwise distance to band midpoint
+            ref_target = (
+                selector.target_ltp if selector.target_ltp is not None else (min_p + max_p) / 2.0
+            )
+
+            def range_sort_key(contract: PointInTimeOptionContract) -> tuple[Any, ...]:
+                primary: float
+                secondary: float
+                if selector.tie_breaker == SelectorTieBreaker.HIGHER_OI:
+                    primary = float(-contract.oi)
+                    secondary = abs(contract.ltp - ref_target)
+                elif selector.tie_breaker == SelectorTieBreaker.HIGHER_VOLUME:
+                    primary = float(-contract.volume)
+                    secondary = abs(contract.ltp - ref_target)
+                elif (
+                    selector.tie_breaker == SelectorTieBreaker.CLOSER_TO_ATM
+                    and self._spot_price is not None
+                ):
+                    primary = abs(contract.strike - self._spot_price)
+                    secondary = abs(contract.ltp - ref_target)
+                else:
+                    # CLOSEST_PREMIUM: primary is distance to target / midpoint, secondary is ATM proximity
+                    primary = abs(contract.ltp - ref_target)
+                    secondary = (
+                        abs(contract.strike - self._spot_price)
+                        if self._spot_price is not None
+                        else 0.0
+                    )
+
+                return (
+                    primary,
+                    secondary,
+                    contract.strike,
+                    contract.option_type,
+                    contract.trading_symbol,
+                )
+
+            candidates.sort(key=range_sort_key)
+
+            if selector.fail_on_ambiguity and len(candidates) > 1:
+                k1 = range_sort_key(candidates[0])
+                k2 = range_sort_key(candidates[1])
+                if k1[0] == k2[0] and k1[1] == k2[1]:
+                    raise AmbiguousOptionContractError(
+                        f"Ambiguous contract selection in band [₹{min_p:.2f}, ₹{max_p:.2f}] between "
+                        f"'{candidates[0].trading_symbol}' (LTP {candidates[0].ltp}) and "
+                        f"'{candidates[1].trading_symbol}' (LTP {candidates[1].ltp}) with fail_on_ambiguity enabled."
+                    )
+
+            return candidates[0]
+
         elif selector.type == ContractSelectorType.STRIKE_OFFSET:
             # Sort strikes ascending
             candidates_by_strike = sorted(candidates, key=lambda c: c.strike)
@@ -405,3 +488,56 @@ class PointInTimeOptionChain:
             return candidates_by_strike[target_idx]
 
         raise NotImplementedError(f"ContractSelector type '{selector.type}' is not yet supported.")
+
+    def find_band_candidates(
+        self,
+        band: PremiumBand,
+        option_type: str = "CE",
+        underlying: str | None = None,
+        expiry_offset: int = 0,
+    ) -> list[PointInTimeOptionContract]:
+        """Find all candidate contracts within an explicit PremiumBand without lookahead."""
+        target_underlying = (underlying or self._underlying).strip().upper()
+        candidates = [
+            c
+            for c in self._contracts
+            if c.underlying == target_underlying and c.option_type == option_type
+        ]
+        unique_expiries = sorted(
+            {c.expiry.date() if isinstance(c.expiry, datetime) else c.expiry for c in candidates}
+        )
+        if expiry_offset < len(unique_expiries):
+            target_expiry = unique_expiries[expiry_offset]
+            candidates = [
+                c
+                for c in candidates
+                if (c.expiry.date() if isinstance(c.expiry, datetime) else c.expiry)
+                == target_expiry
+            ]
+        return [c for c in candidates if band.contains(c.ltp)]
+
+    def resolve_band(
+        self,
+        band: PremiumBand,
+        option_type: Literal["CE", "PE"] = "CE",
+        underlying: str | None = None,
+        expiry_offset: int = 0,
+        tie_breaker: SelectorTieBreaker = SelectorTieBreaker.CLOSEST_PREMIUM,
+        min_volume: int = 0,
+        min_oi: int = 0,
+        fail_on_ambiguity: bool = False,
+    ) -> PointInTimeOptionContract:
+        """Convenience method to resolve a single contract directly within an explicit PremiumBand."""
+        selector = ContractSelector(
+            type=ContractSelectorType.PREMIUM_RANGE,
+            min_ltp=band.min_ltp,
+            max_ltp=band.max_ltp,
+            underlying=underlying or self._underlying,
+            option_type=option_type,
+            expiry_offset=expiry_offset,
+            tie_breaker=tie_breaker,
+            min_volume=min_volume,
+            min_oi=min_oi,
+            fail_on_ambiguity=fail_on_ambiguity,
+        )
+        return self.resolve(selector, underlying=underlying)

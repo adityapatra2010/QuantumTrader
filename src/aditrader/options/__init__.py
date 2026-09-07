@@ -7,6 +7,7 @@ from aditrader.options.chain_replay import (
     OptionsReplayError,
     PointInTimeOptionChain,
     PointInTimeOptionContract,
+    PremiumBand,
     StaleOptionQuoteError,
 )
 from aditrader.options.greeks import GREEK_CALCULATION_TOLERANCE, calculate_greeks
@@ -69,6 +70,7 @@ __all__ = [
     "PointInTimeOptionContract",
     "PositionGroupLeg",
     "PositionGroupStatus",
+    "PremiumBand",
     "PremiumTrailingStop",
     "StaleOptionQuoteError",
     "TrailingStopEvent",

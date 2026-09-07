@@ -522,6 +522,20 @@ def cmd_validate(args: argparse.Namespace) -> int:
         readiness = check_options_replay_readiness(dsl)
         print("-" * 68)
         print("Options Replay Diagnostics:")
+        if readiness.underlying:
+            print(f"  Instrument:                 {readiness.underlying}")
+        if readiness.option_type:
+            print(f"  Option Type:                {readiness.option_type}")
+        if readiness.premium_bands:
+            print("  Premium Bands:")
+            for b in readiness.premium_bands:
+                print(f"    {b}")
+        if readiness.short_summary:
+            print(f"  Short:                      {readiness.short_summary}")
+        if readiness.hedge_summary:
+            print(f"  Hedge:                      {readiness.hedge_summary}")
+        if readiness.trailing_summary:
+            print(f"  Trailing:                   {readiness.trailing_summary}")
         print(
             f"  Dynamic Premium Selector:   {'SUPPORTED' if readiness.dynamic_selector_supported else 'UNSUPPORTED'}"
         )

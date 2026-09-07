@@ -126,8 +126,18 @@ class OptionsTheoreticalValidator:
                     volatility=volatility,
                     option_type=opt_type,
                 )
-            elif leg.contract_selector is not None and leg.contract_selector.target_ltp is not None:
-                target_p = leg.contract_selector.target_ltp
+            elif leg.contract_selector is not None:
+                sel = leg.contract_selector
+                target_p = sel.target_ltp
+                if target_p is None and sel.min_ltp is not None and sel.max_ltp is not None:
+                    target_p = (sel.min_ltp + sel.max_ltp) / 2.0
+                elif target_p is None and strategy.premium_bands:
+                    target_p = (
+                        strategy.premium_bands[0].min_ltp + strategy.premium_bands[0].max_ltp
+                    ) / 2.0
+                elif target_p is None:
+                    target_p = 50.0
+
                 # Search candidate strikes [-50, 50] to find strike closest to target premium
                 best_strike = atm_strike
                 best_diff = float("inf")

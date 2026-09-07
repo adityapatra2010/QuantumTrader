@@ -140,3 +140,11 @@ class OptionsReplayReadiness(BaseModel):
         description="Dataset prerequisites for replay execution",
     )
     reason: str = Field(..., description="Diagnostic explanation of replay status")
+    underlying: str | None = Field(default=None, description="Target trading asset (e.g. NIFTY)")
+    option_type: str | None = Field(default=None, description="Option types involved (e.g. CE, PE)")
+    premium_bands: list[str] = Field(
+        default_factory=list, description="Configured premium bands formatted as strings"
+    )
+    short_summary: str | None = Field(default=None, description="Short option leg description")
+    hedge_summary: str | None = Field(default=None, description="Hedge option leg description")
+    trailing_summary: str | None = Field(default=None, description="Trailing stop loss description")

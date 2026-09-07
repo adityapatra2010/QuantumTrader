@@ -191,6 +191,62 @@ def check_options_replay_readiness(
         "POINT_IN_TIME_DYNAMIC" if has_selector else "PRE_RESOLVED"
     )
 
+    # Extract semantic descriptions for diagnostic presentation
+    opt_types = set()
+    for leg in strategy.legs:
+        t = leg.contract_type or (
+            leg.contract_selector.option_type if leg.contract_selector else None
+        )
+        if t:
+            opt_types.add(t)
+    option_type_str = "/".join(sorted(opt_types)) if opt_types else "CE"
+
+    bands_list: list[str] = []
+    if strategy.premium_bands:
+        for b in strategy.premium_bands:
+            bands_list.append(f"{b.min_ltp:.2f}–{b.max_ltp:.2f}")
+
+    short_leg = next(
+        (
+            leg_item
+            for leg_item in strategy.legs
+            if str(leg_item.side).upper() in ("SELL", "ORDERSIDE.SELL")
+        ),
+        None,
+    )
+    short_desc = None
+    if short_leg:
+        opt_t = short_leg.contract_type or (
+            short_leg.contract_selector.option_type if short_leg.contract_selector else "CE"
+        )
+        short_desc = f"SELL {short_leg.lots} dynamically selected {opt_t}"
+
+    hedge_leg = next(
+        (
+            leg_item
+            for leg_item in strategy.legs
+            if str(leg_item.side).upper() in ("BUY", "ORDERSIDE.BUY")
+        ),
+        None,
+    )
+    hedge_desc = None
+    if hedge_leg:
+        opt_t = hedge_leg.contract_type or (
+            hedge_leg.contract_selector.option_type if hedge_leg.contract_selector else "CE"
+        )
+        tgt = (
+            hedge_leg.contract_selector.target_ltp
+            if hedge_leg.contract_selector and hedge_leg.contract_selector.target_ltp is not None
+            else 5.0
+        )
+        hedge_desc = (
+            f"BUY {hedge_leg.lots} dynamically selected {opt_t}\n"
+            f"  Target premium: configurable around ₹{tgt:.0f}"
+        )
+
+    has_ts = any(leg_item.trailing_stop is not None for leg_item in strategy.legs)
+    trailing_desc = "contract-specific premium ratchet" if has_ts else None
+
     if chain_available and is_intraday_data:
         return OptionsReplayReadiness(
             status=OptionsReplayStatus.REPLAYABLE,
@@ -200,6 +256,12 @@ def check_options_replay_readiness(
             selection_policy="CLOSEST_PREMIUM with deterministic tie-breaker",
             data_source_requirement="Intraday option-chain feed with point-in-time quotes",
             reason="Intraday option-chain feed is available with genuine timestamps and contract identities.",
+            underlying=strategy.underlying,
+            option_type=option_type_str,
+            premium_bands=bands_list,
+            short_summary=short_desc,
+            hedge_summary=hedge_desc,
+            trailing_summary=trailing_desc,
         )
 
     if chain_available and not is_intraday_data:
@@ -214,6 +276,12 @@ def check_options_replay_readiness(
                 "Strategy is structurally valid with dynamic selectors, but provided market data is a daily EOD "
                 "derivative quote archive lacking intraday bar/tick granularity for continuous execution."
             ),
+            underlying=strategy.underlying,
+            option_type=option_type_str,
+            premium_bands=bands_list,
+            short_summary=short_desc,
+            hedge_summary=hedge_desc,
+            trailing_summary=trailing_desc,
         )
 
     return OptionsReplayReadiness(
@@ -227,4 +295,10 @@ def check_options_replay_readiness(
             "Strategy structure and selectors are valid, but no active option-chain feed is currently attached. "
             "Replay requires a point-in-time option chain provider."
         ),
+        underlying=strategy.underlying,
+        option_type=option_type_str,
+        premium_bands=bands_list,
+        short_summary=short_desc,
+        hedge_summary=hedge_desc,
+        trailing_summary=trailing_desc,
     )

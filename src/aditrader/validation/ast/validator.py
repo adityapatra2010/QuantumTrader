@@ -394,6 +394,40 @@ class ASTValidator:
                             observed_value=sel.target_ltp,
                         )
                     )
+                if sel.min_ltp is not None and sel.min_ltp <= 0.0:
+                    gate_results.append(
+                        ValidationGateResult(
+                            gate_name=f"{leg_ctx}.SELECTOR_MIN_LTP_INVALID",
+                            passed=False,
+                            severity=GateSeverity.HARD_FLOOR,
+                            detail=f"Min LTP ({sel.min_ltp}) must be strictly positive.",
+                            observed_value=sel.min_ltp,
+                        )
+                    )
+                if sel.max_ltp is not None and sel.max_ltp <= 0.0:
+                    gate_results.append(
+                        ValidationGateResult(
+                            gate_name=f"{leg_ctx}.SELECTOR_MAX_LTP_INVALID",
+                            passed=False,
+                            severity=GateSeverity.HARD_FLOOR,
+                            detail=f"Max LTP ({sel.max_ltp}) must be strictly positive.",
+                            observed_value=sel.max_ltp,
+                        )
+                    )
+                if (
+                    sel.min_ltp is not None
+                    and sel.max_ltp is not None
+                    and sel.min_ltp > sel.max_ltp
+                ):
+                    gate_results.append(
+                        ValidationGateResult(
+                            gate_name=f"{leg_ctx}.SELECTOR_BAND_INVERTED",
+                            passed=False,
+                            severity=GateSeverity.HARD_FLOOR,
+                            detail=f"Min LTP ({sel.min_ltp}) cannot exceed max LTP ({sel.max_ltp}).",
+                            observed_value={"min": sel.min_ltp, "max": sel.max_ltp},
+                        )
+                    )
                 if sel.tolerance < 0.0:
                     gate_results.append(
                         ValidationGateResult(
@@ -443,7 +477,12 @@ class ASTValidator:
             if leg.strike_offset is not None:
                 leg_spec_key: Any = leg.strike_offset
             elif leg.contract_selector is not None:
-                leg_spec_key = (leg.contract_selector.type.value, leg.contract_selector.target_ltp)
+                leg_spec_key = (
+                    leg.contract_selector.type.value,
+                    leg.contract_selector.target_ltp,
+                    leg.contract_selector.min_ltp,
+                    leg.contract_selector.max_ltp,
+                )
             else:
                 leg_spec_key = "unspecified"
 
