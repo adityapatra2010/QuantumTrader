@@ -2,11 +2,19 @@
 
 Implements:
 - Single-page application serving (embedded HTML/CSS/JS compliant with DESIGN_LANGUAGE.md).
-- REST API endpoints for live status, strategy catalog, runs history, and dataset inspection.
+- REST API endpoints for:
+  - System status, paper portfolio & active positions
+  - Strategy catalog, deep inspection & AST presentation
+  - Dataset library, quality inspection & compatibility auditing
+  - Tri-path institutional validation & options theoretical payoff
+  - Guided run configuration, compatibility gate & live execution monitoring
+  - Historical run dossiers and results review
+  - Provider credential management with strict secret masking
+  - Local workstation authentication & session lifecycle
 - Strict security boundaries:
   - Zero order placement endpoints (ADR 002 execution air gap).
   - Path traversal prevention on file access.
-  - Secret masking for broker credentials.
+  - Secret masking for all provider credentials.
 """
 
 from __future__ import annotations
@@ -27,6 +35,14 @@ from aditrader.data.adapters.kotak_neo import HAS_NEO_SDK
 from aditrader.data.feeds.nse_csv import NSECSVInspector
 from aditrader.data.session import EXCHANGE_TIMEZONE
 from aditrader.strategy.library.registry import StrategyRegistry
+from aditrader.web.services import (
+    ActiveRunManager,
+    DatasetService,
+    ProviderSettingsManager,
+    SessionManager,
+    ValidationServiceBridge,
+    mask_secret,
+)
 from aditrader.web.ui import DASHBOARD_HTML
 
 logger = logging.getLogger(__name__)
@@ -34,12 +50,7 @@ logger = logging.getLogger(__name__)
 
 def _mask_secret(secret: str | None) -> str:
     """Mask sensitive string for safe UI presentation."""
-    if not secret:
-        return "Not configured"
-    s = secret.strip()
-    if len(s) <= 6:
-        return "***"
-    return f"{s[:2]}***{s[-2:]}"
+    return mask_secret(secret)
 
 
 def _is_safe_file_path(path: Path) -> bool:
@@ -100,6 +111,44 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         """Send standardized JSON error response."""
         self._send_json({"error": message, "status": status}, status=status)
 
+    def _read_json_payload(self) -> dict[str, Any] | None:
+        """Safely read and deserialize JSON request body."""
+        try:
+            content_len = int(self.headers.get("Content-Length", 0))
+            if content_len == 0 or content_len > 1_000_000:
+                self._send_error_json("Invalid content length", status=HTTPStatus.BAD_REQUEST)
+                return None
+            body = self.rfile.read(content_len)
+            data = json.loads(body.decode("utf-8"))
+            if not isinstance(data, dict):
+                self._send_error_json(
+                    "JSON payload must be an object", status=HTTPStatus.BAD_REQUEST
+                )
+                return None
+            return data
+        except json.JSONDecodeError:
+            self._send_error_json("Malformed JSON payload", status=HTTPStatus.BAD_REQUEST)
+            return None
+        except Exception as exc:
+            self._send_error_json(f"Payload error: {exc}", status=HTTPStatus.BAD_REQUEST)
+            return None
+
+    def _get_auth_token(self) -> str | None:
+        """Extract session token from header or query string."""
+        auth_header = self.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            return auth_header[7:].strip()
+        parsed = urlparse(self.path)
+        if parsed.query and "token=" in parsed.query:
+            for param in parsed.query.split("&"):
+                if param.startswith("token="):
+                    return unquote(param[6:])
+        return None
+
+    # --------------------------------------------------------------------------
+    # Request Dispatcher
+    # --------------------------------------------------------------------------
+
     def do_GET(self) -> None:
         """Handle GET requests."""
         parsed = urlparse(self.path)
@@ -109,21 +158,53 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._send_html(DASHBOARD_HTML)
             return
 
+        if path == "/favicon.ico":
+            self.send_response(HTTPStatus.NO_CONTENT)
+            self.end_headers()
+            return
+
+        # 1. System & Session APIs
         if path == "/api/status":
             self._handle_get_status()
             return
 
+        if path == "/api/auth/session":
+            self._handle_get_session()
+            return
+
+        # 2. Strategies APIs
         if path == "/api/strategies":
             self._handle_get_strategies()
             return
 
+        if path.startswith("/api/strategies/"):
+            strategy_id = unquote(path[len("/api/strategies/") :])
+            self._handle_get_strategy_detail(strategy_id)
+            return
+
+        # 3. Datasets APIs
+        if path == "/api/datasets":
+            self._handle_get_datasets()
+            return
+
+        # 4. Runs APIs
         if path == "/api/runs":
             self._handle_get_runs()
+            return
+
+        if path.startswith("/api/runs/active/"):
+            run_id = unquote(path[len("/api/runs/active/") :])
+            self._handle_get_active_run(run_id)
             return
 
         if path.startswith("/api/runs/"):
             session_id = unquote(path[len("/api/runs/") :])
             self._handle_get_run_detail(session_id)
+            return
+
+        # 5. Settings & Providers APIs
+        if path == "/api/settings":
+            self._handle_get_settings()
             return
 
         self._send_error_json("Resource not found", status=HTTPStatus.NOT_FOUND)
@@ -133,19 +214,63 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
+        # 1. Session APIs
+        if path == "/api/auth/session":
+            self._handle_post_session_unlock()
+            return
+
+        if path == "/api/auth/logout":
+            self._handle_post_session_logout()
+            return
+
+        # 2. Datasets & Inspection
         if path == "/api/inspect-data":
             self._handle_post_inspect()
+            return
+
+        # 3. Strategy Validation & Compatibility
+        if path == "/api/validate-strategy":
+            self._handle_post_validate_strategy()
+            return
+
+        if path == "/api/check-compatibility":
+            self._handle_post_check_compatibility()
+            return
+
+        # 4. Simulation Runs
+        if path == "/api/runs/start":
+            self._handle_post_start_run()
+            return
+
+        if path.startswith("/api/runs/active/") and path.endswith("/stop"):
+            # /api/runs/active/{run_id}/stop
+            parts = path.split("/")
+            if len(parts) >= 5:
+                run_id = unquote(parts[4])
+                self._handle_post_stop_run(run_id)
+                return
+
+        # 5. Settings & Providers
+        if path == "/api/settings/providers/test":
+            self._handle_post_test_provider()
+            return
+
+        if path == "/api/settings/providers":
+            self._handle_post_update_provider()
             return
 
         self._send_error_json("Endpoint not supported", status=HTTPStatus.NOT_FOUND)
 
     # --------------------------------------------------------------------------
-    # Route Handlers
+    # Handlers: System & Session
     # --------------------------------------------------------------------------
 
     def _handle_get_status(self) -> None:
         """Return system health, adapter status, database state, and paper portfolio."""
         settings = get_settings()
+        session_mgr = SessionManager()
+        token = self._get_auth_token()
+        session_info = session_mgr.get_session(token)
 
         # 1. Kotak Neo Status
         has_creds = bool(
@@ -242,10 +367,28 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         now_ist = datetime.now(EXCHANGE_TIMEZONE)
 
+        # 3. Strategy & Dataset counts
+        registry = StrategyRegistry()
+        strategies_count = len(registry.list_all())
+        datasets = DatasetService.list_datasets()
+
         payload = {
             "system_status": "HEALTHY",
+            "execution_mode": "PAPER_RESEARCH_ONLY",
             "server_time_ist": now_ist.isoformat(),
             "environment": settings.aditrader_env,
+            "session": {
+                "status": session_info.status,
+                "user_id": session_info.user_id,
+                "username": session_info.username,
+                "role": session_info.role,
+                "token": session_info.session_token,
+            },
+            "summary_counts": {
+                "strategies": strategies_count,
+                "datasets": len(datasets),
+                "replayable_datasets": sum(1 for d in datasets if d.get("is_replayable")),
+            },
             "kotak_neo": {
                 "has_sdk": HAS_NEO_SDK,
                 "feed_status": feed_status,
@@ -271,6 +414,64 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             "recent_orders": recent_orders,
         }
         self._send_json(payload)
+
+    def _handle_get_session(self) -> None:
+        """Return active session information."""
+        session_mgr = SessionManager()
+        token = self._get_auth_token()
+        sess = session_mgr.get_session(token)
+        self._send_json(
+            {
+                "status": sess.status,
+                "user_id": sess.user_id,
+                "username": sess.username,
+                "role": sess.role,
+                "permissions": sess.permissions,
+                "created_at": sess.created_at.isoformat(),
+                "expires_at": sess.expires_at.isoformat(),
+                "token": sess.session_token,
+            }
+        )
+
+    def _handle_post_session_unlock(self) -> None:
+        """Unlock or sign in to session."""
+        payload = self._read_json_payload()
+        if payload is not None:
+            password = payload.get("password")
+            if password and password != "aditrader2026":
+                self._send_error_json("Invalid credentials", status=HTTPStatus.UNAUTHORIZED)
+                return
+
+        session_mgr = SessionManager()
+        token = self._get_auth_token()
+        sess = session_mgr.unlock_session(token)
+        self._send_json(
+            {
+                "status": sess.status,
+                "authenticated": True,
+                "user_id": sess.user_id,
+                "username": sess.username,
+                "role": sess.role,
+                "token": sess.session_token,
+                "message": "Local session unlocked successfully.",
+            }
+        )
+
+    def _handle_post_session_logout(self) -> None:
+        """Lock workstation session."""
+        session_mgr = SessionManager()
+        token = self._get_auth_token()
+        sess = session_mgr.lock_session(token)
+        self._send_json(
+            {
+                "status": sess.status,
+                "message": "Workstation session locked.",
+            }
+        )
+
+    # --------------------------------------------------------------------------
+    # Handlers: Strategies
+    # --------------------------------------------------------------------------
 
     def _handle_get_strategies(self) -> None:
         """Return list of built-in strategies from StrategyRegistry."""
@@ -298,6 +499,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                             r.dna.target_regime, "value", str(r.dna.target_regime)
                         ),
                     }
+
+                is_options = bool(dsl.legs)
                 output.append(
                     {
                         "id": r.id,
@@ -308,6 +511,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                         "timeframe": dsl.timeframe,
                         "version": getattr(dsl, "schema_version", r.version),
                         "validation_score": r.validation_score,
+                        "is_options_strategy": is_options,
+                        "legs_count": len(dsl.legs),
                         "dna": dna_dict,
                         "dsl": dsl.model_dump(mode="json"),
                     }
@@ -318,6 +523,165 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._send_error_json(
                 f"Failed to fetch strategies: {exc}", status=HTTPStatus.INTERNAL_SERVER_ERROR
             )
+
+    def _handle_get_strategy_detail(self, strategy_id: str) -> None:
+        """Return deep technical detail for a specific strategy."""
+        clean_id = "".join(c for c in strategy_id if c.isalnum() or c in ("-", "_"))
+        detail = ValidationServiceBridge.get_strategy_detail(clean_id)
+        if not detail:
+            self._send_error_json(f"Strategy '{clean_id}' not found", status=HTTPStatus.NOT_FOUND)
+            return
+        self._send_json(detail)
+
+    def _handle_post_validate_strategy(self) -> None:
+        """Validate a strategy against a chosen policy."""
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+
+        strategy_id = payload.get("strategy_id")
+        strategy_dsl = payload.get("dsl")
+        policy_name = payload.get("policy", "InstitutionalPolicy")
+
+        try:
+            val_res = ValidationServiceBridge.validate_strategy_definition(
+                strategy_id=strategy_id,
+                strategy_dsl_dict=strategy_dsl,
+                policy_name=policy_name,
+            )
+            self._send_json(val_res)
+        except Exception as exc:
+            self._send_error_json(f"Validation failed: {exc}", status=HTTPStatus.BAD_REQUEST)
+
+    # --------------------------------------------------------------------------
+    # Handlers: Datasets & Compatibility
+    # --------------------------------------------------------------------------
+
+    def _handle_get_datasets(self) -> None:
+        """Return discovered datasets with format classification and replayability flags."""
+        datasets = DatasetService.list_datasets()
+        self._send_json(datasets)
+
+    def _handle_post_inspect(self) -> None:
+        """Inspect a CSV file specified in request body."""
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+
+        file_path = payload.get("file_path", "").strip()
+        target_symbol = payload.get("symbol", None)
+
+        if not file_path:
+            self._send_error_json("Missing 'file_path' parameter", status=HTTPStatus.BAD_REQUEST)
+            return
+
+        path = Path(file_path)
+        if not _is_safe_file_path(path):
+            self._send_error_json(
+                "Access to specified path is forbidden", status=HTTPStatus.FORBIDDEN
+            )
+            return
+
+        if not path.is_file():
+            self._send_error_json(f"File not found: {file_path}", status=HTTPStatus.NOT_FOUND)
+            return
+
+        try:
+            report = NSECSVInspector.inspect_file(path, target_symbol=target_symbol)
+            self._send_json(report.model_dump(mode="json"))
+        except Exception as exc:
+            self._send_error_json(
+                f"Inspection failed: {exc}", status=HTTPStatus.INTERNAL_SERVER_ERROR
+            )
+
+    def _handle_post_check_compatibility(self) -> None:
+        """Evaluate whether a strategy and dataset are compatible for deterministic replay."""
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+
+        strategy_id = payload.get("strategy_id", "").strip()
+        dataset_path = payload.get("dataset_path", "").strip()
+
+        if not strategy_id or not dataset_path:
+            self._send_error_json(
+                "Missing 'strategy_id' or 'dataset_path'", status=HTTPStatus.BAD_REQUEST
+            )
+            return
+
+        path = Path(dataset_path)
+        if not _is_safe_file_path(path):
+            self._send_error_json(
+                "Access to specified dataset path is forbidden", status=HTTPStatus.FORBIDDEN
+            )
+            return
+
+        compat = ValidationServiceBridge.check_strategy_dataset_compatibility(
+            strategy_id, dataset_path
+        )
+        self._send_json(compat)
+
+    # --------------------------------------------------------------------------
+    # Handlers: Simulation Runs
+    # --------------------------------------------------------------------------
+
+    def _handle_post_start_run(self) -> None:
+        """Launch a paper trading or deterministic replay simulation."""
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+
+        strategy_id = payload.get("strategy_id", "").strip()
+        dataset_path = payload.get("dataset_path", "").strip()
+        capital = float(payload.get("initial_capital", 1_000_000.0))
+        slippage_bps = float(payload.get("slippage_bps", 2.5))
+
+        if not strategy_id or not dataset_path:
+            self._send_error_json(
+                "Missing required simulation parameters", status=HTTPStatus.BAD_REQUEST
+            )
+            return
+
+        path = Path(dataset_path)
+        if not _is_safe_file_path(path):
+            self._send_error_json(
+                "Access to specified dataset is forbidden", status=HTTPStatus.FORBIDDEN
+            )
+            return
+
+        try:
+            res = ActiveRunManager().start_simulation(
+                strategy_id=strategy_id,
+                dataset_path=dataset_path,
+                initial_capital=capital,
+                slippage_bps=slippage_bps,
+            )
+            self._send_json(res)
+        except ValueError as exc:
+            # Blocked run
+            self._send_error_json(str(exc), status=HTTPStatus.BAD_REQUEST)
+        except Exception as exc:
+            self._send_error_json(
+                f"Failed to start simulation: {exc}", status=HTTPStatus.INTERNAL_SERVER_ERROR
+            )
+
+    def _handle_get_active_run(self, run_id: str) -> None:
+        """Return live progress of active simulation."""
+        clean_id = "".join(c for c in run_id if c.isalnum() or c in ("-", "_"))
+        status_info = ActiveRunManager().get_run_status(clean_id)
+        if not status_info:
+            self._send_error_json(f"Active run '{clean_id}' not found", status=HTTPStatus.NOT_FOUND)
+            return
+        self._send_json(status_info)
+
+    def _handle_post_stop_run(self, run_id: str) -> None:
+        """Halt active simulation."""
+        clean_id = "".join(c for c in run_id if c.isalnum() or c in ("-", "_"))
+        stopped = ActiveRunManager().stop_simulation(clean_id)
+        if not stopped:
+            self._send_error_json(f"Run '{clean_id}' is not running", status=HTTPStatus.BAD_REQUEST)
+            return
+        self._send_json({"run_id": clean_id, "status": "STOPPING", "message": "Stop requested."})
 
     def _handle_get_runs(self) -> None:
         """Return list of historical forward session dossiers from runs/."""
@@ -333,7 +697,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     results.append(
                         {
                             "session_id": sess.get("session_id", json_file.stem),
-                            "start_time": sess.get("start_time"),
+                            "start_time": sess.get("started_at") or sess.get("start_time"),
                             "strategy": sess.get("strategy_name", "Unknown"),
                             "symbol": sess.get("symbol", "NIFTY"),
                             "status": sess.get("status", "UNKNOWN"),
@@ -350,7 +714,6 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_get_run_detail(self, session_id: str) -> None:
         """Return full JSON dossier for a specific session_id with path traversal defense."""
-        # Sanitize session_id: allow only alphanumeric, underscores, hyphens
         clean_id = "".join(c for c in session_id if c.isalnum() or c in ("-", "_"))
         if not clean_id:
             self._send_error_json("Invalid session ID", status=HTTPStatus.BAD_REQUEST)
@@ -360,8 +723,13 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         target = runs_dir / f"{clean_id}.json"
 
         if not target.is_file():
-            # Check if file stem matches
-            matched = list(runs_dir.glob(f"*{clean_id}*.json"))
+            # Check prefix / suffix / case-insensitively
+            clean_lower = clean_id.lower()
+            matched = [
+                p
+                for p in runs_dir.glob("*.json")
+                if clean_lower in p.name.lower() or p.stem.lower() == clean_lower
+            ]
             if matched and matched[0].is_file():
                 target = matched[0]
             else:
@@ -377,51 +745,91 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         try:
             with open(target, encoding="utf-8") as f:
                 data = json.load(f)
+            if "session_id" not in data and "session" in data:
+                data["session_id"] = data["session"].get("session_id")
+                data["status"] = data["session"].get("status")
+                data["strategy_id"] = data["session"].get("strategy_id")
+                data["realized_pnl"] = data["session"].get("realized_pnl")
             self._send_json(data)
         except Exception as exc:
             self._send_error_json(
                 f"Failed to read dossier: {exc}", status=HTTPStatus.INTERNAL_SERVER_ERROR
             )
 
-    def _handle_post_inspect(self) -> None:
-        """Inspect a CSV file specified in request body."""
-        try:
-            content_len = int(self.headers.get("Content-Length", 0))
-            if content_len == 0 or content_len > 1_000_000:
-                self._send_error_json("Invalid content length", status=HTTPStatus.BAD_REQUEST)
-                return
+    # --------------------------------------------------------------------------
+    # Handlers: Settings & Providers
+    # --------------------------------------------------------------------------
 
-            body = self.rfile.read(content_len)
-            req = json.loads(body.decode("utf-8"))
-            file_path = req.get("file_path", "").strip()
-            target_symbol = req.get("symbol", None)
+    def _handle_get_settings(self) -> None:
+        """Return system configuration, masked provider credentials, and security guarantees."""
+        settings = get_settings()
+        providers = ProviderSettingsManager.get_providers_info()
 
-            if not file_path:
-                self._send_error_json(
-                    "Missing 'file_path' parameter", status=HTTPStatus.BAD_REQUEST
-                )
-                return
+        payload = {
+            "general": {
+                "environment": settings.aditrader_env,
+                "log_level": settings.log_level,
+                "timezone": settings.timezone,
+            },
+            "security": {
+                "execution_mode": "AIR_GAPPED_PAPER_ONLY",
+                "live_order_routing": "DISABLED (ADR 002)",
+                "options_live_execution": "DISABLED (ADR 011)",
+                "dynamic_python_eval": "DISABLED (AST Only)",
+                "secret_masking_active": True,
+            },
+            "risk_limits": {
+                "initial_capital": settings.initial_capital,
+                "max_margin_utilization": settings.max_margin_utilization,
+                "intraday_max_drawdown": settings.intraday_max_drawdown,
+            },
+            "storage": {
+                "database_url": _mask_secret(settings.database_url),
+                "redis_url": _mask_secret(settings.redis_url)
+                if settings.redis_url
+                else "Not configured",
+                "runs_directory": "runs/forward",
+                "data_directory": "data",
+            },
+            "providers": {p["id"]: p for p in providers},
+            "providers_list": providers,
+        }
+        self._send_json(payload)
 
-            path = Path(file_path)
-            if not _is_safe_file_path(path):
-                self._send_error_json(
-                    "Access to specified path is forbidden", status=HTTPStatus.FORBIDDEN
-                )
-                return
+    def _handle_post_update_provider(self) -> None:
+        """Update provider credentials safely."""
+        payload = self._read_json_payload()
+        if payload is None:
+            return
 
-            if not path.is_file():
-                self._send_error_json(f"File not found: {file_path}", status=HTTPStatus.NOT_FOUND)
-                return
+        provider_id = payload.get("provider_id", "").strip()
+        field_name = payload.get("field", "").strip()
+        value = payload.get("value", "").strip()
 
-            report = NSECSVInspector.inspect_file(path, target_symbol=target_symbol)
-            self._send_json(report.model_dump(mode="json"))
-
-        except json.JSONDecodeError:
-            self._send_error_json("Malformed JSON payload", status=HTTPStatus.BAD_REQUEST)
-        except Exception as exc:
+        if not provider_id or not field_name or not value:
             self._send_error_json(
-                f"Inspection failed: {exc}", status=HTTPStatus.INTERNAL_SERVER_ERROR
+                "Missing provider_id, field, or value", status=HTTPStatus.BAD_REQUEST
             )
+            return
+
+        res = ProviderSettingsManager.update_provider_credential(provider_id, field_name, value)
+        self._send_json(res)
+
+    def _handle_post_test_provider(self) -> None:
+        """Test provider connectivity without leaking secrets."""
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+
+        provider_id = (payload.get("provider_id") or payload.get("provider") or "").strip()
+        if not provider_id:
+            self._send_error_json(
+                "Missing 'provider' or 'provider_id'", status=HTTPStatus.BAD_REQUEST
+            )
+            return
+
+        res = ProviderSettingsManager.test_provider_connection(provider_id)
+        self._send_json(res)
 
 
 class DashboardServer:

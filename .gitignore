@@ -70,3 +70,6 @@ logs/
 
 # External skills directories
 .agents/skills/*/
+# Playwright CLI output (may contain credentials)
+.playwright-cli/
+node_modules/

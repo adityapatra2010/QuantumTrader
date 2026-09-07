@@ -1,21 +1,4 @@
-"""Embedded responsive HTML, CSS, and JS single-page interface for AdiTrader Web Dashboard.
-
-Strictly follows DESIGN_LANGUAGE.md:
-- Technical dark theme (#0E1117 background, #161B22 surface, #30363D border).
-- Color semantics (#2EA043 green, #DA3633 red, #58A6FF blue, #D29922 amber, #BC8CFF purple).
-- Typography (JetBrains Mono / monospace for numbers/tables; Inter / sans-serif for UI).
-- Touch-target accessibility (>= 44px) and responsive mobile viewport.
-- Strictly read-only research workstation (ADR 002 physical air-gap).
-"""
-
-from pathlib import Path
-
-_STATIC_INDEX = Path(__file__).parent / "static" / "index.html"
-
-if _STATIC_INDEX.is_file():
-    DASHBOARD_HTML = _STATIC_INDEX.read_text(encoding="utf-8")
-else:
-    DASHBOARD_HTML = r"""<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -1818,4 +1801,3 @@ else:
   </script>
 </body>
 </html>
-"""

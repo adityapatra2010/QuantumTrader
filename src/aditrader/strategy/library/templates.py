@@ -264,6 +264,53 @@ def create_nifty_ce_premium_ladder_dsl() -> StrategyDSL:
     )
 
 
+def create_nifty_intraday_trend_dsl() -> StrategyDSL:
+    """Construct Nifty Intraday Trend linear strategy declarative DSL."""
+    return StrategyDSL(
+        schema_version="1.0",
+        name="Nifty Intraday Trend",
+        underlying="NIFTY",
+        timeframe="1m",
+        entry_conditions=ConditionGroup(
+            operator=ASTOperator.AND,
+            conditions=[
+                ConditionNode(
+                    category=ConditionCategory.TIME,
+                    field="time_of_day",
+                    operator=ASTOperator.WITHIN_RANGE,
+                    range_min="09:15",
+                    range_max="15:00",
+                ),
+                ConditionNode(
+                    category=ConditionCategory.INDICATOR,
+                    indicator="RSI",
+                    indicator_params={"period": 14},
+                    operator=ASTOperator.GREATER_THAN,
+                    threshold=50.0,
+                ),
+            ],
+        ),
+        exit_conditions=ConditionGroup(
+            operator=ASTOperator.OR,
+            conditions=[
+                ConditionNode(
+                    category=ConditionCategory.TIME,
+                    field="time_of_day",
+                    operator=ASTOperator.GREATER_THAN,
+                    threshold="15:20",
+                ),
+            ],
+        ),
+        legs=[],
+        target_regime="Intraday Trend Following",
+        metadata={
+            "author": "AdiTrader Quantitative Engineering",
+            "tier": "Institutional",
+            "asset_class": "EQUITY/INDEX",
+        },
+    )
+
+
 def build_template_record(
     dsl: StrategyDSL,
     template_id: str,
@@ -291,6 +338,7 @@ def get_builtin_templates() -> dict[str, StrategyRecord]:
     long_straddle_dsl = create_nifty_long_straddle_dsl()
     bull_call_spread_dsl = create_nifty_bull_call_spread_dsl()
     nifty_ce_premium_ladder_dsl = create_nifty_ce_premium_ladder_dsl()
+    nifty_intraday_trend_dsl = create_nifty_intraday_trend_dsl()
 
     return {
         "iron_condor": build_template_record(
@@ -316,5 +364,11 @@ def get_builtin_templates() -> dict[str, StrategyRecord]:
             template_id="tpl-nifty-ce-premium-ladder-v1",
             version="1.0.0",
             validation_score=95.0,
+        ),
+        "nifty_intraday_trend": build_template_record(
+            nifty_intraday_trend_dsl,
+            template_id="tpl-nifty-intraday-trend-v1",
+            version="1.0.0",
+            validation_score=93.0,
         ),
     }

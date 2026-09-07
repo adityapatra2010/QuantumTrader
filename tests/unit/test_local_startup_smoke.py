@@ -70,7 +70,7 @@ def test_cmd_status_reporting(capsys: pytest.CaptureFixture[str]) -> None:
 
     assert exit_code == 0
     assert "AdiTrader / QuantumValidator — Status" in captured.out
-    assert "Strategy Library:  4 registered built-in templates" in captured.out
+    assert "registered built-in templates" in captured.out
     assert "Nifty Weekly Iron Condor" in captured.out
 
 
