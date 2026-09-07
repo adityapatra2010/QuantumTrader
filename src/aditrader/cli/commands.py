@@ -770,7 +770,7 @@ def cmd_inspect_strategy(args: argparse.Namespace) -> int:
         print(f"[ERROR] Strategy file not found: {file_path}")
         return 1
 
-    from aditrader.strategy.inspector import StrategyInspector
+    from aditrader.strategy.inspector import StrategyFormat, StrategyInspector
 
     print("=" * 68)
     print("      AdiTrader / QuantumValidator — Strategy Compatibility Inspector")
@@ -809,6 +809,56 @@ def cmd_inspect_strategy(args: argparse.Namespace) -> int:
     if report.unsupported_constructs:
         print(f"Unsupported Rules:  {', '.join(report.unsupported_constructs)}")
 
+    # 1. Semantic Mismatch Alert
+    if report.naming_behavior_mismatch:
+        print("-" * 68)
+        print("  [SEMANTIC MISMATCH DETECTED]")
+        print(f"  Title / Claim:     {report.strategy_name}")
+        if report.position_semantics:
+            print(f"  Actual Execution:  {report.position_semantics}")
+        if report.option_leg_semantics:
+            print(f"  Option Structure:  {report.option_leg_semantics}")
+        print(f"  Diagnostic Notice: {report.naming_behavior_mismatch}")
+
+    # 2. Custom P&L Arithmetic Audit
+    if report.custom_pnl_detected and report.custom_pnl_details:
+        print("-" * 68)
+        print("  [CUSTOM P&L ARITHMETIC AUDIT]")
+        pnl_d = report.custom_pnl_details
+        vars_str = ", ".join(pnl_d.get("variables", []))
+        print(f"  Formula Variables: {vars_str}")
+        if "payoff_model" in pnl_d:
+            print(f"  Payoff Model:      {pnl_d['payoff_model']}")
+        if pnl_d.get("target_profit_value") is not None:
+            print(f"  Target Profit:     ₹{pnl_d['target_profit_value']:,.2f}")
+        if pnl_d.get("max_loss_limit_value") is not None:
+            print(f"  Max Loss Limit:    ₹{pnl_d['max_loss_limit_value']:,.2f}")
+        if "pricing_connection" in pnl_d:
+            print(f"  Pricing Linkage:   {pnl_d['pricing_connection']}")
+        if "dsl_evaluation_limitation" in pnl_d:
+            print(f"  AST Limitation:    {pnl_d['dsl_evaluation_limitation']}")
+
+    # 3. Construct Discovery & Classification Matrix
+    if report.detected_constructs:
+        print("-" * 68)
+        print("  [CONSTRUCT DISCOVERY & CLASSIFICATION MATRIX]")
+        print(f"  {'Construct':<34} | {'Category':<12} | {'Fidelity':<13} | {'Translatable':<12}")
+        print(f"  {'-' * 34}-+-{'-' * 12}-+-{'-' * 13}-+-{'-' * 12}")
+        for c in report.detected_constructs:
+            trans_str = "YES" if c.translatable else "NO"
+            print(
+                f"  {c.name[:34]:<34} | {c.category:<12} | {c.fidelity.value:<13} | {trans_str:<12}"
+            )
+            if c.details:
+                print(f"    ↳ {c.details}")
+
+    # 4. PaperBroker Comparison Notes
+    if report.order_behavior_notes:
+        print("-" * 68)
+        print("  [PAPERBROKER VS PINE SIMULATION COMPARISON]")
+        for note in report.order_behavior_notes:
+            print(f"  • {note}")
+
     print("-" * 68)
     if report.has_lookahead_risk:
         print(
@@ -833,14 +883,11 @@ def cmd_inspect_strategy(args: argparse.Namespace) -> int:
         print("Quality Check:      CLEAN - Fully compatible with QuantumValidator AST.")
 
     print("=" * 68)
-    return (
-        0
-        if (
-            report.validation_ready
-            or report.translation_status.value in ("SUPPORTED", "TRANSLATABLE")
-        )
-        else 1
+    # Inspection succeeds (0) if format is recognized and no fatal lookahead bias
+    inspection_success = (
+        report.detected_format != StrategyFormat.UNKNOWN and not report.has_lookahead_risk
     )
+    return 0 if inspection_success else 1
 
 
 def cmd_forward_test(args: argparse.Namespace) -> int:

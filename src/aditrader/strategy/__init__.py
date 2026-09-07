@@ -16,6 +16,7 @@ from aditrader.strategy.compiler import (
     compile_strategy,
 )
 from aditrader.strategy.inspector import (
+    ConstructFidelity,
     FidelityLevel,
     StrategyFormat,
     StrategyFormatDetector,
@@ -47,6 +48,7 @@ __all__ = [
     "ConditionCategory",
     "ConditionGroup",
     "ConditionNode",
+    "ConstructFidelity",
     "DefaultASTEvaluator",
     "Directionality",
     "EvaluationContext",

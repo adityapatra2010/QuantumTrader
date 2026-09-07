@@ -79,6 +79,33 @@ class PineScriptTranslator(BaseStrategyTranslator):
                 "declarative JSON AST. Strategy must use vectorized indicator rules."
             )
 
+        # Check for procedural mutable state variables (var / varip with :=)
+        var_matches = list(
+            dict.fromkeys(
+                re.findall(
+                    r"\b(?:var|varip)\s+(?:float|int|bool|string|color)?\s*([a-zA-Z0-9_]+)\s*=",
+                    text,
+                )
+            )
+        )
+        has_var_assign = bool(re.search(r"([a-zA-Z0-9_]+)\s*:=", text))
+        if var_matches and has_var_assign:
+            self._raise_structured_failure(
+                text,
+                strategy_name=strategy_name,
+                pine_version=pine_version,
+                file_path=file_path,
+            )
+
+        # Check for synthetic custom P&L formulas
+        if re.search(r"\b(?:currentPL|priceDiff)\b", text):
+            self._raise_structured_failure(
+                text,
+                strategy_name=strategy_name,
+                pine_version=pine_version,
+                file_path=file_path,
+            )
+
         # ----------------------------------------------------------------------
         # 4. Extract Variables and Indicator Definitions
         # ----------------------------------------------------------------------
@@ -211,12 +238,32 @@ class PineScriptTranslator(BaseStrategyTranslator):
                 except ValueError:
                     entry_nodes.append(node)
 
+        # Look for time conditions: e.g. hour == 10 and minute == 0
+        m_time = re.search(r"\bhour\s*==\s*([0-9]+)\s+and\s+minute\s*==\s*([0-9]+)\b", text)
+        if not m_time:
+            m_time = re.search(r"\bminute\s*==\s*([0-9]+)\s+and\s+hour\s*==\s*([0-9]+)\b", text)
+            if m_time:
+                m_min, m_hr = m_time.groups()
+            else:
+                m_hr, m_min = None, None
+        else:
+            m_hr, m_min = m_time.groups()
+
+        if m_hr is not None and m_min is not None:
+            time_node = ConditionNode(
+                category=ConditionCategory.TIME,
+                field="time_of_day",
+                operator=ASTOperator.EQUALS,
+                threshold=f"{int(m_hr):02d}:{int(m_min):02d}",
+            )
+            entry_nodes.append(time_node)
+
         if not entry_nodes:
-            # Fallback: create default price envelope entry if standard patterns not matched
-            raise ValueError(
-                "Could not extract supported entry condition logic from Pine Script. "
-                "Supported patterns include ta.crossover, ta.crossunder, ta.sma/ema/rsi/atr, "
-                "and scalar threshold comparisons."
+            self._raise_structured_failure(
+                text=text,
+                strategy_name=strategy_name,
+                pine_version=pine_version,
+                file_path=file_path,
             )
 
         entry_group = ConditionGroup(operator=ASTOperator.AND, conditions=entry_nodes[:4])
@@ -338,3 +385,74 @@ class PineScriptTranslator(BaseStrategyTranslator):
             )
 
         return None
+
+    def _raise_structured_failure(
+        self,
+        text: str,
+        *,
+        strategy_name: str,
+        pine_version: str,
+        file_path: str | Path | None = None,
+    ) -> None:
+        """Raise a structured, actionable error when Pine Script cannot be translated into AST."""
+        blockers: list[str] = []
+
+        var_matches = list(
+            dict.fromkeys(
+                re.findall(
+                    r"\b(?:var|varip)\s+(?:float|int|bool|string|color)?\s*([a-zA-Z0-9_]+)\s*=",
+                    text,
+                )
+            )
+        )
+        has_var_assign = bool(re.search(r"([a-zA-Z0-9_]+)\s*:=", text))
+        if var_matches and has_var_assign:
+            blockers.append(
+                f"Mutable persistent state variables ({', '.join(var_matches[:5])}) mutated via ':=' "
+                "require procedural execution, barred by ADR 007 from declarative StrategyDSL AST."
+            )
+
+        if re.search(r"\b(?:currentPL|priceDiff)\b", text):
+            blockers.append(
+                "Synthetic custom P&L calculations ('currentPL', 'priceDiff') detected. "
+                "QuantumValidator calculates P&L strictly from actual market fills and order book execution "
+                "inside PaperBroker; synthetic algebraic payoff formulas cannot override ledger accounting."
+            )
+
+        m_opt = re.search(
+            r"(?i)\b(iron\s*fly|broken\s*wing|straddle|strangle|condor|butterfly|credit\s*spread|debit\s*spread)\b",
+            text,
+        )
+        if m_opt and re.search(r"\bstrategy\.entry\s*\([^,]+,\s*strategy\.(?:long|short)\b", text):
+            blockers.append(
+                f"Semantic mismatch: Strategy title/comments advertise an options structure ('{m_opt.group(1)}'), "
+                "but the script executes single underlying spot orders ('strategy.entry') without actual option contract legs. "
+                "Institutional option evaluation requires explicit multi-leg contract specifications (ADR 011)."
+            )
+
+        if re.search(r"\b(?:math\.round|math\.abs)\b", text) and not re.search(
+            r"(?:ta\.)?(?:sma|ema|rsi|atr|crossover)", text
+        ):
+            blockers.append(
+                "Dynamic procedural mathematical functions (math.round, math.abs) detected without standard indicator signals."
+            )
+
+        if not blockers:
+            blockers.append(
+                "Could not extract supported entry condition logic. "
+                "Supported patterns include ta.crossover, ta.crossunder, ta.sma/ema/rsi/atr, "
+                "scalar threshold comparisons, and exact time filters (hour == H and minute == M)."
+            )
+
+        msg_lines = [
+            f"Cannot translate Pine Script strategy '{strategy_name}' ({pine_version}) into declarative StrategyDSL AST:",
+        ]
+        for b in blockers:
+            msg_lines.append(f"  • [BLOCKER] {b}")
+
+        path_hint = f" '{file_path}'" if file_path else ""
+        msg_lines.append(
+            f"\nTo inspect the complete syntax and construct compatibility audit, run:\n"
+            f"  aditrader inspect-strategy{path_hint}"
+        )
+        raise ValueError("\n".join(msg_lines))

@@ -1,6 +1,7 @@
 """Pydantic data models for strategy discovery, inspection, and compatibility auditing."""
 
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -51,6 +52,24 @@ class FidelityLevel(StrEnum):
     EQUIVALENT = "EQUIVALENT"
     APPROXIMATED = "APPROXIMATED"
     UNSUPPORTED = "UNSUPPORTED"
+    VISUAL_ONLY = "VISUAL_ONLY"
+
+
+class ConstructFidelity(BaseModel):
+    """Classification of an individual script construct and its semantic mapping."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str = Field(..., description="Construct or feature name")
+    category: str = Field(
+        ...,
+        description="Construct category (e.g. entry, exit, timing, state, calculation, visual, directive)",
+    )
+    fidelity: FidelityLevel = Field(..., description="Fidelity level classification")
+    details: str = Field(..., description="Explanation of mapping, approximation, or limitation")
+    translatable: bool = Field(
+        default=False, description="Whether construct is directly translatable to StrategyDSL"
+    )
 
 
 class StrategyInspectionReport(BaseModel):
@@ -111,4 +130,49 @@ class StrategyInspectionReport(BaseModel):
     )
     warnings: list[str] = Field(
         default_factory=list, description="Diagnostic warnings found during inspection"
+    )
+
+    # Detailed semantic diagnostics
+    detected_constructs: list[ConstructFidelity] = Field(
+        default_factory=list, description="Granular construct classifications"
+    )
+    entry_mechanisms: list[str] = Field(
+        default_factory=list, description="Order entry triggers and mechanisms"
+    )
+    exit_mechanisms: list[str] = Field(
+        default_factory=list, description="Order exit triggers and mechanisms"
+    )
+    persistent_state_vars: list[str] = Field(
+        default_factory=list, description="Detected mutable persistent state variables (var/varip)"
+    )
+    time_conditions: list[str] = Field(
+        default_factory=list, description="Detected time or session conditions"
+    )
+    indicators_used: list[str] = Field(
+        default_factory=list, description="Technical indicators referenced in code"
+    )
+    custom_calculations: list[str] = Field(
+        default_factory=list,
+        description="Detected custom arithmetic formulas or synthetic calculations",
+    )
+    position_semantics: str | None = Field(
+        default=None, description="Actual order position semantics (e.g. Long underlying)"
+    )
+    option_leg_semantics: str | None = Field(
+        default=None, description="Option-leg structure analysis (actual vs simulated)"
+    )
+    naming_behavior_mismatch: str | None = Field(
+        default=None, description="Discrepancy between title/naming and actual executed code"
+    )
+    custom_pnl_detected: bool = Field(
+        default=False, description="True if script calculates synthetic arithmetic P&L"
+    )
+    custom_pnl_details: dict[str, Any] | None = Field(
+        default=None, description="Detailed diagnostic breakdown of custom P&L calculation"
+    )
+    order_behavior_notes: list[str] = Field(
+        default_factory=list, description="Semantic differences vs PaperBroker execution"
+    )
+    visual_only_constructs: list[str] = Field(
+        default_factory=list, description="Detected visualization directives (plot, fill, etc.)"
     )
