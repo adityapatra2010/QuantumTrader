@@ -1,223 +1,252 @@
 # QuantumValidator / AdiTrader
 
-**Institutional-Grade Paper-Trading & Quantitative Research Platform for Indian Equity & Derivatives Markets**
+**Institutional-Grade Paper-Trading & Quantitative Research Operating System for Indian Equity & Derivatives Markets**
 
 ---
 
 ## System Overview
 
-QuantumValidator (AdiTrader) is a decoupled, mathematically rigorous quantitative research and simulation operating system designed for National Stock Exchange of India (NSE) cash equities and F&O derivatives.
+QuantumValidator (AdiTrader) is a modular, mathematically rigorous quantitative research and paper-trading platform purpose-built for the National Stock Exchange of India (NSE) cash equities and F&O derivatives.
 
-The platform guarantees institutional simulation integrity, strict anti-lookahead historical backtesting, theoretical payoff modeling for non-linear option structures, an AST-compiled declarative strategy DSL, and comprehensive pre-trade risk controls.
-
----
-
-## Architectural & Security Invariants
-
-1. **Strict Air-Gapped Paper Execution (ADR 002)**: Broker adapters (`data/adapters/`) are strictly read-only for market data ingestion and scrip master discovery. Order routing methods are permanently barred; all order state transitions and fills occur inside `core.PaperBroker`.
-2. **Deterministic Anti-Lookahead Backtesting**: Historical bar replays enforce zero lookahead bias. Signals generated at Bar $T$ close are executed at Bar $T+1$ open with realistic friction and volume participation limits.
-3. **Options Simulation Air-Gap (ADR 011)**: Multi-leg option strategies cannot be proxied onto underlying spot candles. Linear assets are validated statistically via historical backtests; multi-leg options are validated theoretically via Black-Scholes Greeks, payoff curves, and margin/wing risk models.
-4. **Declarative AST Compilation (ADR 001, ADR 007)**: Strategies are compiled from version-controlled JSON AST trees into stateless state machines. Dynamic code evaluation (`eval()`, `exec()`) is prohibited.
-5. **Advisory AI Isolation (ADR 005, ADR 012)**: All AI subsystems (Gemini Vision, OCR, OpenRouter) remain purely advisory with complete provenance tracking and cannot place trades or alter validation verdicts.
+The platform guarantees institutional simulation integrity, strict anti-lookahead point-in-time historical replay, theoretical Black-Scholes Greek modeling for non-linear option structures, an AST-compiled declarative JSON strategy DSL, comprehensive pre-trade risk gates, multi-format NSE CSV ingestion with quality inspection, and a responsive web research workstation adhering to the institutional dark design system.
 
 ---
 
-## Run QuantumValidator Locally
+## Architectural & Security Invariants ("Never" Rules)
 
-Follow this step-by-step workflow to install, verify, and run QuantumValidator from a fresh clone.
+1. **Strict Air-Gapped Paper Execution (ADR 002)**: Real live broker order routing is physically impossible. Broker adapters (`data/adapters/`) are strictly read-only for market data ingestion and scrip discovery. All order state transitions, margin calculations, and fills occur strictly inside `core.PaperBroker`.
+2. **Deterministic Anti-Lookahead Causality**: Historical bar and tick replays strictly enforce $exec\_ts \ge bar.timestamp$. Orders triggered by closed bar $T$ are executed at the prevailing market tick with verified causal timestamps.
+3. **No Synthetic Quote Fabrication**: When replaying historical bar datasets or streaming depth-less quotes, the system records `bid=None` and `ask=None`. Missing market depth is never disguised with artificial bid/ask spreads.
+4. **Options Simulation Air-Gap (ADR 011, ADR 013)**: Multi-leg options strategies cannot be simulated on linear spot bars without a dedicated option chain execution engine. Forward-testing multi-leg options strategies fails fast with `UnsupportedStrategyError`. Linear strategies are validated statistically via historical backtests; options strategies are evaluated theoretically via Black-Scholes Greeks, payoff curves, and margin/wing risk models.
+5. **Declarative AST Compilation (ADR 001, ADR 007)**: Dynamic Python execution (`eval()`, `exec()`) is prohibited. All strategy logic is defined as versioned JSON AST trees with registered, statically compiled condition evaluators.
+6. **Purely Advisory AI Isolation (ADR 005, ADR 012)**: All AI subsystems (Gemini Vision, OCR, OpenRouter) remain advisory with cryptographic input hash provenance (`SHA-256`) and cannot route orders or override validation verdicts.
 
-### 1. Prerequisites & Environment Activation
+---
 
-QuantumValidator requires **Python 3.11+** on Linux (or macOS/WSL2).
+## 60-Second Quickstart
 
 ```bash
-# Clone repository
+# 1. Clone the repository and enter the directory
 git clone https://github.com/adityaxd/aditrader.git
 cd aditrader
 
-# Create virtual environment with Python 3.11+
+# 2. Create and activate Python virtual environment (Python 3.11+)
 python3 -m venv .venv
-
-# Activate virtual environment
 source .venv/bin/activate
 
-# Upgrade pip and install package with development dependencies
+# 3. Install package with development dependencies
 pip install --upgrade pip
 pip install -e ".[dev]"
-```
 
-### 2. Configure Environment Variables
-
-Create your local `.env` file from the provided safe template:
-
-```bash
+# 4. Create local environment configuration from template
 cp .env.example .env
-```
 
-* **Offline Development**: The default values in `.env` are preconfigured for local offline simulation with SQLite (`runs/aditrader.db`), local Parquet caching (`data/cache/`), and synthetic/mock market data feeds. No external credentials are required to start or backtest.
-* **Optional Live Feeds**: To connect to live Kotak Neo market data streams, populate `KOTAK_CONSUMER_KEY`, `KOTAK_CONSUMER_SECRET`, `KOTAK_MOBILE_NUMBER`, and `KOTAK_PASSWORD`.
-* **Optional AI Providers**: To enable vision or OCR advisory parsing, add `GEMINI_API_KEY`, `OCRSPACE_API_KEY`, or `OPENROUTER_API_KEY`.
-* **Security Rule**: Never commit `.env` or credential tokens into source control.
-
-### 3. Initialize the Local Database
-
-Initialize the local transactional SQLite ledger tables:
-
-```bash
+# 5. Initialize the local SQLite transactional ledger
 aditrader init-db
-```
-*Or apply database migrations via Alembic:*
-```bash
-alembic upgrade head
-```
 
-This creates the local database file at `runs/aditrader.db` with WAL mode enabled (ADR 008) and schemas for `orders`, `positions`, `trades`, and `account_balance`.
-
-### 4. Verify System Readiness (Doctor)
-
-Run the built-in diagnostic tool to verify runtime dependencies, database connectivity, directory permissions, and configuration:
-
-```bash
+# 6. Verify environment health with Doctor
 aditrader doctor
-# or: quantumvalidator doctor
-```
-
-A healthy installation will output:
-```
-====================================================================
-      AdiTrader / QuantumValidator — System Diagnostics (Doctor)
-====================================================================
-[READY]            Python Runtime: 3.11.x (linux)
-[READY]            Core Dependencies: All installed (pydantic, sqlalchemy, alembic, pyarrow, polars)
-[READY]            Storage Directories: Writable (runs, data/cache)
-[READY]            Configuration: Valid (env: development, tz: Asia/Kolkata)
-[READY]            Database: Connected & initialized (sqlite:///runs/aditrader.db)
-[OPTIONAL/MISSING] Broker Feed (Kotak Neo): Not configured (Mock mode active)
-[OPTIONAL/MISSING] AI Vision (Gemini): Key not configured (offline fallback active)
---------------------------------------------------------------------
-Diagnostic Summary: SYSTEM READY FOR OFFLINE RESEARCH & LOCAL REPLAY
---------------------------------------------------------------------
 ```
 
 ---
 
-## Command Reference
+## Comprehensive Command Reference
 
-The platform provides canonical CLI commands accessible via `aditrader`, `quantumvalidator`, or `python -m aditrader.cli`.
+The platform provides 11 verified CLI operations accessible via `aditrader`, `quantumvalidator`, or `python -m aditrader.cli`.
 
-### Check System Status
+```
+aditrader <command> [options]
+```
+
+### 1. System Diagnostics (`doctor`)
+Run comprehensive checks across Python runtime, dependencies, storage directories, SQLite database connectivity, and optional broker credentials:
+```bash
+aditrader doctor
+```
+
+### 2. Operational Status (`status`)
+Display active environment settings, database ledger records, strategy catalog count, scrip cache status, and active validation policies:
 ```bash
 aditrader status
 ```
-Displays system version, environment, database connection and record counts, strategy catalog size, scrip cache status, and active validation policies.
 
-### List & Inspect Strategy Templates
+### 3. Initialize Database (`init-db`)
+Initialize or upgrade the local SQLite transactional ledger tables (`orders`, `trades`, `positions`, `bars`, `account_balance`):
 ```bash
-# List all built-in version-controlled strategies
+aditrader init-db
+# or apply migrations via Alembic:
+alembic upgrade head
+```
+
+### 4. Strategy Catalog (`strategies`)
+List or inspect version-controlled built-in strategy templates and their multi-dimensional Strategy DNA:
+```bash
+# List all built-in strategy templates
 aditrader strategies
 
-# Inspect detailed metadata, legs, and Strategy DNA for a specific template
+# Inspect detailed metadata, AST structure, and Strategy DNA
 aditrader strategies --detail iron_condor
+aditrader strategies --detail test_ma_crossover
 ```
 
-### Validate a Strategy
-Validate multi-leg options or linear strategies against institutional risk gates (unhedged tail risk, slope boundary conditions, expectancy floors):
-
+### 5. Scrip Search & Derivative Discovery (`search`)
+Query the high-performance local in-memory scrip index by symbol, company name, strike, or derivative hierarchy:
 ```bash
-# Institutional Policy (Strict)
+# Search by index or underlying
+aditrader search "NIFTY"
+
+# Search specific option contract strike
+aditrader search "NIFTY 24000 CE" --limit 5
+
+# Search equity scrip
+aditrader search "RELIANCE"
+```
+
+### 6. Quantitative Validation Gate (`validate`)
+Validate linear or multi-leg option strategies through static AST rules and institutional risk floors (expectancy, drawdown, tail risk):
+```bash
+# Validate built-in option strategy under Institutional policy (strict default)
 aditrader validate --strategy iron_condor
 
-# Moderate Policy (Standard paper-trading thresholds)
-aditrader validate --strategy bull_call_spread --policy moderate
+# Validate linear strategy under Moderate policy
+aditrader validate --strategy test_ma_crossover --policy moderate
 
-# Validate from a custom JSON AST definition file
-aditrader validate --file path/to/strategy.json
+# Validate custom JSON strategy AST file
+aditrader validate --file path/to/strategy.json --policy institutional
 ```
 
-### Run a Deterministic Backtest
-Execute historical backtests on linear assets (Equities / Futures) with realistic slippage, volume participation limits, and recorded simulation assumptions:
-
+### 7. Deterministic Backtesting (`backtest`)
+Execute point-in-time historical backtests on linear assets with statutory exchange taxes, slippage modeling, and volume participation limits:
 ```bash
-# Run backtest with 100 synthetic market bars
+# Backtest using synthetic market bars
 aditrader backtest --strategy test_ma_crossover --bars 100
 
-# Run backtest against a historical CSV file
+# Backtest using historical CSV dataset
 aditrader backtest --strategy test_ma_crossover --csv tests/fixtures/nifty_sample.csv --capital 1000000 --slippage-bps 2.5
 ```
 
-### Search Instruments & Derivatives
-Search the high-performance scrip index by symbol, trading symbol, strike, or derivative type:
-
+### 8. Dataset Discovery & Quality Inspection (`inspect-data`)
+Inspect CSV market data files before replay. Automatically detects format variants (NSE Intraday, CM Bhavcopy, FO Bhavcopy, Index History), verifies price envelopes, date ranges, and reports anomalies:
 ```bash
-aditrader search "NIFTY 24000 CE"
-aditrader search "RELIANCE" --limit 5
+# Inspect any local CSV dataset
+aditrader inspect-data data/nifty_sample.csv
+
+# Inspect and filter for a specific scrip symbol
+aditrader inspect-data data/cm_bhavcopy.csv --symbol RELIANCE
 ```
 
-### Forward Paper-Testing (Air-Gapped Rehearsal & Live Replay)
-Execute forward-testing sessions connecting streaming market data directly through the pre-trade risk engine and strictly air-gapped `PaperBroker` with quote-aware fill execution:
-
+### 9. Forward Paper-Testing Runner (`forward-test`)
+Execute an air-gapped paper trading session connecting streaming or replayed market data through the pre-trade risk engine and strictly isolated `PaperBroker`:
 ```bash
-# Run linear MA crossover on NIFTY for 50 ticks in mock rehearsal mode:
-aditrader forward-test --strategy test_ma_crossover --ticks 50
+# 1. Run in simulated rehearsal mode for 50 ticks
+aditrader forward-test --strategy test_ma_crossover --ticks 50 --mock
 
-# Run forward-testing session bounded by closed bars:
-aditrader forward-test --strategy test_ma_crossover --bars 5 --timeframe 1s
+# 2. Replay real historical CSV dataset for deterministic forward testing
+aditrader forward-test --strategy test_ma_crossover --csv data/nifty_sample.csv
 
-# Run forward test with custom paper capital and save audit dossier:
-aditrader forward-test --strategy test_ma_crossover --capital 2000000 --duration 10 --output runs/my_forward_session.json
+# 3. Run timed session with custom paper capital and write JSON audit dossier
+aditrader forward-test --strategy test_ma_crossover --capital 2000000 --duration 15 --output runs/my_forward_session.json
 
-# Run with strict market data quality checks (aborts immediately on crossed quotes or bad data):
+# 4. Run with strict market data quality checks (fails fast on crossed or bad ticks)
 aditrader forward-test --strategy test_ma_crossover --ticks 100 --strict-quality
 ```
 
+### 10. Market-Data Feed Smoke Test (`smoke-feed`)
+Verify live or mock WebSocket connectivity, TOTP authentication, scrip subscriptions, and tick normalization without placing orders (strictly read-only):
+```bash
+# Smoke test in mock rehearsal mode
+aditrader smoke-feed --symbol NIFTY --ticks 5 --mock
+
+# Smoke test against live Kotak Neo SFeed WebSocket (requires credentials in .env)
+aditrader smoke-feed --symbol NIFTY --ticks 10 --timeout 20.0
+```
+
+### 11. Responsive Web GUI Dashboard (`dashboard`)
+Launch the browser-first, responsive research workstation adhering to `DESIGN_LANGUAGE.md` (dark theme `#0E1117`, surface `#161B22`, border `#30363D`, Inter/JetBrains Mono fonts):
+```bash
+# Display dashboard configuration and roadmap status
+aditrader dashboard
+
+# Launch the live responsive HTTP dashboard server
+aditrader dashboard --serve --port 8050
+```
+Open `http://127.0.0.1:8050` in your web browser (desktop, tablet, or smartphone).
+
 ---
 
-## Getting Started Q&A
+## Responsive Web GUI Architecture
+
+The dashboard server is built with zero unnecessary heavy web dependencies (using Python standard library `ThreadingHTTPServer`) and provides an institutional single-page research interface:
+
+* **Real-Time State Badges**: Distinct visual indicators for `LIVE_CONNECTED`, `SIMULATED_REHEARSAL`, `CSV_REPLAY`, `LIVE_CONNECTING`, `LIVE_FAILED`, `UNSUPPORTED`, and `STALE_DATA`.
+* **Portfolio & Ledger Analytics**: Real-time view of Total Capital, Available Cash, Realized P&L, Unrealized P&L, Margin Utilization %, open paper positions, and recent paper fills with itemized statutory charges (STT, exchange turnover, stamp duty).
+* **Strategy Catalog & AST Explorer**: Interactive inspection of built-in templates, Strategy DNA vectors (Theta bias, delta profile, target regime), and declarative AST JSON definitions.
+* **Run History & Dossier Viewer**: Access recorded forward-testing sessions and audit dossiers saved under `runs/forward/`.
+* **Integrated Dataset Inspector**: Test any local CSV file path interactively with real-time feedback on schema classification, column recognition, and price envelope sanity.
+* **Mobile-Responsive & Accessible**: Touch targets $\ge 44$px, responsive CSS grid (single column on mobile $<768$px; multi-column on desktop $\ge 768$px), and horizontal scrolling on dense financial tables.
+* **Strict Security Air-Gap**: 100% read-only interface; zero order placement endpoints exist; sensitive project credentials and system paths are guarded against path traversal.
+
+---
+
+## NSE CSV Engine & Supported Formats
+
+The high-fidelity `NSECSVParser` and `NSECSVInspector` natively recognize and normalize:
+
+| Dataset Format | Expected Headers / Columns | Special Capabilities |
+| :--- | :--- | :--- |
+| **NSE Intraday (1m / 5m / 15m)** | `Date`, `Time` (or `timestamp`), `Open`, `High`, `Low`, `Close`, `Volume`, `OI` | Auto-combines separate date & time columns; infers bar interval; preserves trade counts. |
+| **NSE Capital Market Bhavcopy** | `SYMBOL`, `SERIES`, `OPEN`, `HIGH`, `LOW`, `CLOSE`, `TOTTRDQTY`, `TOTTRDVAL`, `TIMESTAMP`, `TOTALTRADES` | Parses `dd-MMM-yyyy` dates; filters series (e.g. `EQ`); derives authentic volume-weighted VWAP. |
+| **NSE F&O Derivatives Bhavcopy** | `INSTRUMENT`, `SYMBOL`, `EXPIRY_DT`, `STRIKE_PR`, `OPTION_TYP`, `OPEN`, `HIGH`, `LOW`, `CLOSE`, `CONTRACTS`, `OPEN_INT` | Resolves composite contract symbols; normalizes contract counts and open interest. |
+| **NSE Historical Index CSV** | `Date`, `Open`, `High`, `Low`, `Close`, `Shares Traded`, `Turnover (Rs. Cr)` | Cleans comma-formatted numbers (`"21,500.50"`); parses turnover and volume safely. |
+| **Generic OHLCV CSV** | `timestamp`, `open`, `high`, `low`, `close`, `volume` | Standard CSV candle replay with strict Asia/Kolkata timezone localization. |
+
+---
+
+## Developer Getting Started FAQ
 
 | Question | Answer |
 | :--- | :--- |
-| **How do I install dependencies?** | `pip install -e ".[dev]"` inside an active virtual environment. |
-| **How do I activate the environment?** | `source .venv/bin/activate` |
-| **How do I configure environment variables?** | `cp .env.example .env` and edit optional keys as needed. Safe defaults work offline out-of-the-box. |
-| **How do I initialize the database?** | `aditrader init-db` (or `alembic upgrade head`). |
-| **How do I verify installation?** | Run `aditrader doctor`. Ensure all core checks report `[READY]`. |
-| **How do I start the application?** | Use `aditrader status`, `aditrader strategies`, `aditrader backtest`, `aditrader validate`, or `aditrader forward-test`. |
-| **How do I start the research UI?** | **Not yet active**: The Plotly Dash UI is scheduled for **Phase 8**. Running `aditrader dashboard` prints an architectural roadmap notice. |
-| **How do I start paper forward-testing?** | Run `aditrader forward-test --strategy <name>` with optional `--ticks`, `--bars`, or `--duration` limits. Uses strictly air-gapped `PaperBroker` and quote-aware fill simulation. |
-| **Where are logs & results stored?** | SQLite database at `runs/aditrader.db`; session dossiers at `runs/forward/`; Parquet market caches at `data/cache/`. |
-| **How do I stop the application?** | CLI commands execute deterministically and exit cleanly with standard return codes. For active sessions, send `SIGINT` (`Ctrl+C`) for graceful conclusion. |
+| **How do I install dependencies?** | `pip install -e ".[dev]"` inside an activated virtual environment (`.venv`). |
+| **How do I activate the environment?** | `source .venv/bin/activate` (Linux/macOS) or `.venv\Scripts\activate` (Windows). |
+| **How do I configure environment variables?** | `cp .env.example .env`. Safe default values work completely offline out-of-the-box. |
+| **How do I initialize the database?** | Run `aditrader init-db` (creates SQLite WAL database at `runs/aditrader.db`). |
+| **How do I verify installation?** | Run `aditrader doctor`. Ensure core runtime checks report `[READY]`. |
+| **How do I inspect a CSV file before replay?** | Run `aditrader inspect-data path/to/market_data.csv`. |
+| **How do I start paper forward-testing?** | Run `aditrader forward-test --strategy test_ma_crossover` with optional `--csv <path>`, `--ticks <N>`, or `--duration <sec>`. |
+| **How do I launch the research UI?** | Run `aditrader dashboard --serve --port 8050` and open `http://127.0.0.1:8050` in a browser. |
+| **Where are logs & simulation results saved?** | SQLite database at `runs/aditrader.db`; session dossiers at `runs/forward/`; scrip master Parquet caches at `data/cache/`. |
+| **How do I stop active sessions?** | Send `SIGINT` (`Ctrl+C`) to cleanly flush in-progress bars, record final session metrics, and close database connections. |
 
 ---
 
-## Verification & Quality Assurance
+## Quality Verification
 
-All commits must pass the institutional verification suite:
+All contributions must strictly satisfy the 4-stage quality gate before merging:
 
 ```bash
-# 1. Run complete unit and integration test suite
-pytest
+# 1. Run all unit and integration tests (368+ passing tests)
+./.venv/bin/pytest tests/unit/
 
-# 2. Enforce strict static type checking across all files
-mypy src tests
+# 2. Strict static type analysis across all source files (0 errors)
+./.venv/bin/mypy --strict src tests
 
-# 3. Verify code style and linting
-ruff check src tests
+# 3. Code formatting and linting
+./.venv/bin/ruff check src tests
 
-# 4. Verify formatting
-ruff format --check src tests
+# 4. Format consistency check
+./.venv/bin/ruff format --check src tests
 ```
 
 ---
 
-## Project Status & Roadmap
+## Milestone Progress
 
-* **Phase 0–5.6**: Core Domain, Ledger Persistence, Order State Machine, Greeks Engine, AST Compiler, Strategy DNA, Backtest Engine, Risk Engine, Simulation Integrity — **COMPLETE & VERIFIED ✅**
+* **Phase 0–5.6**: Core Domain, Ledger Persistence, Greeks Engine, AST Compiler, Strategy DNA, Risk Engine — **COMPLETE & VERIFIED ✅**
 * **Phase 6**: Tri-Path Strategy Validation Engine & Institutional Policy Framework — **COMPLETE & SEALED ✅**
-* **Instrument Search Subsystem**: In-Memory Multi-Index, Token/Symbol Scoring, Scrip Master Parquet Caching — **COMPLETE & SEALED ✅**
-* **Market Data Fidelity & Replay Parity**: Canonical Models, Kotak Neo Quote Parser, Aggregator Volume Modes & Quality Guards, Data Quality Engine, Simulation Assumptions & Forward Test Auditing — **COMPLETE & VERIFIED ✅**
-* **Developer Experience & Local Startup Workflow**: Unified CLI Router (`doctor`, `status`, `init-db`, `strategies`, `search`, `validate`, `backtest`, `forward-test`), Setup Documentation — **COMPLETE & VERIFIED ✅**
-* **Forward-Testing Runner**: Application Orchestrator, Quote-Aware Paper Fills, Pre-Trade Risk Gates, Session Lifecycle, Dossier & Ledger Persistence, CLI `aditrader forward-test` — **COMPLETE & VERIFIED ✅**
+* **Instrument Search Subsystem**: In-Memory Scrip Master Multi-Index & Scoring — **COMPLETE & SEALED ✅**
+* **Forward-Testing Rehearsal & Audit Remediation**: Quote Truthfulness, Limit Clamping, Symmetrical Margins, Dynamic Tax Resolution — **COMPLETE & VERIFIED ✅**
+* **Kotak Neo Live Market-Data Feed**: Official `kotakneoapi>=3.0.0` SFeed WebSocket Streaming, Explicit Readiness Handshake — **COMPLETE & VERIFIED ✅**
+* **NSE CSV Ingestion & Dataset Discovery**: Intraday split Date/Time, CM/FO Bhavcopy, Index Historical, Static Dataset Inspector — **COMPLETE & VERIFIED ✅**
+* **Responsive Web GUI Foundation**: Zero-Dependency Threading HTTP Server, Responsive Dark Technical UI (`DESIGN_LANGUAGE.md`), REST APIs — **COMPLETE & VERIFIED ✅**
 * **Phase 7**: AI Subsystems & Advisory Pipeline (Time-series Forecasting, Gemini Vision Pattern Parser, Strategy Suggestor, Quantitative Research Dossier) — **NEXT MILESTONE ⏳**
-* **Phase 8**: Interactive Plotly Dash Research Workspace & Terminal UI — **SCHEDULED ⏳**
-* **Phase 7A/7B**: Provider Registry, Model Catalog, Gemini Vision & OCR Runtime — **IN PROGRESS / CONTROLLED FOUNDATION**
-* **Phase 8**: Plotly Dash Multi-Page Dashboard & Interactive Research Workspace — **PLANNED**
+* **Phase 8**: Plotly Dash Multi-Page Dashboard & Interactive Options Workstation — **PLANNED ⏳**

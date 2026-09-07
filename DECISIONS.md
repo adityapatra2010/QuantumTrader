@@ -223,5 +223,104 @@ Phase 7 introduces AI-driven advisory capabilities including time-series forecas
 - **Positive**: Guarantees complete auditability, cryptographic input tracking, and reproducibility; prevents AI hallucinations from masquerading as deterministic evidence; eliminates naive-vs-aware datetime comparison errors and guarantees strict monotonic future forecasting; preserves 100% offline usability when AI providers are unavailable.
 - **Negative**: Requires computing SHA-256 digests on all inputs; requires timezone-aware datetime hygiene throughout the pipeline.
 
+---
+
+## ADR 013: Forward-Testing Rehearsal Truthfulness, Symmetrical Margin Invariants, and Point-in-Time Execution Fidelity
+
+### Context
+A hostile quantitative systems audit of the forward-testing orchestrator, market-data ingestion pipeline, and paper broker identified critical risks in simulation realism and research integrity:
+1. **Options Air-Gap Bypass in Forward Testing**: Multi-leg options strategies could be passed directly to `ForwardTestRunner`, bypassing the ADR 011 options air-gap and simulating synthetic options trades without a full options chain ladder.
+2. **Execution Timestamp Non-Causality**: Order placement and fill timestamps were pegged to the closed bar's start timestamp rather than the prevailing execution tick timestamp, causing simulated trades to appear in the ledger prior to the market event that triggered them ($exec\_ts < prevailing\_tick.timestamp$).
+3. **Limit Order Slippage Price Inversion**: Limit orders were filled using raw slippage multipliers without clamping against the submitted limit price, violating basic exchange auction mechanics (BUY limit orders could fill above the limit price, and SELL limit orders could fill below).
+4. **Instrument-Blind Transaction Cost Underestimation**: `PaperBroker` hardcoded transaction costs to `"EQUITY_INTRADAY"`, significantly underestimating exchange turnover charges, stamp duties, and Securities Transaction Tax (STT) on futures and options contracts.
+5. **Asymmetrical Margin Enforcement**: `PaperBroker` enforced margin checks solely on BUY orders, allowing unlimited unhedged short exposure without verifying capital reserves.
+6. **Partial-Bar Flush Execution Leakage**: Flushed partial bars on runner shutdown emitted callback events that triggered strategy signals and created duplicate bar records in the ledger.
+7. **Broker Feed Status Ambiguity**: `KotakNeoAdapter` declared mock or live status ambiguously without validating SDK availability, risking the perception of live execution in an air-gapped simulated environment.
+8. **Volume-Agnostic Price Aggregation**: `TickAggregator` defaulted to tick counting, generating pseudo-TWAP rather than authentic volume-weighted average prices (VWAP).
+9. **Non-Atomic Dossier Persistence**: Writing session dossiers directly to disk risked file corruption if processes were terminated abruptly.
+10. **Timezone Inconsistency in Local Ledger**: SQLite datetime columns were stored without guaranteed UTC normalization, risking timezone drift across sessions.
+
+### Decision
+1. **Strict Options Air-Gap in Forward Testing**: `ForwardTestRunner` unconditionally inspects `strategy_dsl.legs`. If non-empty, it raises `UnsupportedStrategyError` immediately before starting data feeds or initializing brokers, preserving ADR 011 boundaries until a dedicated options execution engine is developed.
+2. **Static AST Pre-Validation Gate**: `ForwardTestRunner` invokes `ASTValidator.validate()` during initialization, failing fast if the declarative strategy tree contains structural or operator violations.
+3. **Point-in-Time Execution Timestamp Invariant**: All order creation and trade execution events in `ForwardTestRunner` are timestamped using the prevailing tick timestamp (`latest_tick.timestamp >= bar.timestamp`), guaranteeing strict causal ordering.
+4. **Exchange Limit-Order Clamping Invariant**: `PaperBroker` strictly enforces exchange limit bounds: BUY limit fills are clamped to $\min(fill\_price, limit\_price)$, and SELL limit fills are clamped to $\max(fill\_price, limit\_price)$.
+5. **Dynamic Instrument Classification**: `resolve_instrument_class(symbol)` determines whether an instrument is `OPTIONS`, `FUTURES`, or `EQUITY_INTRADAY` using boundary-safe regular expressions, routing the correct statutory tax and fee parameters into `CostCalculator`.
+6. **Symmetrical Pre-Trade Margin Gates**: `PaperBroker.submit_order()` calculates required margin symmetrically for both BUY and SELL sides. Closing orders (which reduce exposure) are exempt, while opening orders and position reversals must strictly satisfy $required\_margin \le available\_margin$.
+7. **Safe Partial-Bar Shutdown Lifecycle**: `TickAggregator.flush(emit_callback=False)` flushes final incomplete bars for observation logging only, preventing callback emission into strategy signal logic and preventing duplicate ledger bar persistence. The runner enters an explicit `STOPPING` state, making `stop()` re-entrancy safe.
+8. **Truthful Feed Status & Live Fail-Closed Architecture**: `KotakNeoAdapter` declares explicit `feed_status: Literal["LIVE_CONNECTED", "LIVE_CONNECTING", "LIVE_FAILED", "SIMULATED_REHEARSAL", "UNSUPPORTED"]`. In the absence of the proprietary broker SDK (`neo-api-client`), live mode raises `NotImplementedError` and fails closed. The runner resolves to `SIMULATED_REHEARSAL`, explicitly logging its rehearsal status.
+9. **Configurable Volume Modes & Traded-Volume VWAP**: `TickAggregator` supports `volume_mode: Literal["TICK_COUNT", "TRADED_VOLUME", "CUMULATIVE", "INCREMENTAL"]`, enabling true volume-weighted VWAP accumulation when traded volume $\Delta V$ is available.
+10. **Atomic File Persistence & UTC Ledger Normalization**: `ForwardTestRecorder` persists JSON dossiers atomically via temporary file, buffer flush, `os.fsync()`, and atomic replace. `LedgerRepository` normalizes all stored and retrieved datetimes to UTC.
+
+### Consequences
+---
+
+## ADR 014: Official Kotak Neo Async SFeed Market-Data Streaming and Explicit Readiness Handshake
+
+### Context
+To transition QuantumValidator from simulated rehearsal to genuine live market-data paper forward testing while preserving ADR 002 (strict physical isolation from live broker order execution), a real market-data streaming adapter was required:
+1. **Modern Official SDK Contract**: The legacy callback-based `client.subscribe` API is deprecated and unstable. Kotak Neo provides an official async binary protocol (`SFeedWebSocket`) via the PyPI `kotakneoapi` package (`neo_api_client`), requiring `NeoAPI`, `create_websocket()`, `WsToken`, `subscribe_scrips()`, `subscribe_index()`, and async message iteration (`async for msg in ws:`).
+2. **Truthful State Reporting & No False Live Claims**: Under ADR 013, the adapter must report truthful feed states (`LIVE_CONNECTING`, `LIVE_CONNECTED`, `LIVE_FAILED`, `SIMULATED_REHEARSAL`, `UNSUPPORTED`). Authentication success (TOTP/MPIN login) must NEVER be conflated with feed readiness or active data reception.
+3. **Explicit Readiness Handshake & Fail-Closed Timeout**: Live forward-testing sessions must not declare themselves running until real market ticks are actively flowing across the wire. A configurable, bounded readiness timeout must fail closed without hanging or falling back silently to mock data.
+4. **Normalized Market Data Fidelity**: Real depth quotes (best bid/ask price and quantity) must be parsed from `SFeedScrip` without inventing synthetic quotes when depth is missing (retaining `None`). Timestamps must be normalized to `Asia/Kolkata` from Unix epoch seconds or milliseconds.
+5. **Thread Safety & Deadlock Prevention**: The WebSocket runs in an asynchronous background thread with a dedicated event loop. Disconnecting from within a tick callback or the worker thread itself must avoid blocking on `Future.result()`, preventing thread deadlocks.
+
+### Decision
+1. **Official Async SDK Transport**: Integrate official `kotakneoapi>=3.0.0` (`neo_api_client.neo_api` and `neo_api_client.websocket.feed`). Real broker order placement remains physically impossible; only read-only market data methods are implemented on `KotakNeoAdapter`.
+2. **Truthful Feed State Machine**:
+   - `SIMULATED_REHEARSAL`: Explicitly set in mock mode.
+   - `UNSUPPORTED`: Explicitly set when SDK is absent or uninstalled.
+   - `LIVE_CONNECTING`: Set upon initialization and vendor authentication (`totp_login` + optional `totp_validate`).
+   - `LIVE_CONNECTED`: Set ONLY after the WebSocket connection is established, subscriptions are acknowledged, and at least one valid market-data tick message has been successfully decoded.
+   - `LIVE_FAILED`: Set if connection retries are exhausted, credentials fail, or readiness timeout expires.
+3. **Explicit Readiness Synchronization (`wait_until_ready`)**: `KotakNeoAdapter.wait_until_ready(timeout=...)` blocks on a threading event until the first valid tick arrives. If the timeout expires before a tick is received, it sets `LIVE_FAILED` and raises `TimeoutError`. `ForwardTestRunner` halts fail-closed on readiness failures.
+4. **Truthful SFeed Message Normalization**:
+   - `SFeedScrip` & `SFeedScripLite`: Extracted into canonical `Tick` with authentic 5-level depth for best bid and ask. Missing quotes remain `None`.
+   - `SFeedIndex`: Normalized to canonical index symbols (`NIFTY`, `BANKNIFTY`, etc.) with `bid=None` and `ask=None`.
+   - `SFeedMarketStatus`: Decoded to track exchange market states without emitting artificial ticks.
+   - Timestamps: Converted from epoch seconds/ms to timezone-aware IST (`Asia/Kolkata`).
+5. **Re-entrancy-Safe Clean Disconnect**: `KotakNeoAdapter.disconnect()` sets stop events, safely cancels tasks on the private event loop, avoids blocking on futures when called from within the worker thread, and joins the worker thread within a bounded timeout.
+6. **Safe Read-Only Smoke Test CLI (`aditrader smoke-feed`)**: A standalone diagnostic subcommand allows operators to verify WebSocket connectivity, TOTP authentication, scrip subscriptions, and live tick ingestion without starting a full forward-testing trading session.
+
+### Consequences
+- **Positive**: Live market data streams directly into the canonical ingestion pipeline; zero risk of false readiness reporting; physical air gap strictly preserved (no broker order APIs); deterministic fallback to simulated rehearsal when requested; clean shutdown without thread leaks or deadlocks.
+- **Negative**: Live streaming requires network access to Kotak Neo WebSocket servers and active market hours for tick delivery; options forward execution remains air-gapped until Phase 8 option chain execution is developed.
+
+---
+
+## ADR 015: Comprehensive Multi-Format NSE CSV Ingestion, Pre-Replay Dataset Inspection UX, and Zero-Dependency Responsive Web Workstation
+
+### Context
+1. **NSE Historical Market-Data Layout Fragmentation**: Public and vendor-exported Indian market datasets exhibit significant variance: intraday 1m/5m data frequently splits `Date` and `Time` across separate columns; NSE Capital Market (CM) Bhavcopy uses `TOTTRDQTY`, `TOTTRDVAL`, and `TIMESTAMP` (`dd-MMM-yyyy`); NSE F&O Bhavcopy uses `CONTRACTS`, `OPEN_INT`, `EXPIRY_DT`, and `STRIKE_PR`; while NSE Index historical exports format numbers with commas (`"21,500.50"`). A naive CSV reader fails on comma-formatted numbers or drops intraday bars when dates and times are split.
+2. **Synthetic Quote Fabrication Risks**: Replaying bar datasets by fabricating synthetic bid/ask spreads violates quantitative research truthfulness. Where authentic market depth is absent from the input dataset, `Tick.bid` and `Tick.ask` must remain `None`.
+3. **Dataset Usability and Pre-Replay Validation UX**: Operators need immediate visibility into dataset health (detected schema, date ranges, bar counts, missing fields, price envelope violations) before initiating long backtests or forward paper runs.
+4. **Accessible Research Web Interface without Framework Bloat**: While full Plotly Dash multi-page architecture is designated for Phase 8, an immediate, lightweight, responsive web interface is necessary to inspect portfolio state, examine built-in strategy AST trees, review past session dossiers, and diagnose CSV files across desktop and mobile devices without heavy client-side node/build dependencies or heavyweight server frameworks.
+
+### Decision
+1. **Multi-Format NSE CSV Parser (`NSECSVParser`)**:
+   - Classifies dataset schemas into `NSE_INTRADAY`, `NSE_CM_BHAVCOPY`, `NSE_FO_BHAVCOPY`, `NSE_INDEX_HISTORY`, or `GENERIC_OHLCV`.
+   - Combines split `Date` and `Time` columns into timezone-aware IST datetimes (`Asia/Kolkata`).
+   - Parses comma-formatted numbers, dashes, and null tokens safely.
+   - Strictly enforces price envelope sanity ($low \le open, close \le high$).
+   - Sorts chronologically ascending and deduplicates bars with identical timestamps.
+2. **Truthful Quote Replay Invariant**:
+   - `CSVDataFeed.stream_ticks()` and `ForwardTestRunner._gen_bars()` strictly yield `Tick` objects with `bid=None` and `ask=None`.
+   - `PaperBroker` uses `ltp` when depth quotes are missing, strictly avoiding artificial spread fabrication.
+3. **Pre-Replay Dataset Discovery & Quality Inspector (`NSECSVInspector` / `aditrader inspect-data`)**:
+   - Inspects files without mutating them, producing a structured `CSVInspectionReport`.
+   - Exposes `aditrader inspect-data <file> [--symbol <symbol>]` in the CLI.
+4. **Zero-Dependency Responsive Web Workstation (`DashboardServer` / `aditrader dashboard --serve`)**:
+   - Implements a high-performance HTTP server using Python's standard library `ThreadingHTTPServer`.
+   - Delivers a single-page technical dark-mode UI compliant with `DESIGN_LANGUAGE.md` (`#0E1117` background, `#161B22` surface, `#30363D` border, Inter and JetBrains Mono typography).
+   - Provides touch-accessible targets ($\ge 44$px) and a mobile-responsive grid ($<768$px single column; $\ge 768$px dashboard).
+   - Exposes read-only REST endpoints (`/api/status`, `/api/strategies`, `/api/runs`, `/api/inspect-data`) with strict path traversal defenses and secret masking. Real broker order placement is barred.
+
+### Consequences
+- **Positive**: Native replay support for all major NSE data formats; zero lookahead leakage; 100% truthful quote semantics; immediate pre-flight visibility into data quality; zero additional external dependencies added to virtual environment; clean mobile and desktop monitoring interface.
+- **Negative**: Replaying high-frequency multi-million-row CSV files entirely in memory requires sufficient RAM (mitigated by streaming generators).
+
+
+
+
 
 

@@ -1,11 +1,37 @@
 """Indian market statutory charges and slippage calculations."""
 
+import re
 from dataclasses import dataclass
 from typing import Literal
 
 from aditrader.core.models.enums import OrderSide
 
 InstrumentClass = Literal["OPTIONS", "FUTURES", "EQUITY_INTRADAY", "EQUITY_DELIVERY"]
+
+
+def resolve_instrument_class(symbol: str) -> InstrumentClass:
+    """Resolve Indian market InstrumentClass from trading symbol or contract string."""
+    s = symbol.strip().upper()
+    # Options: must end with CE or PE preceded by strike digits or separator (e.g. 24000CE, 2500PE, NIFTY 24000 CE)
+    # Does not match standard equity symbols like RELIANCE, FINANCE, TAPE
+    if bool(re.search(r"(?:\d+|[-_\s])(?:CE|PE)$", s)):
+        return "OPTIONS"
+
+    if (
+        s.endswith("-FUT")
+        or s.endswith(".FUT")
+        or s.endswith(" FUT")
+        or s.endswith("_FUT")
+        or bool(re.search(r"\d{2}[A-Z]{3}FUT$", s))
+        or bool(re.search(r"(?:^|[-_\.\s])FUT(?:IDX|STK)?(?:$|[-_\.\s])", s))
+    ):
+        return "FUTURES"
+
+    # Benchmark indices traded as linear assets on paper ledger use futures cost schedule
+    if s in ("NIFTY", "NIFTY 50", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX"):
+        return "FUTURES"
+
+    return "EQUITY_INTRADAY"
 
 
 @dataclass(frozen=True)

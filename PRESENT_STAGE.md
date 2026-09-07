@@ -1,15 +1,15 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-06 20:50 IST  
-**Current Phase**: Runnable Forward-Testing & Paper-Trading Workflow — COMPLETE & VERIFIED ✅  
-**Last Verified By**: AGY CLI Quality Verification Suite (Ruff Clean, Mypy Strict Clean across 148 files, Pytest 324 passed, 5 skipped)  
+**Last Updated**: 2026-09-07 18:15 IST  
+**Current Phase**: NSE CSV Replay, Dataset Discovery UX & Zero-Dependency Responsive Web Dashboard — COMPLETE & VERIFIED ✅  
+**Last Verified By**: AGY CLI Quality Verification Suite (Ruff Clean, Mypy Strict Clean across 157 files, Pytest 368 passed, 6 skipped)  
 
 ---
 
 ## Repository State
 
 - **Branch**: `main`
-- **Working Tree**: Core domain entities, order state machine, paper broker with net equity accounting, local SQLite ledger persistence, market data feeds, Kotak Neo adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine with options air-gap guards and volume participation constraints, walk-forward analysis & OOS splitters, hardened pre-trade risk engine with lot-aware position limits and session-boundary resets, finite performance analytics with strict timeframe resolution, static AST structural validation, institutional historical statistical validation for linear assets, theoretical payoff/Greek risk validation for multi-leg option strategies, high-performance Instrument Search & Selection Subsystem with hierarchical derivatives resolution, and the runnable air-gapped ForwardTestRunner orchestrating live/rehearsal market data, quality validation, bar aggregation, strategy evaluation, pre-trade risk checks, quote-aware fills, and audit persistence sealed and verified.
+- **Working Tree**: Core domain entities, order state machine, paper broker with net equity accounting, local SQLite ledger persistence, market data feeds, multi-format NSE CSV parser (intraday split date/time, CM Bhavcopy, FO Bhavcopy, Index Historical), pre-replay dataset inspector (`NSECSVInspector`), zero-dependency responsive Web Dashboard (`DashboardServer` and `aditrader dashboard --serve`), official Kotak Neo async SFeed market data adapter (`kotakneoapi>=3.0.0`), Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine with options air-gap guards and volume participation constraints, walk-forward analysis & OOS splitters, hardened pre-trade risk engine with lot-aware position limits and session-boundary resets, finite performance analytics with strict timeframe resolution, static AST structural validation, institutional historical statistical validation for linear assets, theoretical payoff/Greek risk validation for multi-leg option strategies, high-performance Instrument Search & Selection Subsystem with hierarchical derivatives resolution, runnable ForwardTestRunner with options air-gap enforcement, point-in-time timestamp causality, exchange limit-order clamping, symmetrical margin checks, instrument-aware cost resolution, safe partial-bar shutdown, truthful feed status reporting, traded-volume VWAP aggregation, atomic JSON persistence, and UTC ledger normalization sealed and verified.
 
 ---
 
@@ -19,16 +19,14 @@
 - **Do not execute raw dynamic code** (`eval()`, `exec()`, or dynamic python code generation).
 - **Options backtesting remains air-gapped**: Never emit historical performance metrics for options; theoretical payoff modeling only.
 - **Do not integrate live AI forecasting or vision modules** until Phase 7 specifications are aligned.
-- **Do not construct Plotly Dash dashboards or interactive CLI handlers** (Phase 8).
-- **Do not modify architecture or contracts** without proposing an ADR update in `DECISIONS.md`.
-- **Maintain strict Python 3.11 target compatibility** across all typing, syntax, and libraries.
+- **Maintain strict Python 3.11+ target compatibility** across all typing, syntax, and libraries.
 
 ---
 
 ## Architecture Status
 
 - **Documentation**: `██████████` 100%
-- **Implementation**: `████████░░` 80% (Phases 0, 1, 2, 3, 4, 5, 5.5, 5.6, 6, and Instrument Search Complete)
+- **Implementation**: `█████████░` 88% (Phases 0-6, Search, Forward-Testing Audit Remediation, Live Kotak Neo Adapter, NSE CSV Engine, Dataset Discovery UX, and Web Dashboard Complete)
 
 ---
 
@@ -55,10 +53,53 @@
 - Simulation integrity, portfolio net equity accounting & timeframe annualization (ADR 010).
 - Research integrity hardening: options air-gap, volume realism, session risk & finite metrics (ADR 011).
 - AI advisory provenance, reproducibility, and research dossier integrity (ADR 012).
+- Forward-testing rehearsal truthfulness, symmetrical margin invariants, and point-in-time execution fidelity (ADR 013).
+- Official Kotak Neo async SFeed market-data streaming and explicit readiness handshake (ADR 014).
+- Comprehensive multi-format NSE CSV ingestion, pre-replay dataset inspection UX, and zero-dependency responsive web workstation (ADR 015).
 
 ---
 
 ## Completed
+
+### Multi-Format NSE CSV Ingestion, Pre-Replay Dataset Inspection UX, and Zero-Dependency Responsive Web Workstation
+**Status**: COMPLETE & VERIFIED ✅
+- **Comprehensive NSE CSV Engine (`src/aditrader/data/feeds/nse_csv.py`)**: Built `NSECSVParser` supporting intraday 1m/5m/15m with split Date/Time columns, NSE Capital Market Bhavcopy with `TOTTRDQTY` and `TOTTRDVAL`, NSE F&O Derivatives Bhavcopy with `CONTRACTS` and `OPEN_INT`, and NSE Index historical CSVs with comma-formatted numbers (`"21,500.50"`).
+- **Truthful Quote Invariant**: Replaced synthetic spread calculation in CSV replay with authentic `bid=None` and `ask=None`. `PaperBroker` cleanly falls back to `ltp` without fabricating artificial quotes.
+- **Dataset Discovery & Quality Inspector (`NSECSVInspector` / `aditrader inspect-data`)**: Standalone static file analyzer that classifies schema, computes date ranges, checks for price envelope anomalies ($low \le open, close \le high$), out-of-order timestamps, and duplicates before initiating runs.
+- **Zero-Dependency Responsive Web Workstation (`src/aditrader/web/`)**: High-performance HTTP server (`DashboardServer`) using standard library `ThreadingHTTPServer`. Implements single-page application compliant with `DESIGN_LANGUAGE.md` (dark theme `#0E1117`, surface `#161B22`, border `#30363D`, Inter/JetBrains Mono). Features mobile-first responsive layout ($\ge 44$px touch targets, mobile card grid), distinct feed status badges (`LIVE`, `SIMULATION/CSV_REPLAY`, `PAPER`, `CONNECTING`, `FAILED`, `UNSUPPORTED`, `STALE_DATA`), REST endpoints (`/api/status`, `/api/strategies`, `/api/runs`, `/api/inspect-data`), and path traversal security against secret leakage.
+- **Unified Forward Replay**: Extended `aditrader forward-test --strategy <name> --csv <path>` to execute point-in-time deterministic forward sessions directly from CSV datasets without live networking.
+
+**Status**: COMPLETE & VERIFIED ✅
+- **Official SDK Integration (`kotakneoapi>=3.0.0`)**: Added official vendor package exposing `neo_api_client.neo_api` and `neo_api_client.websocket.feed`. Preserved 100% execution air gap (ADR 002); no broker order placement APIs exist on the adapter.
+- **Async SFeed WebSocket Streaming**: Built background worker thread with dedicated event loop running `SFeedWebSocket`, `subscribe_scrips()`, `subscribe_index()`, and async message iteration (`async for msg in ws:`).
+- **Truthful Feed State Machine**: Strictly separates authentication from readiness: `LIVE_CONNECTING` on authentication, `LIVE_CONNECTED` ONLY after the first valid market tick is parsed, `LIVE_FAILED` on failures, `SIMULATED_REHEARSAL` in mock mode, and `UNSUPPORTED` when SDK is absent.
+- **Explicit Readiness Synchronization (`wait_until_ready`)**: Blocks until the first genuine market tick is received or timeout expires. Configurable via `feed_readiness_timeout` (default: 15.0s) in `ForwardTestConfig`; fails closed without hanging or silent mock fallback.
+- **Normalized Market Data & Depth Quotes**: Parses `SFeedScrip` with genuine best bid/ask prices and quantities, `SFeedIndex` into canonical symbols (`NIFTY`, `BANKNIFTY`), `SFeedMarketStatus` for exchange status tracking, and normalizes all timestamps to `Asia/Kolkata`.
+- **Re-entrancy & Deadlock Prevention**: `disconnect()` safely cancels tasks and avoids blocking on futures when invoked from within the worker thread or tick callbacks.
+- **Safe Read-Only Smoke Test CLI (`aditrader smoke-feed`)**: Standalone CLI command testing live or mock WebSocket connectivity, TOTP login, subscriptions, and tick normalization without placing orders.
+- **Comprehensive Test Suite (`tests/unit/test_kotak_neo_live_feed.py`)**: 14 unit and integration tests covering air-gap guarantees, state transitions, TOTP auth, symbol tokens, message parsing, readiness gates, runner execution, and CLI smoke test, plus 1 opt-in real network test.
+- **Automated Verification**:
+  - `ruff check src tests` and `ruff format --check src tests` passing cleanly.
+  - `mypy src tests` passing in strict mode across 150 source files with 0 errors.
+  - `pytest` suite passing 352/352 unit and integration tests (100% pass rate) + 6 skipped opt-in smoke tests.
+
+### Forward-Testing Hostile Quantitative Audit Remediation
+**Status**: COMPLETE & VERIFIED ✅
+- **Options Air-Gap Enforcement**: `ForwardTestRunner` immediately raises `UnsupportedStrategyError` on multi-leg option strategies (`strategy_dsl.legs`), preventing unhedged option forward simulation without a dedicated option chain execution engine (ADR 011, ADR 013).
+- **Static AST Validation Gate**: `ForwardTestRunner` verifies AST structure via `ASTValidator.validate()` prior to feed initialization.
+- **Point-in-Time Timestamp Causality**: Order creation and trade execution timestamps are driven by prevailing tick events, strictly enforcing $exec\_ts \ge bar.timestamp$.
+- **Exchange Limit-Order Invariant**: `PaperBroker` clamps limit fills: BUY limit fills $\le limit\_price$, SELL limit fills $\ge limit\_price$.
+- **Dynamic Instrument Costs**: `PaperBroker` classifies instruments dynamically via `resolve_instrument_class(symbol)` into `OPTIONS`, `FUTURES`, or `EQUITY_INTRADAY` with boundary-safe regex patterns, routing accurate statutory exchange taxes and turnover fees.
+- **Symmetrical Margin Checks**: `PaperBroker.submit_order()` enforces pre-trade margin checks symmetrically across BUY and SELL orders, exempting position-reducing closing orders.
+- **Safe Partial-Bar Shutdown Lifecycle**: `TickAggregator.flush(emit_callback=False)` flushes incomplete bars for logging only, preventing callback emission into strategy signal logic and preventing duplicate ledger bar persistence. Runner lifecycle includes a re-entrancy-safe `STOPPING` state.
+- **Truthful Feed Status & Live Fail-Closed Architecture**: `KotakNeoAdapter` declares explicit `feed_status: Literal["LIVE_CONNECTED", "LIVE_CONNECTING", "LIVE_FAILED", "SIMULATED_REHEARSAL", "UNSUPPORTED"]`. In the absence of `neo-api-client`, live mode fails closed with `NotImplementedError`, and forward tests resolve to `SIMULATED_REHEARSAL`.
+- **Traded-Volume VWAP Aggregation**: `TickAggregator` supports `volume_mode: Literal["TICK_COUNT", "TRADED_VOLUME", "CUMULATIVE", "INCREMENTAL"]`, properly weighting price by incremental volume $\Delta V$.
+- **Atomic File Persistence & UTC Ledger**: `ForwardTestRecorder` uses atomic temporary file replacement with `os.fsync()`, and `LedgerRepository` normalizes all stored and retrieved datetimes to UTC.
+- **Comprehensive Regression Test Suite (`tests/unit/test_forward_remediation.py`)**: 14 regression tests verifying all 10 audit findings and secondary edge cases.
+- **Automated Verification**:
+  - `ruff check src tests` and `ruff format --check src tests` passing cleanly (Python 3.11 target).
+  - `mypy src tests` passing in strict mode across 149 source files with 0 errors (Python 3.11 target).
+  - `pytest` suite passing 338/338 unit and integration tests (100% pass rate) + 5 skipped opt-in smoke tests.
 
 ### Runnable Forward-Testing & Paper-Trading Workflow
 **Status**: COMPLETE & VERIFIED ✅

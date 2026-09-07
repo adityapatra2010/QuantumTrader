@@ -1,6 +1,7 @@
 """Institutional air-gapped forward-testing and paper-trading orchestrator."""
 
 import contextlib
+import logging
 import random
 import signal
 import sys
@@ -9,13 +10,13 @@ import time
 from collections.abc import Callable, Iterator
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from aditrader.config.settings import get_settings
 from aditrader.core.broker import PaperBroker
-from aditrader.core.costs import SlippageModel
+from aditrader.core.costs import SlippageModel, resolve_instrument_class
 from aditrader.core.ledger.repository import LedgerRepository
 from aditrader.core.models.enums import OrderSide, OrderStatus, OrderType, SignalDirection
 from aditrader.core.models.execution import AccountBalance, Position, Trade
@@ -36,6 +37,7 @@ from aditrader.data.forward import (
     ForwardTestSession,
     ForwardTestStatus,
 )
+from aditrader.data.instruments.specs import resolve_contract_specs
 from aditrader.data.quality import (
     DataQualityError,
     DataQualityReport,
@@ -53,6 +55,12 @@ from aditrader.strategy.compiler.engine import ExecutableStrategy
 from aditrader.strategy.library.models import StrategyRecord
 from aditrader.strategy.library.registry import StrategyRegistry
 
+logger = logging.getLogger(__name__)
+
+
+class UnsupportedStrategyError(ValueError):
+    """Raised when a strategy definition cannot be deterministically simulated by the runner."""
+
 
 class ForwardTestConfig(BaseModel):
     """Configuration governing an air-gapped forward paper-testing session."""
@@ -61,6 +69,15 @@ class ForwardTestConfig(BaseModel):
 
     symbol: str = Field(..., min_length=1, description="Target trading instrument symbol")
     timeframe: str = Field(default="1m", description="Bar aggregation timeframe (e.g. '1m', '5m')")
+    qty: int | None = Field(
+        default=None,
+        gt=0,
+        description="Order execution quantity override (defaults to lot size for derivatives, 1 for equity)",
+    )
+    volume_mode: Literal["TICK_COUNT", "TRADED_VOLUME", "CUMULATIVE", "INCREMENTAL"] = Field(
+        default="TRADED_VOLUME",
+        description="Volume aggregation mode for TickAggregator (default: TRADED_VOLUME)",
+    )
     initial_capital: float = Field(
         default=1_000_000.0, gt=0.0, description="Starting simulated capital in INR"
     )
@@ -99,6 +116,11 @@ class ForwardTestConfig(BaseModel):
     )
     force_mock: bool = Field(
         default=False, description="Force mock data adapter even if broker credentials exist"
+    )
+    feed_readiness_timeout: float = Field(
+        default=15.0,
+        gt=0.0,
+        description="Maximum seconds to wait for live feed readiness before failing closed",
     )
 
 
@@ -259,12 +281,46 @@ class ForwardTestRunner:
             strategy, symbol=config.symbol
         )
 
+        # Guard 1: Options air-gap barrier (matches BacktestRunner ADR 011)
+        if self.strategy_dsl.legs:
+            raise UnsupportedStrategyError(
+                f"Strategy '{self.strategy_dsl.name}' defines {len(self.strategy_dsl.legs)} option leg(s). "
+                "ForwardTestRunner only simulates underlying spot/futures candle execution. "
+                "Simulating multi-leg option strategies requires option-chain tick data and synthetic "
+                "IV surface modeling. Silent proxy execution of option legs "
+                "against underlying spot prices is strictly prohibited."
+            )
+
+        # Guard 2: Static AST structural validation
+        from aditrader.validation.ast.validator import ASTValidator
+        from aditrader.validation.models import ValidationStatus
+
+        val_res = ASTValidator.validate(self.strategy_dsl)
+        if val_res.status == ValidationStatus.REJECTED:
+            failed_gates = "; ".join(val_res.failed_gates)
+            raise ValueError(
+                f"Strategy '{self.strategy_dsl.name}' failed static AST validation: {failed_gates}"
+            )
+
+        # Resolve instrument class for statutory charges and fee schedule
+        self.instrument_class = resolve_instrument_class(config.symbol)
+
         # Execution venue: strictly paper broker (air-gapped)
         self.broker = PaperBroker(
             initial_capital=config.initial_capital,
             max_margin_utilization=config.max_margin_utilization,
             slippage_model=SlippageModel(percentage=config.slippage_bps / 10000.0),
+            default_instrument=self.instrument_class,
         )
+
+        # Trade lot quantity resolution
+        if config.qty is not None:
+            self.trade_qty = config.qty
+        elif self.instrument_class in ("FUTURES", "OPTIONS"):
+            _, lot = resolve_contract_specs(config.symbol)
+            self.trade_qty = lot
+        else:
+            self.trade_qty = 1
 
         # Pre-trade risk engine
         self.risk_engine = RiskEngine(
@@ -291,6 +347,7 @@ class ForwardTestRunner:
             symbol=config.symbol,
             interval_seconds=interval_secs,
             on_bar_close=self._on_bar_close,
+            volume_mode=config.volume_mode,
         )
 
         # Local ledger repository
@@ -301,7 +358,12 @@ class ForwardTestRunner:
             try:
                 self.ledger_repo = ledger_repo or LedgerRepository(database_url=db_url)
                 self.ledger_repo.create_tables()
-            except Exception:
+            except Exception as exc:
+                logger.warning(
+                    "Failed to initialize local SQLite ledger repository at '%s': %s. Continuing without transactional database persistence.",
+                    db_url,
+                    exc,
+                )
                 self.ledger_repo = None
 
         # Data feed & adapter resolution
@@ -345,30 +407,28 @@ class ForwardTestRunner:
             return self._is_running
 
     def _resolve_default_adapter(self) -> AbstractBrokerAdapter:
-        """Resolve and authenticate default KotakNeoAdapter based on environment settings."""
+        """Resolve and authenticate default KotakNeoAdapter based on environment settings.
+
+        Fails closed truthfully if live credentials are configured but the live
+        networking client is unsupported or missing.
+        """
         settings = get_settings()
         has_credentials = bool(
             settings.kotak_consumer_key
-            and settings.kotak_consumer_secret
             and settings.kotak_mobile_number
-            and settings.kotak_password
+            and (settings.kotak_ucc or settings.kotak_password)
         )
 
         if has_credentials and not self.config.force_mock:
-            adapter = KotakNeoAdapter(mock_mode=False)
-        else:
-            adapter = KotakNeoAdapter(mock_mode=True)
-
-        try:
-            adapter.authenticate()
-        except Exception as exc:
-            # Fall back to mock adapter if live auth fails
-            adapter = KotakNeoAdapter(mock_mode=True)
-            adapter.authenticate()
-            self.recorder.record_error(
-                f"Live adapter authentication failed: {exc}. Reverted to mock mode."
+            adapter = KotakNeoAdapter(
+                mock_mode=False,
+                readiness_timeout=self.config.feed_readiness_timeout,
             )
+            adapter.authenticate()
+            return adapter
 
+        adapter = KotakNeoAdapter(mock_mode=True)
+        adapter.authenticate()
         return adapter
 
     def _run_mock_feeder(self) -> None:
@@ -447,9 +507,26 @@ class ForwardTestRunner:
 
             # Subscribe to ticks on adapter if present
             if self.adapter is not None:
+                if getattr(self.adapter, "feed_status", None) == "UNSUPPORTED":
+                    raise NotImplementedError(
+                        "Cannot start forward-testing session: broker feed is UNSUPPORTED in this environment. "
+                        "Run with --mock or force_mock=True for simulated paper trading rehearsal."
+                    )
                 if not self.adapter.is_connected():
                     self.adapter.authenticate()
                 self.adapter.subscribe_ticks([self.config.symbol], self.on_tick)
+                if not getattr(self.adapter, "mock_mode", False) and hasattr(
+                    self.adapter, "wait_until_ready"
+                ):
+                    try:
+                        self.adapter.wait_until_ready(timeout=self.config.feed_readiness_timeout)
+                    except Exception as readiness_exc:
+                        self._status = ForwardTestStatus.FAILED
+                        self.recorder.set_status(
+                            ForwardTestStatus.FAILED, reason=str(readiness_exc)
+                        )
+                        self.recorder.record_error(str(readiness_exc), fatal=True)
+                        raise
 
             # Subscribe on feed if present
             if self.feed is not None:
@@ -564,16 +641,22 @@ class ForwardTestRunner:
             # 4. Pre-Trade Risk Verification
             # Determine order side and quantity
             side = OrderSide.BUY if signal_obj.direction == SignalDirection.BUY else OrderSide.SELL
-            qty = 1  # 1 unit/lot base
+            qty = self.trade_qty
+
+            # Execution causality: event time and price are from the latest tick that closed the bar
+            exec_ts = (
+                self._latest_tick.timestamp if self._latest_tick is not None else bar.timestamp
+            )
+            exec_price = self._latest_tick.ltp if self._latest_tick is not None else bar.close
 
             tentative_order = self.broker.create_order(
                 symbol=self.config.symbol,
                 side=side,
                 order_type=OrderType.MARKET,
                 qty=qty,
-                price=bar.close,
-                signal_id=f"SIG-{bar.timestamp.isoformat()}",
-                timestamp=bar.timestamp,
+                price=exec_price,
+                signal_id=f"SIG-{exec_ts.isoformat()}",
+                timestamp=exec_ts,
             )
 
             bal = self.broker.get_account_balance()
@@ -582,7 +665,7 @@ class ForwardTestRunner:
                 order=tentative_order,
                 balance=bal,
                 positions=positions_map,
-                current_market_price=bar.close,
+                current_market_price=exec_price,
             )
 
             if not risk_check.passed:
@@ -591,7 +674,7 @@ class ForwardTestRunner:
                 rejected_order = OrderStateMachine.transition(
                     tentative_order,
                     OrderStatus.REJECTED,
-                    timestamp=bar.timestamp,
+                    timestamp=exec_ts,
                     rejection_reason=rejection,
                 )
                 self.broker._orders[rejected_order.order_id] = rejected_order
@@ -605,8 +688,8 @@ class ForwardTestRunner:
 
                 executed_order = self.broker.submit_order(
                     tentative_order,
-                    current_market_price=bar.close,
-                    timestamp=bar.timestamp,
+                    current_market_price=exec_price,
+                    timestamp=exec_ts,
                     bid=bid_quote,
                     ask=ask_quote,
                 )
@@ -628,7 +711,8 @@ class ForwardTestRunner:
         # 6. Snapshot Portfolio Balance & Positions
         balance = self.broker.get_account_balance()
         self.risk_engine.update_equity(balance.total_capital)
-        self.recorder.record_equity_snapshot(balance, bar.timestamp)
+        snap_ts = self._latest_tick.timestamp if self._latest_tick is not None else bar.timestamp
+        self.recorder.record_equity_snapshot(balance, snap_ts)
         self.recorder.record_positions(self.broker.get_positions())
 
         if self.ledger_repo:
@@ -651,13 +735,14 @@ class ForwardTestRunner:
             ):
                 return self._build_result(dossier_path=self._dossier_path)
 
-            self._is_running = False
-            self._status = (
-                ForwardTestStatus.FAILED
-                if self.recorder.status == ForwardTestStatus.FAILED
-                else ForwardTestStatus.COMPLETED
+            was_failed = (
+                self._status == ForwardTestStatus.FAILED
+                or self.recorder.status == ForwardTestStatus.FAILED
             )
-            self.recorder.set_status(self._status, reason=reason)
+            self._is_running = False
+            if not was_failed:
+                self._status = ForwardTestStatus.STOPPING
+                self.recorder.set_status(ForwardTestStatus.STOPPING, reason=reason)
 
             # Restore original SIGINT handler
             if self._prev_sigint_handler is not None:
@@ -665,19 +750,26 @@ class ForwardTestRunner:
                     signal.signal(signal.SIGINT, self._prev_sigint_handler)
                 self._prev_sigint_handler = None
 
-            # Unsubscribe adapter
+            # Unsubscribe adapter and disconnect background streams
             if self.adapter is not None:
                 with contextlib.suppress(Exception):
                     self.adapter.unsubscribe_ticks([self.config.symbol])
+                if hasattr(self.adapter, "disconnect"):
+                    with contextlib.suppress(Exception):
+                        self.adapter.disconnect()
 
-            # Flush any unclosed aggregator ticks into a final bar if desired
-            final_bar = self.aggregator.flush()
+            # Flush any unclosed aggregator ticks into a final bar WITHOUT emitting on_bar_close callback
+            final_bar = self.aggregator.flush(emit_callback=False)
             if final_bar is not None:
                 self.recorder.record_bar(final_bar)
 
             # Snapshot final balance and positions
             self.recorder.record_positions(self.broker.get_positions())
             self.recorder.conclude_session()
+
+            final_status = ForwardTestStatus.FAILED if was_failed else ForwardTestStatus.COMPLETED
+            self._status = final_status
+            self.recorder.set_status(final_status, reason=reason)
 
             # Resolve output path and persist JSON dossier
             output_file: Path | None = None
@@ -694,7 +786,7 @@ class ForwardTestRunner:
             and self._mock_feeder_thread.is_alive()
             and threading.current_thread() != self._mock_feeder_thread
         ):
-            self._mock_feeder_thread.join(timeout=0.5)
+            self._mock_feeder_thread.join(timeout=2.0)
 
         return self._build_result(dossier_path=self._dossier_path)
 
@@ -749,16 +841,15 @@ class ForwardTestRunner:
 
                     def _gen_bars() -> Iterator[Tick]:
                         for b in feed_obj.stream():
-                            spread = round(b.close * 0.0002, 2)
                             yield Tick(
                                 symbol=str(b.symbol),
                                 ltp=b.close,
-                                bid=round(b.close - spread / 2.0, 2),
-                                ask=round(b.close + spread / 2.0, 2),
+                                bid=None,
+                                ask=None,
                                 volume=b.volume,
                                 oi=b.oi,
                                 timestamp=b.timestamp,
-                                source=b.source,
+                                source=b.source or "REPLAY",
                                 is_synthetic=b.is_synthetic,
                             )
 

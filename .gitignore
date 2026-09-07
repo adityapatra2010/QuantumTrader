@@ -63,3 +63,10 @@ data/cache/*
 *~
 .DS_Store
 Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# External skills directories
+.agents/skills/*/

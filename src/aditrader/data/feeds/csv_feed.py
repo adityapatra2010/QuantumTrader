@@ -1,13 +1,13 @@
 """Deterministic historical CSV candle replay feed enforcing strict point-in-time sequencing."""
 
-import csv
 from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 
-from aditrader.core.models.market_data import Bar
+from aditrader.core.models.market_data import Bar, Tick
 from aditrader.data.feeds.base import DataFeed
-from aditrader.data.session import is_market_open, normalize_to_ist
+from aditrader.data.feeds.nse_csv import NSECSVParser, parse_flexible_timestamp
+from aditrader.data.session import normalize_to_ist
 
 
 class CSVDataFeed(DataFeed):
@@ -18,6 +18,7 @@ class CSVDataFeed(DataFeed):
     1. Strict exchange timezone localization (Asia/Kolkata).
     2. Deterministic chronological replay (no look-ahead leakage).
     3. Price envelope validation via immutable Bar models.
+    4. Truthful quote replay (never fabricates synthetic bid/ask quotes).
     """
 
     def __init__(
@@ -32,95 +33,32 @@ class CSVDataFeed(DataFeed):
         self.timeframe = timeframe
         self.session_filter = session_filter
         self._bars: list[Bar] = []
+        self._warnings: list[str] = []
         self._subscribed_symbols: set[str] = {symbol}
         self._load_and_validate()
+
+    @property
+    def warnings(self) -> list[str]:
+        """Diagnostic warnings produced during CSV parsing and normalization."""
+        return list(self._warnings)
 
     def _load_and_validate(self) -> None:
         """Parse, validate, and chronologically sort historical bars from CSV."""
         if not self.file_path.is_file():
             raise FileNotFoundError(f"CSV historical file not found: {self.file_path}")
 
-        loaded: list[Bar] = []
-        with open(self.file_path, encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                # Normalize column keys to lowercase
-                cleaned_row = {k.strip().lower(): v.strip() for k, v in row.items() if k}
-
-                # Parse timestamp
-                ts_raw = (
-                    cleaned_row.get("timestamp")
-                    or cleaned_row.get("datetime")
-                    or cleaned_row.get("date")
-                )
-                if not ts_raw:
-                    continue
-
-                ts = self._parse_timestamp(ts_raw)
-                ist_ts = normalize_to_ist(ts)
-
-                if self.session_filter and not is_market_open(ist_ts):
-                    continue
-
-                open_p = float(cleaned_row["open"])
-                high_p = float(cleaned_row["high"])
-                low_p = float(cleaned_row["low"])
-                close_p = float(cleaned_row["close"])
-                volume = int(float(cleaned_row.get("volume", 0)))
-                oi = int(float(cleaned_row.get("oi", 0)))
-
-                vwap_raw = cleaned_row.get("vwap")
-                vwap = float(vwap_raw) if vwap_raw and float(vwap_raw) > 0 else None
-                tc_raw = cleaned_row.get("tick_count", cleaned_row.get("ticks"))
-                tick_count = int(float(tc_raw)) if tc_raw and int(float(tc_raw)) >= 0 else None
-
-                bar = Bar(
-                    timestamp=ist_ts,
-                    open=open_p,
-                    high=high_p,
-                    low=low_p,
-                    close=close_p,
-                    volume=volume,
-                    oi=oi,
-                    symbol=self.symbol,
-                    vwap=vwap,
-                    tick_count=tick_count,
-                    source="CSV_HISTORICAL",
-                    timeframe=self.timeframe,
-                    is_synthetic=False,
-                )
-                loaded.append(bar)
-
-        # Sort strictly ascending by timestamp (prevents look-ahead / out-of-order bugs)
-        loaded.sort(key=lambda b: b.timestamp)
-
-        # Deduplicate identical timestamps if any
-        deduped: list[Bar] = []
-        seen_ts: set[datetime] = set()
-        for b in loaded:
-            if b.timestamp not in seen_ts:
-                deduped.append(b)
-                seen_ts.add(b.timestamp)
-
-        self._bars = deduped
+        bars, warnings = NSECSVParser.parse_file(
+            file_path=self.file_path,
+            symbol=self.symbol,
+            timeframe=self.timeframe,
+            session_filter=self.session_filter,
+        )
+        self._bars = bars
+        self._warnings = warnings
 
     def _parse_timestamp(self, ts_str: str) -> datetime:
-        """Parse various ISO and standard date formats."""
-        for fmt in (
-            "%Y-%m-%d %H:%M:%S%z",
-            "%Y-%m-%dT%H:%M:%S%z",
-            "%Y-%m-%d %H:%M:%S",
-            "%Y-%m-%dT%H:%M:%S",
-            "%Y-%m-%d",
-            "%d-%m-%Y %H:%M:%S",
-            "%d/%m/%Y %H:%M:%S",
-        ):
-            try:
-                return datetime.strptime(ts_str, fmt)
-            except ValueError:
-                continue
-        # Fallback to fromisoformat
-        return datetime.fromisoformat(ts_str)
+        """Parse various ISO and standard date formats (backward-compatible)."""
+        return parse_flexible_timestamp(ts_str)
 
     def subscribe(self, symbols: list[str]) -> None:
         """Subscribe to symbols."""
@@ -144,6 +82,26 @@ class CSVDataFeed(DataFeed):
         """Chronologically yield immutable Bar instances one by one."""
         if self.symbol in self._subscribed_symbols:
             yield from self._bars
+
+    def stream_ticks(self) -> Iterator[Tick]:
+        """
+        Chronologically yield authentic Tick objects without fabricating synthetic bid/ask quotes.
+
+        Missing quotes remain strictly None to preserve research truthfulness.
+        """
+        if self.symbol in self._subscribed_symbols:
+            for b in self._bars:
+                yield Tick(
+                    symbol=self.symbol,
+                    ltp=b.close,
+                    bid=None,
+                    ask=None,
+                    volume=b.volume,
+                    oi=b.oi,
+                    timestamp=b.timestamp,
+                    source="CSV_REPLAY",
+                    is_synthetic=False,
+                )
 
     def __len__(self) -> int:
         """Return number of loaded bars."""

@@ -60,7 +60,9 @@ The CLI executable entry point is `aditrader` (with `neopaper` retained as an al
 
 | Command | Action |
 |---|---|
-| `aditrader backtest run --symbol <S> [--source live\|file]` | Start paper-trading session using live feed or CSV replay |
+| `aditrader backtest run --symbol <S> [--source live\|file]` | Start backtest session using historical CSV replay or synthetic data |
+| `aditrader forward-test --strategy <NAME> [--instrument <S>]` | Start air-gapped forward-testing paper session with real/rehearsal market data |
+| `aditrader smoke-feed --symbol <S> [--ticks <N>] [--mock]` | Run safe, strictly read-only market data feed smoke test (ADR 002, ADR 014) |
 | `aditrader options chain --symbol <S> --expiry <D>` | Display live options chain with computed Greeks |
 | `aditrader strategy validate --file <PATH>` | Run strategy through AST and Institutional Mode filters |
 | `aditrader suggest --symbol <S> [--bias 60:40]` | Generate options structures based on current regime |

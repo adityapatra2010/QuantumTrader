@@ -43,9 +43,9 @@ v
 ## Subsystem Breakdown
 
 ### 1. Broker Data Layer (`data/`)
-- Isolates broker-specific SDKs (e.g., Kotak Neo Python SDK)[cite: 1, 2].
-- Responsibilities: Authentication (TOTP + MPIN), streaming live ticks via WebSocket (`KotakDataFeed`), scrip master discovery, and historical OHLCV bar fetch[cite: 2].
-- Strict Boundary: Real-order placement functions are entirely excluded; only market data and contract metadata are exposed to upstream modules[cite: 1, 2].
+- Isolates broker-specific SDKs (official `kotakneoapi` package / `neo_api_client`)[cite: 1, 2].
+- Responsibilities: Vendor authentication (TOTP + MPIN), streaming live ticks via async binary WebSocket (`KotakNeoAdapter` / `SFeedWebSocket`), explicit readiness handshake (`wait_until_ready()`), truthful feed state machine, scrip master discovery, and historical OHLCV bar fetch (ADR 014)[cite: 2].
+- Strict Boundary: Real-order placement functions are entirely excluded; only market data and contract metadata are exposed to upstream modules (ADR 002)[cite: 1, 2].
 
 ### 2. Core Paper Broker & Execution State (`core/`)
 - Simulated broker engine maintaining an append-only, transactional ledger (ADR 002).
@@ -146,3 +146,34 @@ v
                                  (Runtime Risk Engine Pre-Trade Gates Checked)
 ```
 
+---
+
+## Forward-Testing & Paper-Trading Execution Pipeline
+
+```
+[Live Feed / Rehearsal Stream]
+          │
+          ▼
+   KotakNeoAdapter (Declared Status: LIVE_CONNECTED / SIMULATED_REHEARSAL)
+          │
+          ▼
+MarketDataQualityValidator (Audit Chronology, Session Boundaries, Crossed Quotes)
+          │
+          ▼
+   TickAggregator (Configurable Volume Modes: TICK_COUNT, TRADED_VOLUME, VWAP)
+          │ (On Closed Bar Rollover)
+          ▼
+  ForwardTestRunner
+    ├── 1. Options Air-Gap & AST Pre-Validation Check (ADR 011, ADR 013)
+    ├── 2. ExecutableStrategy Evaluation -> Signal Generation
+    ├── 3. Runtime Risk Engine Evaluation (Margin utilization <= 85%, Drawdown <= 5%, Lot Limits)
+    ├── 4. PaperBroker Fill Execution (Point-in-time timestamping, Quote-aware, Clamped limit fills)
+    └── 5. Ledger & Dossier Persistence (SQLite UTC-normalized ledger + Atomic JSON dossier)
+```
+
+### Key Architectural Invariants
+1. **Air-Gap Boundary**: Physical disconnection from real broker order APIs (ADR 002).
+2. **Options Air-Gap**: Rejection of multi-leg option strategies in forward testing until dedicated multi-leg option chain execution engine is available (ADR 011, ADR 013).
+3. **Point-in-Time Causality**: All order and trade timestamps are driven by prevailing tick events, enforcing $exec\_ts \ge bar.timestamp$.
+4. **Exchange Limit Clamping**: Limit order slippage is clamped to limit price ($fill \le limit$ for BUY, $fill \ge limit$ for SELL).
+5. **Symmetrical Margin & Cost Realism**: Dynamic instrument classification (`OPTIONS`, `FUTURES`, `EQUITY_INTRADAY`) and symmetrical pre-trade margin gates.

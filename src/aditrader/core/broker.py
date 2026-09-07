@@ -20,7 +20,7 @@ class PaperBroker:
         initial_capital: float = 1_000_000.0,
         max_margin_utilization: float = 0.85,
         slippage_model: SlippageModel | None = None,
-        default_instrument: InstrumentClass = "OPTIONS",
+        default_instrument: InstrumentClass = "EQUITY_INTRADAY",
     ):
         self.initial_capital: float = round(float(initial_capital), 2)
         self.cash_balance: float = self.initial_capital
@@ -156,18 +156,46 @@ class PaperBroker:
             return rejected
 
         balance = self.get_account_balance()
-        required_margin = float(order.qty) * estimated_price
+        existing_pos = self._positions.get(order.symbol)
+        existing_qty = existing_pos.qty if existing_pos else 0
 
-        # Margin Gate: Reject order if margin requirement exceeds available margin
-        if order.side == OrderSide.BUY and required_margin > balance.available_margin:
-            rejected = OrderStateMachine.transition(
-                order,
-                OrderStatus.REJECTED,
-                timestamp=ts,
-                rejection_reason=f"Insufficient available margin: required {required_margin:.2f} > available {balance.available_margin:.2f}",
-            )
-            self._orders[rejected.order_id] = rejected
-            return rejected
+        # Symmetrical Solvency & Margin Gate for Long, Short, and Position Reversals
+        # 1. Closing or reducing an existing position releases margin; no new margin required.
+        # 2. Opening or increasing a position requires: qty * estimated_price <= available_margin.
+        # 3. Position reversals (e.g. Long -> Short or Short -> Long) require margin for the net new position.
+        is_closing = False
+        net_new_qty = order.qty
+        if order.side == OrderSide.BUY:
+            if existing_qty < 0:  # Short position exists
+                closing_qty = min(order.qty, abs(existing_qty))
+                net_new_qty = order.qty - closing_qty
+                is_closing = net_new_qty == 0
+        else:  # OrderSide.SELL
+            if existing_qty > 0:  # Long position exists
+                closing_qty = min(order.qty, existing_qty)
+                net_new_qty = order.qty - closing_qty
+                is_closing = net_new_qty == 0
+
+        if not is_closing and net_new_qty > 0:
+            required_margin = float(net_new_qty) * estimated_price
+            if required_margin > balance.available_margin:
+                side_label = (
+                    "short"
+                    if (order.side == OrderSide.SELL and existing_qty <= 0)
+                    or (order.side == OrderSide.SELL and net_new_qty > 0)
+                    else "long"
+                )
+                rejected = OrderStateMachine.transition(
+                    order,
+                    OrderStatus.REJECTED,
+                    timestamp=ts,
+                    rejection_reason=(
+                        f"Insufficient available margin for {side_label} position: "
+                        f"required {required_margin:.2f} > available {balance.available_margin:.2f}"
+                    ),
+                )
+                self._orders[rejected.order_id] = rejected
+                return rejected
 
         # Transition to SUBMITTED
         submitted = OrderStateMachine.transition(order, OrderStatus.SUBMITTED, timestamp=ts)
@@ -343,6 +371,15 @@ class PaperBroker:
     ) -> Order:
         """Apply slippage, statutory fees, update order state, positions, and cash balance atomically."""
         fill_price, slippage = self.slippage_model.calculate_fill_price(raw_price, order.side)
+
+        # Exchange limit-order invariant: Limit orders must NEVER fill worse than limit price
+        if order.order_type == OrderType.LIMIT and order.price is not None:
+            if order.side == OrderSide.BUY and fill_price > order.price:
+                fill_price = order.price
+                slippage = max(0.0, round(fill_price - raw_price, 2))
+            elif order.side == OrderSide.SELL and fill_price < order.price:
+                fill_price = order.price
+                slippage = max(0.0, round(raw_price - fill_price, 2))
 
         charges = CostCalculator.calculate(
             side=order.side,

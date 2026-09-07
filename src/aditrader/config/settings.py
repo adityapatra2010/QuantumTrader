@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     kotak_consumer_secret: str | None = Field(default=None, alias="KOTAK_CONSUMER_SECRET")
     kotak_mobile_number: str | None = Field(default=None, alias="KOTAK_MOBILE_NUMBER")
     kotak_password: str | None = Field(default=None, alias="KOTAK_PASSWORD")
+    kotak_ucc: str | None = Field(default=None, alias="KOTAK_UCC")
     kotak_mpin: str | None = Field(default=None, alias="KOTAK_MPIN")
     kotak_totp_secret: str | None = Field(default=None, alias="KOTAK_TOTP_SECRET")
 

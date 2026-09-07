@@ -188,13 +188,13 @@ def test_quote_aware_execution_buy_and_sell() -> None:
     positions = runner.broker.get_positions()
     nifty_pos = next((p for p in positions if p.symbol == "NIFTY"), None)
     assert nifty_pos is not None
-    assert nifty_pos.qty == 1
+    assert nifty_pos.qty == 25  # 1 NSE derivative contract lot
 
     runner.stop(reason="Test concluded")
 
 
 def test_quote_unavailable_fallback_to_ltp() -> None:
-    """Verify fallback to LTP when bid/ask quotes are missing, and flag recorded."""
+    """Verify fallback to prevailing tick LTP when bid/ask quotes are missing."""
     config = ForwardTestConfig(symbol="NIFTY", timeframe="1s", slippage_bps=0.0)
     runner = ForwardTestRunner(
         config=config, strategy="test_ma_crossover", adapter=KotakNeoAdapter(mock_mode=True)
@@ -229,8 +229,9 @@ def test_quote_unavailable_fallback_to_ltp() -> None:
 
     trades = runner.broker.get_trades()
     assert len(trades) >= 1
-    # Fills against bar.close (or LTP) when quotes missing
-    assert trades[0].fill_price == 24010.0
+    # Point-in-time fill against latest tick LTP when quotes missing
+    assert trades[0].fill_price == 24015.0
+    assert trades[0].timestamp == tick2.timestamp
 
     runner.stop(reason="Test concluded")
 

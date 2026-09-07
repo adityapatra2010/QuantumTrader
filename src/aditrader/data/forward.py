@@ -185,6 +185,10 @@ class ForwardTestRecorder:
     ) -> None:
         """Update session lifecycle status and optional reason or failure message."""
         with self._lock:
+            if self._status == ForwardTestStatus.FAILED and status != ForwardTestStatus.FAILED:
+                if reason:
+                    self._stop_reason = reason
+                return
             self._status = status
             if reason:
                 self._stop_reason = reason
@@ -451,10 +455,21 @@ class ForwardTestRecorder:
             }
 
     def save_to_json(self, file_path: Path | str) -> Path:
-        """Write session dossier to disk."""
+        """Atomically write session dossier to disk with fsync and safe replacement."""
+        import os
+
         target = Path(file_path)
         target.parent.mkdir(parents=True, exist_ok=True)
+        temp_file = target.parent / f".{target.name}.tmp.{uuid4().hex[:8]}"
         dossier = self.export_dossier()
-        with open(target, "w", encoding="utf-8") as f:
-            json.dump(dossier, f, indent=2)
+        try:
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(dossier, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            temp_file.replace(target)
+        except Exception:
+            if temp_file.exists():
+                temp_file.unlink(missing_ok=True)
+            raise
         return target

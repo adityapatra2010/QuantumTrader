@@ -10,7 +10,9 @@ from aditrader.cli.commands import (
     cmd_doctor,
     cmd_forward_test,
     cmd_init_db,
+    cmd_inspect_data,
     cmd_search,
+    cmd_smoke_feed,
     cmd_status,
     cmd_strategies,
     cmd_validate,
@@ -124,7 +126,25 @@ def build_parser() -> argparse.ArgumentParser:
     # 8. dashboard
     p_dash = subparsers.add_parser(
         "dashboard",
-        help="Launch Plotly Dash research workspace (Phase 8 roadmap status)",
+        help="Launch responsive research and paper-trading dashboard web interface",
+    )
+    p_dash.add_argument(
+        "--port",
+        type=int,
+        default=8050,
+        help="HTTP server port (default: 8050)",
+    )
+    p_dash.add_argument(
+        "--host",
+        type=str,
+        default="127.0.0.1",
+        help="HTTP server host address (default: 127.0.0.1)",
+    )
+    p_dash.add_argument(
+        "--serve",
+        action="store_true",
+        default=False,
+        help="Start the live responsive HTTP research dashboard server",
     )
     p_dash.set_defaults(handler=cmd_dashboard)
 
@@ -138,7 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-s",
         type=str,
         default=None,
-        help="Strategy name or ID to execute (e.g., 'test_ma_crossover', 'iron_condor')",
+        help="Strategy name or ID to execute (e.g., 'test_ma_crossover', 'momentum_breakout')",
     )
     p_fwd.add_argument(
         "--instrument",
@@ -148,10 +168,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Instrument trading symbol (defaults to strategy underlying symbol)",
     )
     p_fwd.add_argument(
+        "--csv",
+        type=str,
+        default=None,
+        help="Path to CSV historical or intraday dataset for deterministic paper replay",
+    )
+    p_fwd.add_argument(
         "--timeframe",
         type=str,
         default=None,
         help="Bar aggregation timeframe override (e.g., '1m', '5m')",
+    )
+    p_fwd.add_argument(
+        "--qty",
+        type=int,
+        default=None,
+        help="Order execution quantity override (defaults to lot size for derivatives, 1 for equity)",
+    )
+    p_fwd.add_argument(
+        "--volume-mode",
+        type=str,
+        choices=["TRADED_VOLUME", "TICK_COUNT", "CUMULATIVE", "INCREMENTAL"],
+        default="TRADED_VOLUME",
+        help="Volume aggregation semantics (default: TRADED_VOLUME)",
     )
     p_fwd.add_argument(
         "--capital",
@@ -202,6 +241,51 @@ def build_parser() -> argparse.ArgumentParser:
         help="Halt session immediately on any market data quality anomaly",
     )
     p_fwd.set_defaults(handler=cmd_forward_test)
+
+    # 10. smoke-feed
+    p_smoke = subparsers.add_parser(
+        "smoke-feed",
+        help="Run safe read-only market data smoke test against Kotak Neo live or mock feed",
+    )
+    p_smoke.add_argument(
+        "--symbol",
+        type=str,
+        default="NIFTY",
+        help="Symbol or index to subscribe to (e.g. 'NIFTY', 'BANKNIFTY', 'RELIANCE')",
+    )
+    p_smoke.add_argument(
+        "--ticks",
+        type=int,
+        default=5,
+        help="Number of streaming ticks to receive before concluding (default: 5)",
+    )
+    p_smoke.add_argument(
+        "--timeout",
+        type=float,
+        default=15.0,
+        help="Readiness and collection timeout in seconds (default: 15.0)",
+    )
+    p_smoke.add_argument(
+        "--mock",
+        action="store_true",
+        default=False,
+        help="Force simulated mock broker feed even if credentials exist",
+    )
+    p_smoke.set_defaults(handler=cmd_smoke_feed)
+
+    # 11. inspect-data
+    p_inspect = subparsers.add_parser(
+        "inspect-data",
+        help="Inspect CSV market data file compatibility, columns, schema, and quality prior to replay",
+    )
+    p_inspect.add_argument("file", type=str, help="Path to CSV file to inspect")
+    p_inspect.add_argument(
+        "--symbol",
+        type=str,
+        default=None,
+        help="Filter/target symbol to evaluate (optional)",
+    )
+    p_inspect.set_defaults(handler=cmd_inspect_data)
 
     return parser
 

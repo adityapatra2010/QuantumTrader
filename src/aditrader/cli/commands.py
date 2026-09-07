@@ -4,9 +4,13 @@ import argparse
 import importlib
 import json
 import os
+import random
 import sys
+import threading
+import time
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 from sqlalchemy import func, select
 from sqlalchemy import inspect as sa_inspect
@@ -17,7 +21,7 @@ from aditrader.core.costs import SlippageModel
 from aditrader.core.ledger.repository import LedgerRepository
 from aditrader.core.ledger.schema import OrderRecord, PositionRecord, TradeRecord
 from aditrader.core.models.execution import Trade
-from aditrader.core.models.market_data import Bar
+from aditrader.core.models.market_data import Bar, Tick
 from aditrader.core.models.trade_signal import Signal
 from aditrader.data.adapters.kotak_neo import KotakNeoAdapter
 from aditrader.data.feeds.csv_feed import CSVDataFeed
@@ -25,6 +29,7 @@ from aditrader.data.feeds.synthetic_feed import SyntheticDataFeed
 from aditrader.data.forward import ForwardTestStatus
 from aditrader.data.forward_runner import ForwardTestConfig, ForwardTestRunner
 from aditrader.data.instruments.service import InstrumentSearchService
+from aditrader.data.session import EXCHANGE_TIMEZONE
 from aditrader.strategy.builder.schema import (
     ASTOperator,
     ConditionCategory,
@@ -623,27 +628,99 @@ def cmd_backtest(args: argparse.Namespace) -> int:
 
 
 # ==============================================================================
-# 8. Dashboard & Forward-Test Notices (Roadmap Boundaries)
+# 8. Dashboard & Inspection Commands
 # ==============================================================================
 
 
 def cmd_dashboard(args: argparse.Namespace) -> int:
-    """Inform user that dashboard UI is scheduled for Phase 8."""
+    """Launch the responsive web research and paper trading dashboard."""
+    port = getattr(args, "port", 8050) or 8050
+    host = getattr(args, "host", "127.0.0.1") or "127.0.0.1"
+    serve = getattr(args, "serve", False)
+
     print("=" * 68)
-    print("                Plotly Dash Research Workspace")
+    print("      AdiTrader / QuantumValidator — Research & Paper Dashboard")
     print("=" * 68)
-    print("[NOTICE] The interactive Plotly Dash UI is scheduled for Phase 8")
-    print("         (Dashboard & Interactive Research Workspace) per ROADMAP.md.")
-    print("         Web servers and frontend handlers are not active in Phase 7.")
-    print("         Please use available CLI research commands:")
-    print("             aditrader doctor")
-    print("             aditrader status")
-    print("             aditrader strategies")
-    print("             aditrader validate --strategy <name>")
-    print("             aditrader backtest --strategy <name>")
-    print("             aditrader search <query>")
+    print("[NOTICE] Full multi-page Plotly Dash integration is scheduled for Phase 8.")
+    print("         A lightweight, zero-dependency responsive Web GUI is ready now.")
+    print(f"         Server endpoint: http://{host}:{port}")
+    print("         Run with '--serve' to start the live server:")
+    print("             aditrader dashboard --serve")
     print("=" * 68)
+
+    if serve:
+        from aditrader.web.server import run_dashboard
+
+        run_dashboard(host=host, port=port)
+
     return 0
+
+
+def cmd_inspect_data(args: argparse.Namespace) -> int:
+    """Inspect CSV market data file compatibility, columns, schema, and quality prior to replay."""
+    file_path = getattr(args, "file", None)
+    if not file_path:
+        print("[ERROR] Please provide a path to a CSV file to inspect.")
+        return 1
+
+    path = Path(file_path)
+    if not path.is_file():
+        print(f"[ERROR] File not found: {file_path}")
+        return 1
+
+    symbol = getattr(args, "symbol", None)
+    from aditrader.data.feeds.nse_csv import NSECSVInspector
+
+    print("=" * 68)
+    print("      AdiTrader / QuantumValidator — Market Data Dataset Inspector")
+    print("=" * 68)
+    print(f"File Path:        {path.resolve()}")
+    print(f"File Size:        {path.stat().st_size:,} bytes")
+    if symbol:
+        print(f"Target Symbol:    {symbol}")
+    print("-" * 68)
+
+    try:
+        report = NSECSVInspector.inspect_file(path, target_symbol=symbol)
+    except Exception as exc:
+        print(f"[ERROR] Inspection failed: {exc}")
+        return 1
+
+    print(f"Detected Format:  {report.detected_format.value}")
+    print(
+        f"Replay Ready:     {'YES - VALID' if report.is_valid_replayable else 'NO - NOT REPLAYABLE'}"
+    )
+    print(f"Total Lines:      {report.total_lines:,}")
+    print(f"Parsed Bars:      {report.parsed_bars:,}")
+    print(f"Timeframe:        {report.timeframe_detected}")
+    if report.start_time and report.end_time:
+        print(f"Date Range:       {report.start_time} to {report.end_time}")
+    if report.symbols:
+        top_syms = ", ".join(report.symbols[:8])
+        if len(report.symbols) > 8:
+            top_syms += f" (+{len(report.symbols) - 8} more)"
+        print(f"Symbols ({len(report.symbols)}):     {top_syms}")
+    print(f"Columns ({len(report.columns_found)}):     {', '.join(report.columns_found)}")
+    print(
+        f"Available Fields: Volume={'YES' if report.has_volume else 'NO'}, "
+        f"OI={'YES' if report.has_oi else 'NO'}, "
+        f"VWAP={'YES' if report.has_vwap else 'NO'}, "
+        f"TickCount={'YES' if report.has_tick_count else 'NO'}"
+    )
+
+    if report.quality_warnings:
+        print("-" * 68)
+        print(f"Quality Warnings ({len(report.quality_warnings)}):")
+        for w in report.quality_warnings[:10]:
+            print(f"  [!] {w}")
+        if len(report.quality_warnings) > 10:
+            print(f"  ... and {len(report.quality_warnings) - 10} additional warnings.")
+    else:
+        print("-" * 68)
+        print("Quality Check:    CLEAN - Zero anomalies detected.")
+
+    print("=" * 68)
+    return 0 if report.is_valid_replayable else 1
 
 
 def cmd_forward_test(args: argparse.Namespace) -> int:
@@ -664,13 +741,19 @@ def cmd_forward_test(args: argparse.Namespace) -> int:
         print("  # Run linear MA crossover on NIFTY for 50 ticks in mock rehearsal:")
         print("  aditrader forward-test --strategy test_ma_crossover --ticks 50")
         print()
-        print("  # Run Iron Condor options forward test for 30 seconds:")
-        print("  aditrader forward-test --strategy iron_condor --duration 30")
+        print("  # Replay real historical CSV dataset for deterministic forward testing:")
+        print("  aditrader forward-test --strategy test_ma_crossover --csv data/nifty_sample.csv")
+        print()
+        print("  # Run momentum breakout forward test for 30 seconds:")
+        print("  aditrader forward-test --strategy momentum_breakout --duration 30")
         print()
         print("  # Run with custom paper capital and output dossier path:")
         print(
             "  aditrader forward-test --strategy test_ma_crossover --capital 2000000 --output runs/my_forward_run.json"
         )
+        print()
+        print("Note: Multi-leg option strategies are strictly air-gapped from forward execution")
+        print("      pending Phase 8 synthetic IV modeling. Only linear strategies are supported.")
         print("=" * 68)
         return 0
 
@@ -700,10 +783,19 @@ def cmd_forward_test(args: argparse.Namespace) -> int:
     duration = getattr(args, "duration", None)
     out_path = Path(args.output) if getattr(args, "output", None) else None
     strict_qual = getattr(args, "strict_quality", False)
+    raw_vol_mode = getattr(args, "volume_mode", "TRADED_VOLUME") or "TRADED_VOLUME"
+    vol_mode: Literal["TICK_COUNT", "TRADED_VOLUME", "CUMULATIVE", "INCREMENTAL"] = (
+        cast(Literal["TICK_COUNT", "TRADED_VOLUME", "CUMULATIVE", "INCREMENTAL"], raw_vol_mode)
+        if raw_vol_mode in ("TICK_COUNT", "TRADED_VOLUME", "CUMULATIVE", "INCREMENTAL")
+        else "TRADED_VOLUME"
+    )
+    qty_arg = getattr(args, "qty", None)
 
     config = ForwardTestConfig(
         symbol=instrument,
         timeframe=timeframe,
+        qty=qty_arg,
+        volume_mode=vol_mode,
         initial_capital=capital,
         slippage_bps=slippage_bps,
         strict_quality_checks=strict_qual,
@@ -717,15 +809,35 @@ def cmd_forward_test(args: argparse.Namespace) -> int:
     settings = get_settings()
     has_credentials = bool(
         settings.kotak_consumer_key
-        and settings.kotak_consumer_secret
         and settings.kotak_mobile_number
-        and settings.kotak_password
+        and (settings.kotak_ucc or settings.kotak_password)
     )
-    mode_label = (
-        "Kotak Neo Live WebSocket"
-        if (has_credentials and not force_mock)
-        else "Simulated Rehearsal (Mock Adapter)"
-    )
+    from aditrader.data.adapters.kotak_neo import HAS_NEO_SDK
+
+    csv_path = getattr(args, "csv", None)
+    csv_feed: CSVDataFeed | None = None
+    if csv_path:
+        csv_file = Path(csv_path)
+        if not csv_file.is_file():
+            print(f"[ERROR] CSV dataset not found: {csv_path}")
+            return 1
+        csv_feed = CSVDataFeed(
+            file_path=csv_file,
+            symbol=instrument,
+            timeframe=timeframe,
+            session_filter=False,
+        )
+        if len(csv_feed) == 0:
+            print(f"[ERROR] No valid bars found for symbol '{instrument}' in CSV '{csv_path}'.")
+            return 1
+        mode_label = f"SIMULATION / CSV_REPLAY ({csv_path}, {len(csv_feed)} bars)"
+    elif has_credentials and not force_mock:
+        if not HAS_NEO_SDK:
+            mode_label = "UNSUPPORTED (Live Kotak Neo SDK not installed; fail-closed)"
+        else:
+            mode_label = "LIVE_STREAM (Kotak Neo SFeed)"
+    else:
+        mode_label = "SIMULATED_REHEARSAL (Mock Adapter)"
 
     print("=" * 68)
     print("      AdiTrader / QuantumValidator — Forward Paper Testing")
@@ -734,6 +846,7 @@ def cmd_forward_test(args: argparse.Namespace) -> int:
     print(f"Strategy:         {dsl.name} (v{getattr(dsl, 'schema_version', '1.0')})")
     print(f"Instrument:       {config.symbol}")
     print(f"Timeframe:        {config.timeframe}")
+    print(f"Volume Mode:      {config.volume_mode}")
     print(f"Initial Capital:  ₹{config.initial_capital:,.2f}")
     print(f"Slippage Model:   {config.slippage_bps} bps")
     print(f"Market Feed Mode: {mode_label}")
@@ -767,6 +880,7 @@ def cmd_forward_test(args: argparse.Namespace) -> int:
     runner = ForwardTestRunner(
         config=config,
         strategy=dsl,
+        feed=csv_feed,
         on_bar_callback=on_bar_closed,
         on_signal_callback=on_signal_emitted,
         on_trade_callback=on_trade_executed,
@@ -800,3 +914,140 @@ def cmd_forward_test(args: argparse.Namespace) -> int:
     print("=" * 68)
 
     return 0 if session.status == ForwardTestStatus.COMPLETED else 1
+
+
+# ==============================================================================
+# 10. Smoke Feed Command (Read-Only Market Data Smoke Test)
+# ==============================================================================
+
+
+def cmd_smoke_feed(args: argparse.Namespace) -> int:
+    """Run a safe, strictly read-only smoke test against Kotak Neo live or mock feed.
+
+    NO ORDERS ARE EVER PLACED (Physical air gap ADR 002).
+    Validates WebSocket connectivity, authentication, scrip subscription,
+    and normalized streaming market ticks.
+    """
+    symbol = getattr(args, "symbol", "NIFTY") or "NIFTY"
+    target_ticks = getattr(args, "ticks", 5) or 5
+    timeout_sec = getattr(args, "timeout", 15.0) or 15.0
+    force_mock = getattr(args, "mock", False)
+
+    from aditrader.data.adapters.kotak_neo import HAS_NEO_SDK
+
+    settings = get_settings()
+    has_credentials = bool(
+        settings.kotak_consumer_key
+        and settings.kotak_mobile_number
+        and (settings.kotak_ucc or settings.kotak_password)
+    )
+
+    is_live = has_credentials and not force_mock
+
+    print("=" * 68)
+    print("      AdiTrader / QuantumValidator — Market Data Feed Smoke Test")
+    print("=" * 68)
+    print("[AIR-GAP GUARD] Strictly READ-ONLY market data. No order routing possible.")
+    print(f"Target Symbol:       {symbol}")
+    print(f"Target Ticks:        {target_ticks}")
+    print(f"Readiness Timeout:   {timeout_sec:.1f}s")
+    print(
+        f"Mode:                {'LIVE (Kotak Neo SFeed)' if is_live else 'SIMULATED_REHEARSAL (Mock Adapter)'}"
+    )
+    print(f"SDK Available:       {'Yes (neo_api_client)' if HAS_NEO_SDK else 'No'}")
+    print("-" * 68)
+
+    if is_live and not HAS_NEO_SDK:
+        print("[FAIL CLOSED] Cannot run live smoke test: neo_api_client SDK is not available.")
+        print("              Run with --mock to test simulated streaming ingestion.")
+        return 1
+
+    if not is_live and not force_mock and not has_credentials:
+        print("[NOTICE] Kotak Neo credentials not configured. Defaulting to --mock rehearsal mode.")
+        force_mock = True
+        is_live = False
+
+    adapter = KotakNeoAdapter(
+        mock_mode=not is_live,
+        readiness_timeout=timeout_sec,
+    )
+
+    received_ticks: list[Tick] = []
+    done_event = threading.Event()
+
+    def on_tick(tick: Tick) -> None:
+        received_ticks.append(tick)
+        ist_str = tick.timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        bid_str = f"Bid: ₹{tick.bid:.2f} ({tick.bid_qty})" if tick.bid is not None else "Bid: N/A"
+        ask_str = f"Ask: ₹{tick.ask:.2f} ({tick.ask_qty})" if tick.ask is not None else "Ask: N/A"
+        print(
+            f"  [TICK #{len(received_ticks):02d}] {tick.symbol} | LTP: ₹{tick.ltp:.2f} | "
+            f"{bid_str} | {ask_str} | Vol: {tick.volume} | OI: {tick.oi or 'N/A'} | Time: {ist_str} IST"
+        )
+        if len(received_ticks) >= target_ticks:
+            done_event.set()
+
+    print(f"Authenticating adapter ({'LIVE' if is_live else 'MOCK'})...")
+    try:
+        adapter.authenticate()
+        print("[OK] Authentication successful.")
+    except Exception as exc:
+        print(f"[ERROR] Authentication failed: {exc}")
+        return 1
+
+    print(f"Subscribing to tick stream for '{symbol}'...")
+    try:
+        adapter.subscribe_ticks([symbol], on_tick)
+    except Exception as exc:
+        print(f"[ERROR] Subscription failed: {exc}")
+        adapter.disconnect()
+        return 1
+
+    feeder_thread: threading.Thread | None = None
+    if not is_live:
+
+        def _mock_feeder() -> None:
+            price = 24000.0 if "NIFTY" in symbol.upper() else 1000.0
+            while not done_event.is_set() and len(received_ticks) < target_ticks:
+                price += random.uniform(-2.0, 2.0)
+                tick = Tick(
+                    symbol=symbol,
+                    ltp=round(price, 2),
+                    bid=round(price - 0.5, 2),
+                    ask=round(price + 0.5, 2),
+                    bid_qty=50,
+                    ask_qty=50,
+                    volume=100,
+                    oi=50000,
+                    timestamp=datetime.now(tz=EXCHANGE_TIMEZONE),
+                    source="MOCK_SMOKE_FEED",
+                    is_synthetic=True,
+                )
+                adapter.emit_mock_tick(tick)
+                time.sleep(0.1)
+
+        feeder_thread = threading.Thread(target=_mock_feeder, daemon=True, name="SmokeMockFeeder")
+        feeder_thread.start()
+
+    print(f"Waiting for {target_ticks} tick(s) (timeout: {timeout_sec:.1f}s)...")
+    start_time = time.time()
+    finished_in_time = done_event.wait(timeout=timeout_sec)
+    elapsed = time.time() - start_time
+
+    print("-" * 68)
+    adapter.disconnect()
+    if feeder_thread and feeder_thread.is_alive():
+        feeder_thread.join(timeout=1.0)
+
+    print(f"Session Duration:    {elapsed:.2f}s")
+    print(f"Ticks Received:      {len(received_ticks)} / {target_ticks}")
+    print(f"Feed Final Status:   {adapter.feed_status}")
+
+    if finished_in_time and len(received_ticks) >= target_ticks:
+        print("[VERDICT] PASS — Feed streaming and tick normalization verified successfully.")
+        print("=" * 68)
+        return 0
+    else:
+        print(f"[VERDICT] FAIL — Failed to receive {target_ticks} ticks within {timeout_sec:.1f}s.")
+        print("=" * 68)
+        return 1

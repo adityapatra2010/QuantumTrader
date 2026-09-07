@@ -17,6 +17,13 @@ from aditrader.core.models.execution import AccountBalance, Position, Trade
 from aditrader.core.models.order import Order
 
 
+def _normalize_to_utc(dt: datetime) -> datetime:
+    """Normalize datetime to UTC with explicit tzinfo."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
 class LedgerRepository:
     """Repository managing transactional ledger state and audit logs."""
 
@@ -43,7 +50,7 @@ class LedgerRepository:
         Base.metadata.create_all(self.engine)
 
     def save_order(self, order: Order, run_id: str) -> None:
-        """Insert or update order record."""
+        """Insert or update order record with UTC normalization."""
         with self.SessionLocal() as session:
             stmt = select(OrderRecord).where(
                 OrderRecord.run_id == run_id,
@@ -51,12 +58,13 @@ class LedgerRepository:
             )
             existing = session.execute(stmt).scalar_one_or_none()
 
+            norm_updated = _normalize_to_utc(order.updated_at)
             if existing:
                 existing.status = order.status.value
                 existing.filled_qty = order.filled_qty
                 existing.average_fill_price = order.average_fill_price
                 existing.rejection_reason = order.rejection_reason
-                existing.updated_at = order.updated_at
+                existing.updated_at = norm_updated
             else:
                 record = OrderRecord(
                     run_id=run_id,
@@ -71,14 +79,14 @@ class LedgerRepository:
                     filled_qty=order.filled_qty,
                     average_fill_price=order.average_fill_price,
                     rejection_reason=order.rejection_reason,
-                    created_at=order.created_at,
-                    updated_at=order.updated_at,
+                    created_at=_normalize_to_utc(order.created_at),
+                    updated_at=norm_updated,
                 )
                 session.add(record)
             session.commit()
 
     def save_trade(self, trade: Trade, run_id: str) -> None:
-        """Append immutable trade fill to the ledger."""
+        """Append immutable trade fill to the ledger with UTC normalization."""
         with self.SessionLocal() as session:
             record = TradeRecord(
                 run_id=run_id,
@@ -91,13 +99,13 @@ class LedgerRepository:
                 slippage=trade.slippage,
                 stt=trade.stt,
                 charges=trade.charges,
-                timestamp=trade.timestamp,
+                timestamp=_normalize_to_utc(trade.timestamp),
             )
             session.add(record)
             session.commit()
 
     def save_position(self, position: Position, run_id: str) -> None:
-        """Upsert current position for an instrument."""
+        """Upsert current position for an instrument with UTC normalization."""
         with self.SessionLocal() as session:
             stmt = select(PositionRecord).where(
                 PositionRecord.run_id == run_id,
@@ -105,13 +113,14 @@ class LedgerRepository:
             )
             existing = session.execute(stmt).scalar_one_or_none()
 
+            norm_updated = _normalize_to_utc(position.updated_at)
             if existing:
                 existing.qty = position.qty
                 existing.buy_avg_price = position.buy_avg_price
                 existing.sell_avg_price = position.sell_avg_price
                 existing.realized_pnl = position.realized_pnl
                 existing.unrealized_pnl = position.unrealized_pnl
-                existing.updated_at = position.updated_at
+                existing.updated_at = norm_updated
             else:
                 record = PositionRecord(
                     run_id=run_id,
@@ -121,13 +130,13 @@ class LedgerRepository:
                     sell_avg_price=position.sell_avg_price,
                     realized_pnl=position.realized_pnl,
                     unrealized_pnl=position.unrealized_pnl,
-                    updated_at=position.updated_at,
+                    updated_at=norm_updated,
                 )
                 session.add(record)
             session.commit()
 
     def save_balance(self, balance: AccountBalance, run_id: str) -> None:
-        """Append account balance snapshot."""
+        """Append account balance snapshot with UTC timestamp."""
         with self.SessionLocal() as session:
             record = AccountBalanceRecord(
                 run_id=run_id,
@@ -142,7 +151,7 @@ class LedgerRepository:
             session.commit()
 
     def get_orders(self, run_id: str) -> list[Order]:
-        """Fetch all orders for a run."""
+        """Fetch all orders for a run with normalized UTC timestamps."""
         with self.SessionLocal() as session:
             stmt = (
                 select(OrderRecord)
@@ -163,14 +172,14 @@ class LedgerRepository:
                     filled_qty=r.filled_qty,
                     average_fill_price=r.average_fill_price,
                     rejection_reason=r.rejection_reason,
-                    created_at=r.created_at,
-                    updated_at=r.updated_at,
+                    created_at=_normalize_to_utc(r.created_at),
+                    updated_at=_normalize_to_utc(r.updated_at),
                 )
                 for r in records
             ]
 
     def get_trades(self, run_id: str) -> list[Trade]:
-        """Fetch all trades for a run."""
+        """Fetch all trades for a run with normalized UTC timestamps."""
         with self.SessionLocal() as session:
             stmt = (
                 select(TradeRecord)
@@ -189,13 +198,13 @@ class LedgerRepository:
                     slippage=r.slippage,
                     stt=r.stt,
                     charges=r.charges,
-                    timestamp=r.timestamp,
+                    timestamp=_normalize_to_utc(r.timestamp),
                 )
                 for r in records
             ]
 
     def get_positions(self, run_id: str) -> list[Position]:
-        """Fetch all positions for a run."""
+        """Fetch all positions for a run with normalized UTC timestamps."""
         with self.SessionLocal() as session:
             stmt = select(PositionRecord).where(PositionRecord.run_id == run_id)
             records = session.execute(stmt).scalars().all()
@@ -207,7 +216,7 @@ class LedgerRepository:
                     sell_avg_price=r.sell_avg_price,
                     realized_pnl=r.realized_pnl,
                     unrealized_pnl=r.unrealized_pnl,
-                    updated_at=r.updated_at,
+                    updated_at=_normalize_to_utc(r.updated_at),
                 )
                 for r in records
             ]

@@ -83,7 +83,9 @@ class TickAggregator:
         max_tick_history: int = 10_000,
         max_bar_history: int = 1_000,
         on_bar_close: Callable[[Bar], None] | None = None,
-        volume_mode: Literal["TICK_COUNT", "CUMULATIVE", "INCREMENTAL"] = "TICK_COUNT",
+        volume_mode: Literal["TICK_COUNT", "CUMULATIVE", "INCREMENTAL", "TRADED_VOLUME"] = (
+            "TICK_COUNT"
+        ),
         strict: bool = False,
         ignore_duplicates: bool = True,
     ):
@@ -133,7 +135,7 @@ class TickAggregator:
         if self.volume_mode == "INCREMENTAL":
             return max(0, tick.volume)
 
-        # CUMULATIVE mode: session volume deltas
+        # CUMULATIVE or TRADED_VOLUME mode: session cumulative volume deltas
         if self._last_session_volume is None:
             self._last_session_volume = tick.volume
             return max(0, tick.volume)
@@ -246,7 +248,8 @@ class TickAggregator:
                 self._curr_volume = delta_vol
                 self._curr_oi = tick.oi
                 self._curr_tick_count = 1
-                self._curr_pv_sum = tick.ltp * (delta_vol if delta_vol > 0 else 1)
+                vol_weight = 1 if self.volume_mode == "TICK_COUNT" else delta_vol
+                self._curr_pv_sum = tick.ltp * vol_weight
             elif self._current_bucket_start is None:
                 # Initialize first bar
                 self._current_bucket_start = bucket_start
@@ -257,7 +260,8 @@ class TickAggregator:
                 self._curr_volume = delta_vol
                 self._curr_oi = tick.oi
                 self._curr_tick_count = 1
-                self._curr_pv_sum = tick.ltp * (delta_vol if delta_vol > 0 else 1)
+                vol_weight = 1 if self.volume_mode == "TICK_COUNT" else delta_vol
+                self._curr_pv_sum = tick.ltp * vol_weight
             else:
                 # Same bucket: update running values
                 self._curr_high = max(self._curr_high, tick.ltp)
@@ -267,7 +271,8 @@ class TickAggregator:
                 if tick.oi is not None:
                     self._curr_oi = tick.oi
                 self._curr_tick_count += 1
-                self._curr_pv_sum += tick.ltp * (delta_vol if delta_vol > 0 else 1)
+                vol_weight = 1 if self.volume_mode == "TICK_COUNT" else delta_vol
+                self._curr_pv_sum += tick.ltp * vol_weight
 
             self._last_tick = tick
             self._last_tick_time = ist_time
@@ -277,8 +282,14 @@ class TickAggregator:
 
         return closed_bar
 
-    def flush(self) -> Bar | None:
-        """Force flush current active bar at end of session or replay."""
+    def flush(self, emit_callback: bool = False) -> Bar | None:
+        """Force flush current active bar at end of session or replay.
+
+        Args:
+            emit_callback: If True, invokes on_bar_close callback. Defaults to False
+                           to prevent incomplete partial bars during engine shutdown
+                           from triggering strategy signals or paper fills.
+        """
         with self._lock:
             if self._current_bucket_start is None:
                 return None
@@ -307,7 +318,7 @@ class TickAggregator:
             self._bars_emitted += 1
             self._current_bucket_start = None
 
-        if self.on_bar_close is not None:
+        if emit_callback and self.on_bar_close is not None:
             self.on_bar_close(closed_bar)
 
         return closed_bar

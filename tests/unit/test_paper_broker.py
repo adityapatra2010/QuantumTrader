@@ -126,9 +126,10 @@ def test_limit_order_delayed_fill(broker: PaperBroker) -> None:
     # Market tick drops to 149.0 -> triggers limit fill at order price 150.0
     trades = broker.on_tick(symbol, 149.0, timestamp=now)
     assert len(trades) == 1
-    assert broker._orders[order.order_id].average_fill_price == pytest.approx(
-        150.075, abs=0.01
-    )  # with slippage
+    # Exchange limit-order invariant: BUY limit must NEVER fill above limit price (150.0)
+    assert broker._orders[order.order_id].average_fill_price == pytest.approx(150.0, abs=0.01)
+    assert order.price is not None
+    assert broker._orders[order.order_id].average_fill_price <= order.price
 
 
 def test_margin_threshold_rejection(broker: PaperBroker) -> None:
@@ -201,7 +202,7 @@ def test_partial_fill_and_multiple_fills(broker: PaperBroker) -> None:
         side=OrderSide.BUY,
         order_type=OrderType.LIMIT,
         qty=100,
-        price=2500.0,
+        price=2520.0,
         timestamp=now,
     )
     submitted = broker.submit_order(order, current_market_price=2600.0, timestamp=now)
