@@ -206,11 +206,11 @@ else:
     }
 
     .card-title {
-      font-size: 0.72rem;
+      font-size: 0.78rem;
       font-weight: 600;
       color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+      text-transform: none;
+      letter-spacing: 0.01em;
       margin-bottom: 4px;
       display: flex;
       justify-content: space-between;
@@ -352,11 +352,11 @@ else:
     }
 
     .form-label {
-      font-size: 0.75rem;
+      font-size: 0.78rem;
       font-weight: 600;
       color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+      text-transform: none;
+      letter-spacing: 0;
     }
 
     select, input[type="text"], input[type="number"], input[type="password"] {
@@ -370,7 +370,9 @@ else:
       min-height: 44px;
     }
 
-    select:focus, input:focus {
+    :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+    select:focus, input:focus, button:focus-visible {
       outline: none;
       border-color: var(--blue);
     }
@@ -584,14 +586,14 @@ else:
   </header>
 
   <!-- Workstation Navigation Tabs -->
-  <nav>
-    <button class="tab-btn active" onclick="switchTab('overview')">📊 Overview & Portfolio</button>
-    <button class="tab-btn" onclick="switchTab('strategies')">📜 Strategy Catalog</button>
-    <button class="tab-btn" onclick="switchTab('datasets')">🗄️ Dataset Library</button>
-    <button class="tab-btn" onclick="switchTab('validation')">🛡️ Validation Studio</button>
-    <button class="tab-btn" onclick="switchTab('simulation')">⚡ Simulation & Replay</button>
-    <button class="tab-btn" onclick="switchTab('results')">📁 Run Dossiers</button>
-    <button class="tab-btn" onclick="switchTab('settings')">⚙️ Settings & Security</button>
+  <nav role="tablist" aria-label="Workstation navigation">
+    <button class="tab-btn active" role="tab" aria-selected="true" onclick="switchTab('overview')">📊 Overview</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('strategies')">📜 Strategies</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('datasets')">🗄️ Data</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('validation')">🛡️ Validation</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('simulation')">⚡ Simulation</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('results')">📁 Runs</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('settings')">⚙️ Settings</button>
   </nav>
 
   <!-- Main Workstation Viewport -->
@@ -607,6 +609,41 @@ else:
 
     <!-- 1. OVERVIEW & PORTFOLIO TAB -->
     <div id="tab-overview" class="tab-pane active">
+      <!-- Workstation Orientation & Primary Workflow -->
+      <div class="section-card" style="margin-bottom: 16px; background: linear-gradient(180deg, rgba(22, 27, 34, 0.95), rgba(14, 17, 23, 0.95)); border-color: rgba(88, 166, 255, 0.2);">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <h2 style="font-size: 1.15rem; color: var(--text-bright); margin-bottom: 4px;">Institutional Quantitative Research Workstation</h2>
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0;">
+              Research mode &middot; Paper execution (Live broker order routing physically disabled).
+            </p>
+          </div>
+          <span class="badge badge-paper" style="font-size: 0.72rem;">RESEARCH ISOLATION</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 10px;">
+          <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; cursor: pointer;" onclick="switchTab('strategies')">
+            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">1. Strategies</div>
+            <div style="font-weight: 600; font-size: 0.88rem; color: var(--text-bright); margin: 2px 0;">Browse Catalog</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Inspect options & linear models &rarr;</div>
+          </div>
+          <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; cursor: pointer;" onclick="switchTab('datasets')">
+            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">2. Data Store</div>
+            <div style="font-weight: 600; font-size: 0.88rem; color: var(--text-bright); margin: 2px 0;">Review Feeds</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Audit 3-pillar data capabilities &rarr;</div>
+          </div>
+          <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; cursor: pointer;" onclick="switchTab('validation')">
+            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">3. Validation</div>
+            <div style="font-weight: 600; font-size: 0.88rem; color: var(--text-bright); margin: 2px 0;">Vet Policies</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Evaluate payoff & risk gates &rarr;</div>
+          </div>
+          <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; cursor: pointer;" onclick="switchTab('simulation')">
+            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">4. Simulation</div>
+            <div style="font-weight: 600; font-size: 0.88rem; color: var(--text-bright); margin: 2px 0;">Replay & Fills</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Execute paper trades & dossiers &rarr;</div>
+          </div>
+        </div>
+      </div>
+
       <div class="metric-grid">
         <div class="card">
           <div class="card-title">Virtual Capital <span style="font-size: 0.7rem; color: var(--text-muted);">INR</span></div>
@@ -687,12 +724,12 @@ else:
       <!-- NIFTY CE Dynamic Premium-Ladder Highlight -->
       <div class="strategy-callout">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-          <h3 style="color: var(--text-bright); font-size: 1.05rem;">🎯 Featured: NIFTY CE Dynamic Premium-Ladder (Options Replay Slice)</h3>
+          <h3 style="color: var(--text-bright); font-size: 1.05rem;">🎯 NIFTY CE Premium-Ladder Strategy</h3>
           <span class="badge badge-purple">OPTIONS REPLAY READY</span>
         </div>
         <p style="font-size: 0.83rem; color: var(--text-muted); margin-top: 6px;">
-          Institutional declarative strategy executing dynamic contract discovery across 6 discrete premium entry bands.
-          <strong>Contracts are identified by observed LTP inside each band — NOT by hard-coded strike prices.</strong>
+          Sells one NIFTY CE whose current price falls inside a target band, then buys 4 lower-priced CEs as a hedge.
+          Entry price (the <em>premium</em>), not the strike, determines which contract to trade.
         </p>
         <div class="premium-bands-grid">
           <div class="band-pill"><strong>Band 1</strong>₹50.00 – ₹59.50</div>
@@ -703,8 +740,8 @@ else:
           <div class="band-pill"><strong>Band 6</strong>₹100.00 – ₹109.50</div>
         </div>
         <div style="font-size: 0.78rem; color: var(--text); margin-top: 10px; display: flex; flex-wrap: wrap; gap: 16px;">
-          <div>🛡️ <strong>Ratio Hedge:</strong> SELL 1 CE (in band) + BUY 4 CE hedges (target ₹5.00 ± ₹2.00)</div>
-          <div>📉 <strong>Contract-Bound Trailing Stop:</strong> Ratchet: 50 &rarr; 40 &rarr; SL 45; 40 &rarr; 30 &rarr; SL 35</div>
+          <div>🛡️ Sell 1 CE per band &nbsp;&middot;&nbsp; Buy 4 CE hedges priced near ₹5</div>
+          <div>📉 Trailing stop ratchets with each ₹10 move — e.g. premium 50&rarr;40 sets stop at 45</div>
         </div>
       </div>
 
@@ -744,6 +781,13 @@ else:
           The system strictly audits datasets across three fundamental pillars before allowing historical replay:
           Format Parsing, Options-Chain Awareness, and Historical Replay Readiness.
         </p>
+        <div class="status-legend" style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; font-size: 0.78rem; color: var(--text-muted);">
+          <span><span class="badge badge-paper" style="font-size: 0.68rem;">NSE_INTRADAY</span> Format recognized</span>
+          <span><span class="badge badge-live" style="font-size: 0.68rem;">REPLAYABLE</span> Valid for simulation</span>
+          <span><span class="badge badge-alert" style="font-size: 0.68rem;">INSPECT ONLY</span> Blocked from simulation</span>
+          <span><span class="badge badge-purple" style="font-size: 0.68rem;">OPTIONS CHAIN</span> Multi-strike derivative quotes</span>
+          <span><span class="badge badge-sim" style="font-size: 0.68rem;">SPOT / LINEAR</span> Single-instrument series</span>
+        </div>
         <div class="table-container">
           <table>
             <thead>
@@ -827,11 +871,12 @@ else:
             <label class="form-label">Validation Policy</label>
             <select id="val-policy-select">
               <option value="INSTITUTIONAL" selected>Institutional Mode (Expectancy > 0, PF >= 1.25, Max DD <= 15%, Tail Risk Veto)</option>
-              <option value="CONSERVATIVE">Conservative Mode (Expectancy > 0, PF >= 1.10, Max DD <= 25%)</option>
-              <option value="RETAIL">Retail Mode (Basic Filter)</option>
+              <option value="MODERATE">Moderate Mode (Expectancy > 0, PF >= 1.10, Max DD <= 25%)</option>
+              <option value="RESEARCH">Research Mode (Exploratory — warnings only, no hard floor)</option>
             </select>
           </div>
         </div>
+        <div class="validation-hint" id="val-strategy-hint" style="padding: 10px 0; font-size: 0.82rem; color: var(--text-muted);"></div>
         <button class="btn btn-primary" onclick="runValidation()">Run Full Validation & Payoff Analysis</button>
 
         <div id="val-results-panel" style="display: none; margin-top: 18px;">
@@ -1028,16 +1073,21 @@ else:
           <!-- Kotak Neo Card -->
           <div class="card" style="grid-column: span 2;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-              <h4 style="color: var(--text-bright); font-size: 0.95rem;">Kotak Neo Broker Feed</h4>
-              <span class="badge badge-sim" id="settings-kotak-badge">FEED CONFIGURED</span>
+              <div>
+                <h4 style="color: var(--text-bright); font-size: 0.95rem; margin-bottom: 2px;">Kotak Neo Broker Feed</h4>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Market data streamer & scrip discovery (Read-only)</div>
+              </div>
+              <span class="badge badge-sim" id="settings-kotak-badge">CHECKING...</span>
             </div>
             <div style="font-size: 0.8rem; color: var(--text); display: flex; flex-direction: column; gap: 4px;">
-              <div><strong>Consumer Key:</strong> <span class="mono" id="set-kotak-key">••••••••••••A91K</span></div>
-              <div><strong>Mobile Number:</strong> <span class="mono" id="set-kotak-mobile">••••••••9876</span></div>
-              <div><strong>Client UCC:</strong> <span class="mono" id="set-kotak-ucc">••••••••K402</span></div>
+              <div><strong>Consumer Key:</strong> <span class="mono" id="set-kotak-key">Not configured</span></div>
+              <div><strong>Mobile Number:</strong> <span class="mono" id="set-kotak-mobile">Not configured</span></div>
+              <div><strong>Client UCC:</strong> <span class="mono" id="set-kotak-ucc">Not configured</span></div>
             </div>
-            <div style="margin-top: 14px; display: flex; gap: 8px; align-items: center;">
-              <button class="btn btn-outline btn-sm" onclick="testProvider('kotak_neo')">Test Broker Connection</button>
+            <div style="margin-top: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;" id="kotak-actions">
+              <button class="btn btn-primary btn-sm" id="btn-kotak-config" onclick="openConfigureProvider('kotak_neo')">Configure</button>
+              <button class="btn btn-outline btn-sm" id="btn-kotak-test" onclick="testProvider('kotak_neo')">Test Connection</button>
+              <button class="btn btn-outline btn-sm" id="btn-kotak-remove" onclick="removeProvider('kotak_neo')" style="color: var(--red);">Remove</button>
               <span style="font-size: 0.75rem; color: var(--text-muted);" id="test-kotak-result"></span>
             </div>
           </div>
@@ -1045,15 +1095,20 @@ else:
           <!-- Google Gemini Card -->
           <div class="card" style="grid-column: span 2;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-              <h4 style="color: var(--text-bright); font-size: 0.95rem;">Google Gemini AI Subsystem</h4>
-              <span class="badge badge-live" id="settings-gemini-badge">CONFIGURED</span>
+              <div>
+                <h4 style="color: var(--text-bright); font-size: 0.95rem; margin-bottom: 2px;">Google Gemini AI Subsystem</h4>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Advisory chart parsing & research dossier critique (ADR 005)</div>
+              </div>
+              <span class="badge badge-sim" id="settings-gemini-badge">CHECKING...</span>
             </div>
             <div style="font-size: 0.8rem; color: var(--text); display: flex; flex-direction: column; gap: 4px;">
-              <div><strong>API Key:</strong> <span class="mono" id="set-gemini-key">••••••••••••9Z1B</span></div>
+              <div><strong>API Key:</strong> <span class="mono" id="set-gemini-key">Not configured</span></div>
               <div><strong>Selected Model:</strong> <span class="mono" id="set-gemini-model">gemini-2.5-flash</span></div>
             </div>
-            <div style="margin-top: 14px; display: flex; gap: 8px; align-items: center;">
-              <button class="btn btn-outline btn-sm" onclick="testProvider('gemini')">Test Gemini Connection</button>
+            <div style="margin-top: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;" id="gemini-actions">
+              <button class="btn btn-primary btn-sm" id="btn-gemini-config" onclick="openConfigureProvider('gemini')">Configure API Key</button>
+              <button class="btn btn-outline btn-sm" id="btn-gemini-test" onclick="testProvider('gemini')">Test Connection</button>
+              <button class="btn btn-outline btn-sm" id="btn-gemini-remove" onclick="removeProvider('gemini')" style="color: var(--red);">Remove</button>
               <span style="font-size: 0.75rem; color: var(--text-muted);" id="test-gemini-result"></span>
             </div>
           </div>
@@ -1062,6 +1117,9 @@ else:
         <!-- Workstation Session Security -->
         <div class="section-card" style="margin-top: 14px;">
           <div class="section-heading" style="font-size: 0.9rem; margin-bottom: 10px;">Workstation Session Authentication</div>
+          <div style="font-size: 0.78rem; color: var(--amber); background: var(--amber-bg); border: 1px solid var(--amber); border-radius: 4px; padding: 6px 10px; margin-bottom: 10px;">
+            ⚠ This lock is a local UI session gate. It does not encrypt data at rest. Use OS-level access controls for full security.
+          </div>
           <div style="font-size: 0.82rem; color: var(--text); margin-bottom: 12px;">
             Logged in as: <strong class="mono" id="session-researcher-id">local_researcher</strong> (Role: Quantitative Researcher)
           </div>
@@ -1074,12 +1132,35 @@ else:
 
   <!-- AST Detail Modal -->
   <div class="modal-backdrop" id="ast-modal">
-    <div class="modal">
+    <div class="modal" style="max-width: 840px;">
       <div class="modal-header">
         <h3 style="color: var(--text-bright); font-size: 1rem;" id="modal-title">Strategy Rules & AST</h3>
         <button class="modal-close" onclick="closeModal('ast-modal')">✕</button>
       </div>
-      <pre class="code-block" id="modal-content"></pre>
+      <div id="modal-human-view" style="margin-bottom: 14px;"></div>
+      <details style="margin-top: 14px;">
+        <summary style="font-size: 0.8rem; color: var(--blue); cursor: pointer;">Show Technical AST Definition (JSON)</summary>
+        <pre class="code-block" id="modal-content" style="margin-top: 8px; max-height: 250px;"></pre>
+      </details>
+    </div>
+  </div>
+
+  <!-- Provider Configuration Modal -->
+  <div class="modal-backdrop" id="provider-modal">
+    <div class="modal" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 style="color: var(--text-bright); font-size: 1rem;" id="provider-modal-title">Configure Provider</h3>
+        <button class="modal-close" onclick="closeModal('provider-modal')">✕</button>
+      </div>
+      <div id="provider-modal-body">
+        <input type="hidden" id="provider-modal-id">
+        <div id="provider-modal-fields"></div>
+        <div id="provider-modal-error" style="color: var(--red); font-size: 0.8rem; margin-top: 10px; display: none;"></div>
+        <div style="margin-top: 18px; display: flex; justify-content: flex-end; gap: 8px;">
+          <button class="btn btn-outline" onclick="closeModal('provider-modal')">Cancel</button>
+          <button class="btn btn-primary" onclick="saveProviderCredentials()">Save Credentials</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1113,7 +1194,7 @@ else:
   <!-- Application JavaScript -->
   <script>
     // State Store
-    let currentToken = localStorage.getItem('aditrader_session_token') || 'tok_researcher_active';
+    let currentToken = 'tok_researcher_active';
     let registeredStrategies = [];
     let registeredDatasets = [];
     let activeRunPollInterval = null;
@@ -1161,6 +1242,8 @@ else:
         return oc.includes(tabId);
       });
       if (targetBtn) targetBtn.classList.add('active');
+      document.querySelectorAll('.tab-btn').forEach(b => b.setAttribute('aria-selected', 'false'));
+      if (targetBtn) targetBtn.setAttribute('aria-selected', 'true');
       const targetPane = document.getElementById('tab-' + tabId);
       if (targetPane) targetPane.classList.add('active');
 
@@ -1267,7 +1350,12 @@ else:
         registeredStrategies.forEach((s, idx) => {
           const tr = document.createElement('tr');
           const dna = s.dna || {};
-          const dnaTag = dna.delta_type ? `${dna.delta_type} | ${dna.theta_bias || 'NEUTRAL'}` : 'Directional Linear';
+          let dnaTag = 'Equity/Index Linear';
+          if (dna.delta_type) {
+            dnaTag = `${dna.delta_type} | ${dna.theta_bias || 'NEUTRAL'}`;
+          } else if ((s.legs && s.legs.length > 0) || /(Condor|Straddle|Spread|Ladder)/i.test(s.name || '')) {
+            dnaTag = 'Options Multi-Leg';
+          }
           tr.innerHTML = `
             <td>
               <strong style="color: var(--text-bright);">${s.name}</strong>
@@ -1276,9 +1364,9 @@ else:
             <td class="mono">${s.underlying}</td>
             <td class="mono">${s.timeframe}</td>
             <td><span class="badge badge-sim">${dnaTag}</span></td>
-            <td><span class="badge badge-live">APPROVED</span></td>
+            <td><span class="badge badge-paper">LOADED</span></td>
             <td>
-              <button class="btn btn-outline btn-sm" onclick="inspectStrategyAst('${s.id}')">Inspect AST</button>
+              <button class="btn btn-outline btn-sm" onclick="inspectStrategyAst('${s.id}')">View Details</button>
             </td>
           `;
           body.appendChild(tr);
@@ -1293,7 +1381,60 @@ else:
         const res = await apiFetch('/api/strategies/' + encodeURIComponent(strategyId));
         if (!res.ok) return;
         const details = await res.json();
-        document.getElementById('modal-title').textContent = (details.name || strategyId) + ' — AST & Definition';
+        document.getElementById('modal-title').textContent = (details.name || strategyId) + ' — Specification & Rules';
+
+        const isOptions = details.is_options || (details.legs && details.legs.length > 0) || details.id.includes('option') || details.id.includes('ladder');
+        let logicHtml = '';
+        if (details.premium_bands && details.premium_bands.bands) {
+          logicHtml = `
+            <div style="margin-top: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px;">
+              <div style="font-weight: 600; font-size: 0.85rem; color: var(--purple); margin-bottom: 6px;">Dynamic Premium Bands (Trigger Range)</div>
+              <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 8px;">
+                <strong>Premium Band &ne; Strike:</strong> The strategy matches the NIFTY CE whose current market premium trades inside the target band:
+              </p>
+              <div class="premium-bands-grid" style="margin-bottom: 10px;">
+                ${details.premium_bands.bands.map(b => `<div class="band-pill"><strong>${b.label}</strong>₹${b.min_premium.toFixed(2)} &ndash; ₹${b.max_premium.toFixed(2)}</div>`).join('')}
+              </div>
+              <div style="font-size: 0.78rem; color: var(--text); line-height: 1.6;">
+                🛡️ <strong>Hedge:</strong> BUY 4 CE hedges near ₹5.00 (tolerance: ₹3.00 &ndash; ₹7.00)<br>
+                📉 <strong>Trailing Ratchet Stop:</strong> Ratchets with ₹10 moves (e.g. premium 50&rarr;40 sets stop at 45)
+              </div>
+            </div>
+          `;
+        } else if (details.dsl && details.dsl.conditions) {
+          logicHtml = `
+            <div style="margin-top: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px;">
+              <div style="font-weight: 600; font-size: 0.85rem; color: var(--blue); margin-bottom: 6px;">Execution Entry Rules</div>
+              <div style="font-size: 0.8rem; color: var(--text);">
+                Conditions: ${details.dsl.conditions.length} condition group(s) &middot; Direction: ${details.dsl.direction || 'LONG'} &middot; Timeframe: ${details.timeframe || 'INTRADAY'}
+              </div>
+            </div>
+          `;
+        }
+
+        const replayStatus = isOptions
+          ? `<span class="badge badge-sim">Requires Multi-Strike Chain Data</span> <span style="font-size: 0.78rem; color: var(--text-muted);">Cannot run on single-instrument spot CSVs</span>`
+          : `<span class="badge badge-live">Ready for Replay</span> <span style="font-size: 0.78rem; color: var(--text-muted);">Compatible with standard NSE Intraday CSV feeds</span>`;
+
+        document.getElementById('modal-human-view').innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+            <span class="badge ${isOptions ? 'badge-purple' : 'badge-paper'}">${isOptions ? 'OPTIONS DERIVATIVE' : 'EQUITY / INDEX LINEAR'}</span>
+            <span class="mono" style="font-size: 0.8rem; color: var(--text-muted);">Underlying: <strong>${details.underlying}</strong> &middot; Timeframe: <strong>${details.timeframe}</strong></span>
+          </div>
+          <p style="font-size: 0.84rem; color: var(--text-bright); line-height: 1.5; margin-bottom: 12px;">
+            ${details.description || 'Institutional declarative strategy built on StrategyDSL state machines.'}
+          </p>
+          ${logicHtml}
+          <div style="margin-top: 12px; padding: 10px; background: rgba(22,27,34,0.6); border: 1px solid var(--border); border-radius: 6px;">
+            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">Replay Readiness</div>
+            <div>${replayStatus}</div>
+          </div>
+          <div style="margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap;">
+            <button class="btn btn-primary btn-sm" onclick="closeModal('ast-modal'); switchTab('validation'); document.getElementById('val-strategy-select').value='${details.id}';">Validate in Studio &rarr;</button>
+            <button class="btn btn-outline btn-sm" onclick="closeModal('ast-modal'); switchTab('simulation'); document.getElementById('sim-strategy-select').value='${details.id}'; checkPreflightCompatibility();">Configure Replay &rarr;</button>
+          </div>
+        `;
+
         document.getElementById('modal-content').textContent = JSON.stringify(details, null, 2);
         document.getElementById('ast-modal').classList.add('active');
       } catch (err) {
@@ -1320,7 +1461,7 @@ else:
             : '<span class="badge badge-sim">SPOT / LINEAR</span>';
           const replayBadge = d.is_replayable
             ? '<span class="badge badge-live">REPLAYABLE</span>'
-            : '<span class="badge badge-alert">INSPECT ONLY</span>';
+            : `<span class="badge badge-alert">INSPECT ONLY</span>${d.ineligibility_reason ? '<div style="font-size:0.7rem;color:var(--text-muted);margin-top:3px;white-space:normal;max-width:200px;">' + d.ineligibility_reason.split('per ADR')[0].trim() + '</div>' : ''}`;
           tr.innerHTML = `
             <td class="mono"><strong>${d.path}</strong></td>
             <td class="mono">${(d.size_bytes / 1024).toFixed(1)} KB</td>
@@ -1386,6 +1527,20 @@ else:
         opt.textContent = s.name + ' (' + s.underlying + ')';
         stratSel.appendChild(opt);
       });
+      stratSel.addEventListener('change', (e) => {
+        const hintEl = document.getElementById('val-strategy-hint');
+        if (hintEl) {
+          hintEl.style.display = 'block';
+          hintEl.textContent = 'Selected: ' + e.target.options[e.target.selectedIndex].text;
+        }
+      });
+      if (stratSel.options.length > 0) {
+        const hintEl = document.getElementById('val-strategy-hint');
+        if (hintEl) {
+          hintEl.textContent = 'Selected: ' + stratSel.options[0].text;
+          hintEl.style.display = 'block';
+        }
+      }
 
       const dsSel = document.getElementById('val-dataset-select');
       dsSel.innerHTML = '';
@@ -1415,11 +1570,14 @@ else:
         }
 
         document.getElementById('val-results-panel').style.display = 'block';
+        const hintEl = document.getElementById('val-strategy-hint');
+        if (hintEl) hintEl.style.display = 'none';
         const banner = document.getElementById('val-banner');
         const icon = document.getElementById('val-banner-icon');
         const text = document.getElementById('val-banner-text');
 
-        const reasonText = rep.reason || rep.message || 'Meets institutional standards and risk gate criteria.';
+        const defaultReason = rep.status === 'APPROVED' ? 'Meets institutional standards and risk gate criteria.' : 'Failed institutional standards or risk gate veto.';
+        const reasonText = rep.reason || rep.message || defaultReason;
         if (rep.status === 'APPROVED') {
           banner.className = 'alert-box success';
           icon.textContent = '✓';
@@ -1431,21 +1589,36 @@ else:
         }
 
         const metrics = rep.metrics || {};
-        document.getElementById('v-expectancy').textContent = (metrics.mathematical_expectancy >= 0 ? '+' : '') + (metrics.mathematical_expectancy || 0).toFixed(2);
-        document.getElementById('v-pf').textContent = (metrics.profit_factor || 0).toFixed(2);
-        document.getElementById('v-winrate').textContent = ((metrics.win_rate || 0) * 100).toFixed(1) + '%';
-        document.getElementById('v-trades-sample').textContent = (metrics.sample_size || 0) + ' sample trades';
-        document.getElementById('v-drawdown').textContent = ((metrics.max_drawdown_pct || 0) * 100).toFixed(1) + '%';
+        const hasExp = metrics.mathematical_expectancy !== null && metrics.mathematical_expectancy !== undefined;
+        if (hasExp) {
+          const expVal = Number(metrics.mathematical_expectancy);
+          document.getElementById('v-expectancy').textContent = (expVal >= 0 ? '+' : '') + expVal.toFixed(2);
+          document.getElementById('v-expectancy-sub').textContent = 'Edge per trade (INR)';
+        } else {
+          document.getElementById('v-expectancy').textContent = 'Not calculated';
+          document.getElementById('v-expectancy-sub').textContent = rep.is_options ? 'Options: Theoretical analysis (ADR 011)' : 'Select dataset to compute';
+        }
+
+        const hasPf = metrics.profit_factor !== null && metrics.profit_factor !== undefined;
+        document.getElementById('v-pf').textContent = hasPf ? Number(metrics.profit_factor).toFixed(2) : 'Not calculated';
+
+        const hasWinRate = metrics.win_rate !== null && metrics.win_rate !== undefined;
+        document.getElementById('v-winrate').textContent = hasWinRate ? (Number(metrics.win_rate) * 100).toFixed(1) + '%' : 'Not calculated';
+        document.getElementById('v-trades-sample').textContent = (metrics.sample_size !== null && metrics.sample_size !== undefined) ? (metrics.sample_size + ' sample trades') : 'No historical trades';
+
+        const hasDd = metrics.max_drawdown_pct !== null && metrics.max_drawdown_pct !== undefined;
+        document.getElementById('v-drawdown').textContent = hasDd ? (Number(metrics.max_drawdown_pct) * 100).toFixed(1) + '%' : 'Not calculated';
 
         // Risk gates
         const gatesContainer = document.getElementById('v-risk-gates');
         gatesContainer.innerHTML = '';
-        (rep.risk_gates || []).forEach(g => {
+        (rep.risk_gates || rep.gate_results || []).forEach(g => {
           const div = document.createElement('div');
           div.className = 'form-group';
+          const gateDisplayName = g.name || g.gate_name || 'Risk Gate';
           div.innerHTML = `
-            <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">${g.name}</div>
-            <div><span class="badge ${g.passed ? 'badge-live' : 'badge-alert'}">${g.passed ? 'PASSED' : 'VETOED'}</span> <span style="font-size: 0.78rem;">${g.detail}</span></div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">${gateDisplayName}</div>
+            <div><span class="badge ${g.passed ? 'badge-live' : 'badge-alert'}">${g.passed ? 'PASSED' : 'VETOED'}</span> <span style="font-size: 0.78rem;">${g.detail || ''}</span></div>
           `;
           gatesContainer.appendChild(div);
         });
@@ -1455,12 +1628,15 @@ else:
         if (rep.payoff_structure) {
           payoffCont.style.display = 'block';
           const p = rep.payoff_structure;
-          const beText = p.breakevens && p.breakevens.length >= 2
-            ? 'BE: ₹' + p.breakevens[0] + ' – ₹' + p.breakevens[1]
-            : 'BE: ₹' + (p.lower_breakeven || 0) + ' – ₹' + (p.upper_breakeven || 0);
+          let beText = '-';
+          if (p.breakevens && p.breakevens.length > 0) {
+            beText = 'BE: ' + p.breakevens.map(b => '₹' + Number(b).toFixed(1)).join(' & ');
+          } else if (p.lower_breakeven || p.upper_breakeven) {
+            beText = 'BE: ₹' + (p.lower_breakeven || 0) + ' – ₹' + (p.upper_breakeven || 0);
+          }
           document.getElementById('v-payoff-be').textContent = beText;
-          document.getElementById('v-payoff-profit').textContent = formatINR(p.max_profit);
-          document.getElementById('v-payoff-loss').textContent = formatINR(p.max_loss);
+          document.getElementById('v-payoff-profit').textContent = p.max_profit !== null && p.max_profit !== undefined ? formatINR(p.max_profit) : 'Uncapped';
+          document.getElementById('v-payoff-loss').textContent = p.max_loss !== null && p.max_loss !== undefined ? formatINR(p.max_loss) : 'Undefined (Unhedged Tail Risk)';
         } else {
           payoffCont.style.display = 'none';
         }
@@ -1670,9 +1846,10 @@ else:
         runs.forEach(r => {
           const tr = document.createElement('tr');
           const pnlVal = r.realized_pnl || 0;
+          const strategyName = (r.strategy && r.strategy !== 'Unknown') ? r.strategy : ('Session ' + (r.session_id || '').slice(-6));
           tr.innerHTML = `
             <td class="mono">${r.session_id}</td>
-            <td><strong>${r.strategy}</strong></td>
+            <td><strong>${strategyName}</strong></td>
             <td class="mono">${r.symbol}</td>
             <td><span class="badge ${r.status === 'COMPLETED' ? 'badge-live' : 'badge-sim'}">${r.status}</span></td>
             <td class="mono ${pnlVal >= 0 ? 'positive' : 'negative'}">${formatINR(pnlVal)}</td>
@@ -1692,19 +1869,51 @@ else:
         const res = await apiFetch('/api/runs/' + encodeURIComponent(sessionId));
         if (!res.ok) return;
         const dossier = await res.json();
-        document.getElementById('dossier-modal-title').textContent = 'Run Dossier: ' + sessionId;
+        const sess = dossier.session || dossier;
+        const trades = dossier.trades || [];
+        const pnl = sess.realized_pnl || 0;
+        document.getElementById('dossier-modal-title').textContent = 'Run Dossier: ' + (sess.session_id || sessionId);
         const cont = document.getElementById('dossier-modal-content');
+
+        let tradesHtml = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">No executed trades in this session</td></tr>';
+        if (trades.length > 0) {
+          tradesHtml = trades.map(t => `
+            <tr>
+              <td class="mono">${t.timestamp ? t.timestamp.substring(11, 19) : '-'}</td>
+              <td class="mono"><strong>${t.symbol}</strong></td>
+              <td><span class="badge ${t.side === 'BUY' ? 'badge-live' : 'badge-alert'}">${t.side}</span></td>
+              <td class="mono">${t.qty}</td>
+              <td class="mono">${formatINR(t.fill_price)}</td>
+              <td class="mono">${formatINR(t.slippage)}</td>
+              <td class="mono">${formatINR((t.stt || 0) + (t.charges || 0))}</td>
+            </tr>
+          `).join('');
+        }
+
         cont.innerHTML = `
           <div class="metric-grid" style="margin-bottom: 14px;">
-            <div class="card"><div class="card-title">Strategy</div><div class="metric-val mono neutral" style="font-size: 1.1rem;">${dossier.strategy_id || dossier.strategy || '-'}</div></div>
-            <div class="card"><div class="card-title">Realized P&L</div><div class="metric-val mono ${(dossier.realized_pnl || 0) >= 0 ? 'positive' : 'negative'}" style="font-size: 1.1rem;">${formatINR(dossier.realized_pnl || 0)}</div></div>
-            <div class="card"><div class="card-title">Total Trades</div><div class="metric-val mono" style="font-size: 1.1rem;">${(dossier.trades || []).length}</div></div>
-            <div class="card"><div class="card-title">Bars Evaluated</div><div class="metric-val mono" style="font-size: 1.1rem;">${dossier.bars_count || '-'}</div></div>
+            <div class="card"><div class="card-title">Strategy</div><div class="metric-val mono neutral" style="font-size: 1.05rem;">${sess.strategy_name || sess.strategy_id || '-'}</div></div>
+            <div class="card"><div class="card-title">Realized P&L</div><div class="metric-val mono ${pnl >= 0 ? 'positive' : 'negative'}" style="font-size: 1.05rem;">${formatINR(pnl)}</div></div>
+            <div class="card"><div class="card-title">Executed Trades</div><div class="metric-val mono" style="font-size: 1.05rem;">${trades.length}</div></div>
+            <div class="card"><div class="card-title">Bars Evaluated</div><div class="metric-val mono" style="font-size: 1.05rem;">${sess.bars_count || '-'}</div></div>
           </div>
-          <div class="section-card">
-            <div class="section-heading" style="font-size: 0.88rem; margin-bottom: 8px;">Full Session Dossier (JSON)</div>
-            <pre class="code-block" style="max-height: 260px;">${JSON.stringify(dossier, null, 2)}</pre>
+          <div class="section-card" style="margin-bottom: 14px;">
+            <div class="section-heading" style="font-size: 0.85rem; margin-bottom: 8px;">Executed Paper Trades</div>
+            <div class="table-container" style="max-height: 180px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Fill Price</th><th>Slippage</th><th>Fees</th>
+                  </tr>
+                </thead>
+                <tbody>${tradesHtml}</tbody>
+              </table>
+            </div>
           </div>
+          <details style="margin-top: 10px;">
+            <summary style="font-size: 0.8rem; color: var(--blue); cursor: pointer;">Full Session Dossier (JSON)</summary>
+            <pre class="code-block" style="max-height: 220px; margin-top: 6px;">${JSON.stringify(dossier, null, 2)}</pre>
+          </details>
         `;
         document.getElementById('dossier-modal').classList.add('active');
       } catch (err) {
@@ -1720,17 +1929,176 @@ else:
         const s = await res.json();
         if (s.providers) {
           if (s.providers.kotak_neo) {
-            document.getElementById('set-kotak-key').textContent = s.providers.kotak_neo.consumer_key_masked || '••••••••';
-            document.getElementById('set-kotak-mobile').textContent = s.providers.kotak_neo.mobile_number_masked || '••••••••';
-            document.getElementById('set-kotak-ucc').textContent = s.providers.kotak_neo.ucc_masked || '••••••••';
+            const k = s.providers.kotak_neo;
+            document.getElementById('set-kotak-key').textContent = k.consumer_key_masked || 'Not configured';
+            document.getElementById('set-kotak-mobile').textContent = k.mobile_number_masked || 'Not configured';
+            document.getElementById('set-kotak-ucc').textContent = k.ucc_masked || 'Not configured';
+            const kStatus = k.status || 'NOT_CONFIGURED';
+            const kBadge = document.getElementById('settings-kotak-badge');
+            if (kBadge) {
+              kBadge.textContent = kStatus.replace('_', ' ');
+              kBadge.className = 'badge ' + (kStatus === 'ACTIVE' || kStatus === 'CONFIGURED' || kStatus === 'READY' ? 'badge-live' : 'badge-sim');
+            }
+            const isConfigured = kStatus === 'CONFIGURED' || kStatus === 'READY' || kStatus === 'ACTIVE';
+            const btnConfig = document.getElementById('btn-kotak-config');
+            const btnTest = document.getElementById('btn-kotak-test');
+            const btnRemove = document.getElementById('btn-kotak-remove');
+            if (btnConfig) {
+              btnConfig.textContent = isConfigured ? 'Replace' : 'Configure';
+              btnConfig.className = isConfigured ? 'btn btn-outline btn-sm' : 'btn btn-primary btn-sm';
+            }
+            if (btnTest) btnTest.style.display = isConfigured ? 'inline-block' : 'none';
+            if (btnRemove) btnRemove.style.display = isConfigured ? 'inline-block' : 'none';
           }
           if (s.providers.gemini) {
-            document.getElementById('set-gemini-key').textContent = s.providers.gemini.api_key_masked || '••••••••';
-            document.getElementById('set-gemini-model').textContent = s.providers.gemini.model_name || 'gemini-2.5-flash';
+            const g = s.providers.gemini;
+            document.getElementById('set-gemini-key').textContent = g.api_key_masked || 'Not configured';
+            document.getElementById('set-gemini-model').textContent = g.model_name || 'gemini-2.5-flash';
+            const gStatus = g.status || 'NOT_CONFIGURED';
+            const gBadge = document.getElementById('settings-gemini-badge');
+            if (gBadge) {
+              gBadge.textContent = gStatus.replace('_', ' ');
+              gBadge.className = 'badge ' + (gStatus === 'ACTIVE' || gStatus === 'CONFIGURED' || gStatus === 'READY' ? 'badge-live' : 'badge-sim');
+            }
+            const isConfigured = gStatus === 'CONFIGURED' || gStatus === 'READY' || gStatus === 'ACTIVE';
+            const btnConfig = document.getElementById('btn-gemini-config');
+            const btnTest = document.getElementById('btn-gemini-test');
+            const btnRemove = document.getElementById('btn-gemini-remove');
+            if (btnConfig) {
+              btnConfig.textContent = isConfigured ? 'Replace' : 'Configure API Key';
+              btnConfig.className = isConfigured ? 'btn btn-outline btn-sm' : 'btn btn-primary btn-sm';
+            }
+            if (btnTest) btnTest.style.display = isConfigured ? 'inline-block' : 'none';
+            if (btnRemove) btnRemove.style.display = isConfigured ? 'inline-block' : 'none';
           }
         }
       } catch (err) {
         console.error('Failed to load settings:', err);
+      }
+    }
+
+    function openConfigureProvider(providerId) {
+      document.getElementById('provider-modal-id').value = providerId;
+      const title = document.getElementById('provider-modal-title');
+      const fields = document.getElementById('provider-modal-fields');
+      const err = document.getElementById('provider-modal-error');
+      err.style.display = 'none';
+
+      if (providerId === 'gemini') {
+        title.textContent = 'Configure Google Gemini API Key';
+        fields.innerHTML = `
+          <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px;">
+            Enter your Google Gemini API key. It will be stored in process memory and masked immediately.
+          </p>
+          <div class="form-group">
+            <label class="form-label">Gemini API Key</label>
+            <input type="password" id="input-gemini-key" placeholder="AIzaSy..." autocomplete="off">
+          </div>
+        `;
+      } else if (providerId === 'kotak_neo') {
+        title.textContent = 'Configure Kotak Neo Broker Credentials';
+        fields.innerHTML = `
+          <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px;">
+            Enter your Kotak Neo developer credentials. Used strictly for read-only market data streaming.
+          </p>
+          <div class="form-group">
+            <label class="form-label">Consumer Key</label>
+            <input type="password" id="input-kotak-key" placeholder="Consumer Key" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Consumer Secret</label>
+            <input type="password" id="input-kotak-secret" placeholder="Consumer Secret" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Registered Mobile Number</label>
+            <input type="text" id="input-kotak-mobile" placeholder="+91..." autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Client UCC</label>
+            <input type="text" id="input-kotak-ucc" placeholder="Client UCC" autocomplete="off">
+          </div>
+        `;
+      }
+      document.getElementById('provider-modal').classList.add('active');
+    }
+
+    async function saveProviderCredentials() {
+      const providerId = document.getElementById('provider-modal-id').value;
+      const err = document.getElementById('provider-modal-error');
+      err.style.display = 'none';
+
+      let credentials = {};
+      if (providerId === 'gemini') {
+        const key = document.getElementById('input-gemini-key').value.trim();
+        if (!key) {
+          err.textContent = 'API key cannot be empty.';
+          err.style.display = 'block';
+          return;
+        }
+        credentials = { api_key: key };
+      } else if (providerId === 'kotak_neo') {
+        const key = document.getElementById('input-kotak-key').value.trim();
+        const secret = document.getElementById('input-kotak-secret').value.trim();
+        const mobile = document.getElementById('input-kotak-mobile').value.trim();
+        const ucc = document.getElementById('input-kotak-ucc').value.trim();
+        if (!key || !mobile) {
+          err.textContent = 'Consumer Key and Mobile Number are required.';
+          err.style.display = 'block';
+          return;
+        }
+        credentials = {
+          consumer_key: key,
+          consumer_secret: secret,
+          mobile_number: mobile,
+          ucc: ucc,
+        };
+      }
+
+      try {
+        const res = await apiFetch('/api/settings/providers/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider_id: providerId,
+            action: 'update',
+            credentials: credentials,
+          })
+        });
+        const rep = await res.json();
+        if (res.ok && rep.success) {
+          closeModal('provider-modal');
+          await loadSettings();
+        } else {
+          err.textContent = rep.message || 'Failed to save credentials.';
+          err.style.display = 'block';
+        }
+      } catch (ex) {
+        err.textContent = 'Network error: ' + ex.message;
+        err.style.display = 'block';
+      }
+    }
+
+    async function removeProvider(providerId) {
+      if (!confirm(`Are you sure you want to remove credentials for ${providerId}? This will deactivate live connectivity.`)) {
+        return;
+      }
+      try {
+        const res = await apiFetch('/api/settings/providers/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider_id: providerId,
+            action: 'remove',
+          })
+        });
+        const rep = await res.json();
+        if (res.ok && rep.success) {
+          await loadSettings();
+        } else {
+          alert('Failed to remove: ' + (rep.message || 'Unknown error'));
+        }
+      } catch (ex) {
+        alert('Error: ' + ex.message);
       }
     }
 
@@ -1744,7 +2112,7 @@ else:
           body: JSON.stringify({ provider: providerName })
         });
         const rep = await res.json();
-        if (rep.status === 'SUCCESS' || rep.status === 'SIMULATED_SUCCESS') {
+        if (rep.status === 'SUCCESS' || rep.status === 'SIMULATED_SUCCESS' || rep.status === 'READY') {
           resElem.textContent = '✓ ' + rep.status + ' (' + rep.message + ')';
           resElem.style.color = 'var(--green)';
         } else {
@@ -1780,7 +2148,6 @@ else:
         const data = await res.json();
         if (res.ok && data.token) {
           currentToken = data.token;
-          localStorage.setItem('aditrader_session_token', currentToken);
           document.getElementById('lock-modal').classList.remove('active');
           document.getElementById('lock-password-input').value = '';
           loadStatus();

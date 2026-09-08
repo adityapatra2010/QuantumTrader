@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 from datetime import datetime
 from http import HTTPStatus
@@ -255,7 +256,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._handle_post_test_provider()
             return
 
-        if path == "/api/settings/providers":
+        if path in ("/api/settings/providers", "/api/settings/providers/update"):
             self._handle_post_update_provider()
             return
 
@@ -438,7 +439,12 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         payload = self._read_json_payload()
         if payload is not None:
             password = payload.get("password")
-            if password and password != "aditrader2026":
+            pin = (
+                os.environ.get("WORKSTATION_PIN")
+                or os.environ.get("ADITRADER_SESSION_PIN")
+                or "aditrader2026"
+            )
+            if password != pin:
                 self._send_error_json("Invalid credentials", status=HTTPStatus.UNAUTHORIZED)
                 return
 
@@ -542,12 +548,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         strategy_id = payload.get("strategy_id")
         strategy_dsl = payload.get("dsl")
         policy_name = payload.get("policy", "InstitutionalPolicy")
+        dataset_path = payload.get("dataset_path") or payload.get("dataset")
 
         try:
             val_res = ValidationServiceBridge.validate_strategy_definition(
                 strategy_id=strategy_id,
                 strategy_dsl_dict=strategy_dsl,
                 policy_name=policy_name,
+                dataset_path=dataset_path,
             )
             self._send_json(val_res)
         except Exception as exc:
@@ -698,7 +706,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                         {
                             "session_id": sess.get("session_id", json_file.stem),
                             "start_time": sess.get("started_at") or sess.get("start_time"),
-                            "strategy": sess.get("strategy_name", "Unknown"),
+                            "strategy": sess.get("strategy_name")
+                            or sess.get("strategy_id")
+                            or f"Session {json_file.stem[-6:]}",
                             "symbol": sess.get("symbol", "NIFTY"),
                             "status": sess.get("status", "UNKNOWN"),
                             "realized_pnl": sess.get("realized_pnl", 0.0),
@@ -797,18 +807,35 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self._send_json(payload)
 
     def _handle_post_update_provider(self) -> None:
-        """Update provider credentials safely."""
+        """Update or remove provider credentials safely."""
         payload = self._read_json_payload()
         if payload is None:
             return
 
-        provider_id = payload.get("provider_id", "").strip()
+        provider_id = (payload.get("provider_id") or payload.get("provider") or "").strip()
+        action = payload.get("action", "update").lower()
+
+        if not provider_id:
+            self._send_error_json("Missing 'provider_id'", status=HTTPStatus.BAD_REQUEST)
+            return
+
+        if action == "remove":
+            res = ProviderSettingsManager.remove_provider_credentials(provider_id)
+            self._send_json(res)
+            return
+
+        credentials = payload.get("credentials")
+        if isinstance(credentials, dict):
+            res = ProviderSettingsManager.update_provider_credentials(provider_id, credentials)
+            self._send_json(res)
+            return
+
         field_name = payload.get("field", "").strip()
         value = payload.get("value", "").strip()
 
-        if not provider_id or not field_name or not value:
+        if not field_name or not value:
             self._send_error_json(
-                "Missing provider_id, field, or value", status=HTTPStatus.BAD_REQUEST
+                "Missing 'field' and 'value', or 'credentials' dict", status=HTTPStatus.BAD_REQUEST
             )
             return
 

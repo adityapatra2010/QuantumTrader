@@ -22,8 +22,10 @@ from typing import Any
 
 from aditrader.config.settings import get_settings
 from aditrader.core.models.enums import OrderSide
+from aditrader.core.models.execution import Trade
+from aditrader.core.models.market_data import Bar
 from aditrader.data.adapters.kotak_neo import HAS_NEO_SDK
-from aditrader.data.feeds.nse_csv import NSECSVFormat, NSECSVInspector, NSECSVParser
+from aditrader.data.feeds.nse_csv import NSECSVFormat, NSECSVInspector
 from aditrader.data.session import EXCHANGE_TIMEZONE
 from aditrader.strategy.builder.schema import StrategyDSL
 from aditrader.strategy.library.registry import StrategyRegistry
@@ -304,6 +306,56 @@ class ProviderSettingsManager:
             "message": f"Credential for {target_env} updated successfully.",
         }
 
+    @staticmethod
+    def update_provider_credentials(
+        provider_id: str,
+        credentials: dict[str, str],
+    ) -> dict[str, Any]:
+        """Batch update provider credentials in runtime environment."""
+        updated = []
+        for field_name, val in credentials.items():
+            if val and val.strip():
+                res = ProviderSettingsManager.update_provider_credential(
+                    provider_id, field_name, val
+                )
+                if res.get("success"):
+                    updated.append(field_name)
+        return {
+            "success": True,
+            "provider": provider_id,
+            "status": "CONFIGURED",
+            "message": f"Updated credentials for '{provider_id}'.",
+            "fields_updated": updated,
+        }
+
+    @staticmethod
+    def remove_provider_credentials(provider_id: str) -> dict[str, Any]:
+        """Remove all credentials for a provider from the runtime environment."""
+        keys_to_remove = {
+            "kotak_neo": [
+                "KOTAK_CONSUMER_KEY",
+                "KOTAK_CONSUMER_SECRET",
+                "KOTAK_MOBILE_NUMBER",
+                "KOTAK_UCC",
+                "KOTAK_PASSWORD",
+                "KOTAK_MPIN",
+                "KOTAK_TOTP_SECRET",
+            ],
+            "gemini": [
+                "GEMINI_API_KEY",
+            ],
+        }
+        target_keys = keys_to_remove.get(provider_id, [])
+        for k in target_keys:
+            os.environ.pop(k, None)
+
+        return {
+            "success": True,
+            "provider": provider_id,
+            "status": "NOT_CONFIGURED",
+            "message": f"All credentials for provider '{provider_id}' have been removed.",
+        }
+
 
 # ==============================================================================
 # 3. Datasets Subsystem & Diagnostics
@@ -535,8 +587,9 @@ class ValidationServiceBridge:
         strategy_id: str | None = None,
         strategy_dsl_dict: dict[str, Any] | None = None,
         policy_name: str = "InstitutionalPolicy",
+        dataset_path: str | None = None,
     ) -> dict[str, Any]:
-        """Execute Tri-Path validation pipeline with theoretical options payoff modeling."""
+        """Execute Tri-Path validation pipeline with theoretical options payoff modeling or backtest statistical evaluation."""
         if strategy_dsl_dict:
             dsl = StrategyDSL.model_validate(strategy_dsl_dict)
         elif strategy_id:
@@ -551,73 +604,175 @@ class ValidationServiceBridge:
             "InstitutionalPolicy": create_institutional_policy(),
             "ModeratePolicy": create_moderate_policy(),
             "ResearchPolicy": create_research_policy(),
+            "INSTITUTIONAL": create_institutional_policy(),
+            "MODERATE": create_moderate_policy(),
+            "RESEARCH": create_research_policy(),
         }
         active_policy = policy_map.get(policy_name, create_institutional_policy())
-
         service = StrategyValidationService(default_policy=active_policy)
-        result = service.validate(dsl, policy=active_policy)
 
-        # Theoretical payoff metrics for option strategies
-        payoff_metrics = {}
-        if dsl.legs:
-            # Multi-leg theoretical payoff
-            payoff_metrics = {
-                "breakevens": [23800.0, 24200.0],
-                "max_profit": 5500.0,
-                "max_loss": -12000.0,
-                "risk_reward_ratio": 0.46,
-                "unhedged_gamma": False,
+        def _format_gate(g: Any) -> dict[str, Any]:
+            raw_name = getattr(g, "gate_name", str(g))
+            friendly_map = {
+                "DEFINED_RISK_ARCHITECTURE": "Tail Risk Gate",
+                "EXPIRY_NAKED_GAMMA_VETO": "Gamma Explosion Gate",
+                "THEORETICAL_RISK_REWARD_RATIO": "Risk / Reward Ratio Gate",
+                "BREAKEVEN_CORRIDOR_CHECK": "Breakeven Bounds Gate",
+                "EXPECTANCY_GATE": "Mathematical Expectancy Gate",
+                "PROFIT_FACTOR_GATE": "Profit Factor Gate",
+                "WIN_RATE_GATE": "Win Rate Gate",
+                "DRAWDOWN_GATE": "Maximum Drawdown Gate",
+                "SAMPLE_SIZE_GATE": "Sample Size Gate",
+                "SQN_GATE": "System Quality Number Gate",
+            }
+            display_name = friendly_map.get(raw_name, raw_name)
+            return {
+                "name": display_name,
+                "gate_name": raw_name,
+                "passed": getattr(g, "passed", True),
+                "severity": getattr(
+                    getattr(g, "severity", None), "value", str(getattr(g, "severity", "HARD_FLOOR"))
+                ),
+                "detail": getattr(g, "detail", ""),
+                "observed_value": getattr(g, "observed_value", None),
+                "threshold_value": getattr(g, "threshold_value", None),
             }
 
+        # ----------------------------------------------------------------------
+        # Case 1: Multi-Leg Option Strategies -> Theoretical Payoff & Risk Validation
+        # ----------------------------------------------------------------------
+        if dsl.legs:
+            val_result = service.validate(dsl, policy=active_policy)
+            payoff_data = val_result.metrics or {}
+
+            breakevens = payoff_data.get("breakevens") or []
+            max_profit = payoff_data.get("max_profit")
+            max_loss = payoff_data.get("max_loss")
+            rr_ratio = payoff_data.get("risk_reward_ratio")
+            is_defined_risk = payoff_data.get("is_defined_risk", True)
+            formatted_gates = [_format_gate(g) for g in val_result.gate_results]
+
+            return {
+                "strategy_name": val_result.strategy_name,
+                "status": getattr(val_result.status, "value", str(val_result.status)),
+                "validation_score": val_result.validation_score,
+                "policy_name": active_policy.policy_name,
+                "validation_scope": "THEORETICAL",
+                "historical_vs_theoretical": "THEORETICAL_PAYOFF",
+                "is_options": True,
+                "metrics": {
+                    # Historical metrics are explicitly None (not calculated) for options per ADR 011
+                    "mathematical_expectancy": None,
+                    "profit_factor": None,
+                    "win_rate": None,
+                    "sample_size": None,
+                    "max_drawdown_pct": None,
+                    "sharpe_ratio": None,
+                    "sqn": None,
+                    # Real theoretical payoff metrics
+                    "max_profit": max_profit,
+                    "max_loss": max_loss,
+                    "risk_reward_ratio": rr_ratio,
+                    "breakevens": breakevens,
+                    "is_defined_risk": is_defined_risk,
+                },
+                "payoff_structure": {
+                    "breakevens": breakevens,
+                    "max_profit": max_profit,
+                    "max_loss": max_loss,
+                    "risk_reward_ratio": rr_ratio,
+                    "is_defined_risk": is_defined_risk,
+                },
+                "risk_gates": formatted_gates,
+                "gate_results": formatted_gates,
+                "failed_gates": val_result.failed_gates,
+                "warnings": val_result.warnings,
+                "suggested_improvements": val_result.suggested_improvements,
+                "notice": "Evaluated via theoretical Black-Scholes Greeks and payoff boundaries (ADR 011). Historical backtest expectancy is not calculated for options.",
+            }
+
+        # ----------------------------------------------------------------------
+        # Case 2: Linear Strategies with Replayable Dataset -> Historical Statistical Path
+        # ----------------------------------------------------------------------
+        if dataset_path:
+            ds_file = Path(dataset_path)
+            if ds_file.is_file():
+                from aditrader.backtesting.runner import BacktestConfig, BacktestRunner
+                from aditrader.data.feeds.nse_csv import NSECSVParser
+                from aditrader.strategy.compiler.engine import ExecutableStrategy
+
+                bars, _ = NSECSVParser.parse_file(ds_file)
+                if bars:
+                    cfg = BacktestConfig(initial_capital=1_000_000.0)
+                    runner = BacktestRunner(config=cfg)
+                    compiled = ExecutableStrategy(dsl)
+                    bt_result = runner.run(strategy=compiled, data=bars)
+                    val_result = service.validate(
+                        dsl, backtest_result=bt_result, policy=active_policy
+                    )
+
+                    perf = bt_result.performance
+                    formatted_gates = [_format_gate(g) for g in val_result.gate_results]
+                    return {
+                        "strategy_name": val_result.strategy_name,
+                        "status": getattr(val_result.status, "value", str(val_result.status)),
+                        "validation_score": val_result.validation_score,
+                        "policy_name": active_policy.policy_name,
+                        "validation_scope": "HISTORICAL",
+                        "historical_vs_theoretical": "HISTORICAL",
+                        "is_options": False,
+                        "dataset": ds_file.name,
+                        "metrics": {
+                            "mathematical_expectancy": perf.expectancy,
+                            "expectancy": perf.expectancy,
+                            "profit_factor": perf.profit_factor,
+                            "win_rate": perf.win_rate,
+                            "sample_size": perf.total_trades,
+                            "max_drawdown_pct": perf.max_drawdown_pct,
+                            "sharpe_ratio": perf.sharpe_ratio,
+                            "sortino_ratio": perf.sortino_ratio,
+                            "sqn": perf.sqn,
+                            "net_profit": perf.net_profit,
+                        },
+                        "payoff_structure": None,
+                        "risk_gates": formatted_gates,
+                        "gate_results": formatted_gates,
+                        "failed_gates": val_result.failed_gates,
+                        "warnings": val_result.warnings,
+                        "suggested_improvements": val_result.suggested_improvements,
+                    }
+
+        # ----------------------------------------------------------------------
+        # Case 3: Linear Strategy without Dataset -> Static AST Validation
+        # ----------------------------------------------------------------------
+        from aditrader.validation.ast.validator import ASTValidator
+
+        ast_result = ASTValidator.validate(dsl)
+        formatted_gates = [_format_gate(g) for g in ast_result.gate_results]
         return {
-            "strategy_name": result.strategy_name,
-            "status": getattr(result.status, "value", str(result.status)),
-            "validation_score": result.validation_score,
+            "strategy_name": dsl.name,
+            "status": getattr(ast_result.status, "value", str(ast_result.status)),
+            "validation_score": ast_result.validation_score,
             "policy_name": active_policy.policy_name,
-            "validation_scope": getattr(
-                result.validation_scope, "value", str(result.validation_scope)
-            ),
-            "historical_vs_theoretical": result.historical_vs_theoretical,
+            "validation_scope": "STATIC_AST",
+            "historical_vs_theoretical": "STATIC_AST",
+            "is_options": False,
             "metrics": {
-                "mathematical_expectancy": 1.45,
-                "profit_factor": 1.62,
-                "win_rate": 0.64,
-                "sample_size": 128,
-                "max_drawdown_pct": 0.082,
-                "sharpe_ratio": 1.88,
-                "sqn": 2.40,
+                "mathematical_expectancy": None,
+                "profit_factor": None,
+                "win_rate": None,
+                "sample_size": None,
+                "max_drawdown_pct": None,
+                "sharpe_ratio": None,
+                "sqn": None,
             },
-            "gate_results": [
-                {
-                    "gate_name": g.gate_name,
-                    "passed": g.passed,
-                    "severity": getattr(g.severity, "value", str(g.severity)),
-                    "detail": g.detail,
-                }
-                for g in result.gate_results
-            ],
-            "risk_gates": [
-                {
-                    "name": "Tail Risk Gate",
-                    "passed": True,
-                    "detail": "Ratio hedges protect extreme adverse tail",
-                },
-                {
-                    "name": "Margin Buffer Gate",
-                    "passed": True,
-                    "detail": "Margin utilization within limits",
-                },
-                {
-                    "name": "Sample Significance Gate",
-                    "passed": True,
-                    "detail": "Sample size >= 30 trades",
-                },
-            ],
-            "failed_gates": result.failed_gates,
-            "warnings": result.warnings,
-            "suggested_improvements": result.suggested_improvements,
-            "payoff_metrics": payoff_metrics,
-            "payoff_structure": payoff_metrics,
+            "payoff_structure": None,
+            "risk_gates": formatted_gates,
+            "gate_results": formatted_gates,
+            "failed_gates": ast_result.failed_gates,
+            "warnings": ast_result.warnings,
+            "suggested_improvements": ast_result.suggested_improvements,
+            "notice": "Static AST validation passed. Select an evaluation dataset to compute historical expectancy and statistical metrics.",
         }
 
     @staticmethod
@@ -757,6 +912,7 @@ class ActiveRunState:
     unrealized_pnl: float = 0.0
     trades_count: int = 0
     orders_count: int = 0
+    current_virtual_time: str | None = None
     equity_curve: list[float] = field(default_factory=list)
     logs: list[str] = field(default_factory=list)
     dossier_path: str | None = None
@@ -830,67 +986,105 @@ class ActiveRunManager:
         }
 
     def _run_worker(self, state: ActiveRunState, dataset_path: Path, slippage_bps: float) -> None:
-        """Worker thread processing bars and updating simulation progress."""
+        """Worker thread processing bars and executing strategy via ForwardTestRunner."""
         try:
+            from aditrader.data.feeds.csv_feed import CSVDataFeed
+            from aditrader.data.forward_runner import ForwardTestConfig, ForwardTestRunner
+
             state.logs.append(
-                f"[{datetime.now(EXCHANGE_TIMEZONE).strftime('%H:%M:%S')}] Initialized PaperBroker with capital ₹{state.initial_capital:,.2f}"
+                f"[{datetime.now(EXCHANGE_TIMEZONE).strftime('%H:%M:%S')}] Initialized paper simulation with capital ₹{state.initial_capital:,.2f}"
             )
             state.logs.append(
                 f"[{datetime.now(EXCHANGE_TIMEZONE).strftime('%H:%M:%S')}] Parsing dataset: {dataset_path.name}"
             )
 
-            bars, _parse_warnings = NSECSVParser.parse_file(dataset_path)
-            state.total_bars = len(bars)
+            detail = ValidationServiceBridge.get_strategy_detail(state.strategy_id)
+            if not detail:
+                raise ValueError(f"Strategy '{state.strategy_id}' not found.")
+            dsl = StrategyDSL.model_validate(detail["dsl"])
+
+            csv_feed = CSVDataFeed(
+                file_path=dataset_path,
+                symbol=dsl.underlying,
+                timeframe=dsl.timeframe,
+                session_filter=False,
+            )
+            state.total_bars = len(csv_feed)
             state.logs.append(
-                f"[{datetime.now(EXCHANGE_TIMEZONE).strftime('%H:%M:%S')}] Starting deterministic replay of {len(bars)} bars..."
+                f"[{datetime.now(EXCHANGE_TIMEZONE).strftime('%H:%M:%S')}] Loaded {len(csv_feed)} historical bars. Starting point-in-time replay..."
             )
 
-            capital = state.initial_capital
-            pnl = 0.0
-            state.equity_curve = [capital]
+            cfg = ForwardTestConfig(
+                symbol=dsl.underlying,
+                timeframe=dsl.timeframe,
+                initial_capital=state.initial_capital,
+                slippage_bps=slippage_bps,
+            )
 
-            # Deterministic bar stepping with realistic pacing
-            for i, bar in enumerate(bars):
+            state.equity_curve = [state.initial_capital]
+            bars_processed = 0
+
+            def on_bar_closed(bar: Bar) -> None:
+                nonlocal bars_processed
                 if state._stop_flag:
-                    state.status = "STOPPED"
-                    state.logs.append("Simulation halted by user request.")
-                    break
+                    runner.stop()
+                    return
 
-                # Simulate signal and paper fill logic
-                if i > 0 and i % 5 == 0:
-                    state.trades_count += 1
-                    state.orders_count += 1
-                    trade_pnl = 250.0 if (i % 10 == 0) else -150.0
-                    pnl += trade_pnl
-                    state.realized_pnl = pnl
-                    capital += trade_pnl
-                    state.equity = capital
-                    state.logs.append(
-                        f"[{bar.timestamp.strftime('%H:%M:%S')}] Bar {i + 1}/{len(bars)}: Trade fill {bar.symbol} @ ₹{bar.close:,.2f} | P&L: ₹{trade_pnl:+,.2f}"
-                    )
+                bars_processed += 1
+                state.bars_processed = bars_processed
+                state.progress_pct = round((bars_processed / max(1, state.total_bars)) * 100, 1)
+                state.current_virtual_time = bar.timestamp.isoformat()
 
-                state.equity_curve.append(capital)
-                state.bars_processed = i + 1
-                state.progress_pct = round(((i + 1) / len(bars)) * 100, 1)
-                time.sleep(0.01)  # Responsive pacing for smooth GUI progress
+                bal = runner.broker.get_account_balance()
+                state.equity = bal.total_capital
+                state.realized_pnl = bal.realized_pnl
+                state.unrealized_pnl = bal.unrealized_pnl
+                state.equity_curve.append(bal.total_capital)
+                time.sleep(0.005)
 
-            if state.status != "STOPPED":
+            def on_trade_executed(trd: Trade) -> None:
+                state.trades_count += 1
+                state.orders_count += 1
+                state.logs.append(
+                    f"[{trd.timestamp.strftime('%H:%M:%S')}] Paper fill: {trd.side.value} {trd.qty}x {trd.symbol} @ ₹{trd.fill_price:,.2f} | Slippage: ₹{trd.slippage:.2f} | Fees: ₹{trd.stt + trd.charges:.2f}"
+                )
+
+            runner = ForwardTestRunner(
+                config=cfg,
+                strategy=dsl,
+                feed=csv_feed,
+                on_bar_callback=on_bar_closed,
+                on_trade_callback=on_trade_executed,
+            )
+
+            res = runner.run()
+
+            if state._stop_flag:
+                state.status = "STOPPED"
+                state.logs.append("Simulation halted by researcher.")
+                self._save_session_dossier(state, res)
+            else:
                 state.status = "COMPLETED"
                 state.progress_pct = 100.0
                 state.ended_at = datetime.now(EXCHANGE_TIMEZONE)
-                state.logs.append(
-                    f"[{datetime.now(EXCHANGE_TIMEZONE).strftime('%H:%M:%S')}] Replay finished. Final Realized P&L: ₹{state.realized_pnl:+,.2f}"
+                state.realized_pnl = res.session.realized_pnl
+                state.unrealized_pnl = res.session.unrealized_pnl or 0.0
+                state.equity = (
+                    res.session.ending_capital
+                    if res.session.ending_capital is not None
+                    else state.equity
                 )
-
-                # Export forward session dossier
-                self._save_session_dossier(state)
+                state.logs.append(
+                    f"[{datetime.now(EXCHANGE_TIMEZONE).strftime('%H:%M:%S')}] Replay finished cleanly. Realized P&L: ₹{state.realized_pnl:+,.2f} | Trades: {len(res.trades)}"
+                )
+                self._save_session_dossier(state, res)
 
         except Exception as exc:
             state.status = "FAILED"
             state.logs.append(f"Simulation error: {exc}")
             logger.exception("Simulation run failed: %s", exc)
 
-    def _save_session_dossier(self, state: ActiveRunState) -> None:
+    def _save_session_dossier(self, state: ActiveRunState, runner_result: Any = None) -> None:
         """Write completed session dossier to runs/forward/ for persistence."""
         import json
 
@@ -898,12 +1092,25 @@ class ActiveRunManager:
         runs_dir.mkdir(parents=True, exist_ok=True)
         dossier_file = runs_dir / f"session_{state.run_id}.json"
 
+        orders_list: list[dict[str, Any]] = []
+        trades_list: list[dict[str, Any]] = []
+        if runner_result is not None:
+            trades_list = [
+                t.model_dump(mode="json") if hasattr(t, "model_dump") else t
+                for t in getattr(runner_result, "trades", [])
+            ]
+            orders_list = [
+                o.model_dump(mode="json") if hasattr(o, "model_dump") else o
+                for o in getattr(runner_result, "orders", [])
+            ]
+
         dossier_data = {
             "session": {
                 "session_id": state.run_id,
                 "symbol": "NIFTY",
                 "strategy_name": state.strategy_name,
                 "strategy_id": state.strategy_id,
+                "dataset_path": state.dataset_path,
                 "started_at": state.started_at.isoformat(),
                 "ended_at": state.ended_at.isoformat() if state.ended_at else None,
                 "status": state.status,
@@ -911,7 +1118,7 @@ class ActiveRunManager:
                 "orders_count": state.orders_count,
                 "trades_count": state.trades_count,
                 "realized_pnl": state.realized_pnl,
-                "unrealized_pnl": 0.0,
+                "unrealized_pnl": state.unrealized_pnl,
                 "initial_capital": state.initial_capital,
                 "ending_capital": state.equity,
                 "assumptions": {
@@ -920,8 +1127,8 @@ class ActiveRunManager:
                     "slippage_bps": 2.5,
                 },
             },
-            "orders": [],
-            "trades": [],
+            "orders": orders_list,
+            "trades": trades_list,
             "equity_snapshots": [
                 {
                     "timestamp": state.started_at.isoformat(),
@@ -935,7 +1142,7 @@ class ActiveRunManager:
                     else state.started_at.isoformat(),
                     "total_capital": state.equity,
                     "realized_pnl": state.realized_pnl,
-                    "unrealized_pnl": 0.0,
+                    "unrealized_pnl": state.unrealized_pnl,
                 },
             ],
             "equity_curve": state.equity_curve,
@@ -960,6 +1167,7 @@ class ActiveRunManager:
                 "progress_pct": state.progress_pct,
                 "bars_processed": state.bars_processed,
                 "total_bars": state.total_bars,
+                "current_virtual_time": state.current_virtual_time,
                 "equity": state.equity,
                 "realized_pnl": state.realized_pnl,
                 "trades_count": state.trades_count,
