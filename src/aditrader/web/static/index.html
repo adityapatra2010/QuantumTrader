@@ -729,6 +729,13 @@
           The system strictly audits datasets across three fundamental pillars before allowing historical replay:
           Format Parsing, Options-Chain Awareness, and Historical Replay Readiness.
         </p>
+        <div class="status-legend" style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; font-size: 0.78rem; color: var(--text-muted);">
+          <span><span class="badge badge-paper" style="font-size: 0.68rem;">NSE_INTRADAY</span> Format recognized</span>
+          <span><span class="badge badge-live" style="font-size: 0.68rem;">REPLAYABLE</span> Valid for simulation</span>
+          <span><span class="badge badge-alert" style="font-size: 0.68rem;">INSPECT ONLY</span> Blocked from simulation</span>
+          <span><span class="badge badge-purple" style="font-size: 0.68rem;">OPTIONS CHAIN</span> Multi-strike derivative quotes</span>
+          <span><span class="badge badge-sim" style="font-size: 0.68rem;">SPOT / LINEAR</span> Single-instrument series</span>
+        </div>
         <div class="table-container">
           <table>
             <thead>
@@ -1316,7 +1323,7 @@
             : '<span class="badge badge-sim">SPOT / LINEAR</span>';
           const replayBadge = d.is_replayable
             ? '<span class="badge badge-live">REPLAYABLE</span>'
-            : '<span class="badge badge-alert">INSPECT ONLY</span>';
+            : `<span class="badge badge-alert">INSPECT ONLY</span>${d.ineligibility_reason ? '<div style="font-size:0.7rem;color:var(--text-muted);margin-top:3px;white-space:normal;max-width:200px;">' + d.ineligibility_reason.split('per ADR')[0].trim() + '</div>' : ''}`;
           tr.innerHTML = `
             <td class="mono"><strong>${d.path}</strong></td>
             <td class="mono">${(d.size_bytes / 1024).toFixed(1)} KB</td>
@@ -1736,10 +1743,22 @@
             document.getElementById('set-kotak-key').textContent = s.providers.kotak_neo.consumer_key_masked || '••••••••';
             document.getElementById('set-kotak-mobile').textContent = s.providers.kotak_neo.mobile_number_masked || '••••••••';
             document.getElementById('set-kotak-ucc').textContent = s.providers.kotak_neo.ucc_masked || '••••••••';
+            const kStatus = s.providers.kotak_neo.status || 'NOT_CONFIGURED';
+            const kBadge = document.getElementById('settings-kotak-badge');
+            if (kBadge) {
+              kBadge.textContent = kStatus.replace('_', ' ');
+              kBadge.className = 'badge ' + (kStatus === 'ACTIVE' || kStatus === 'CONFIGURED' ? 'badge-live' : 'badge-sim');
+            }
           }
           if (s.providers.gemini) {
             document.getElementById('set-gemini-key').textContent = s.providers.gemini.api_key_masked || '••••••••';
             document.getElementById('set-gemini-model').textContent = s.providers.gemini.model_name || 'gemini-2.5-flash';
+            const gStatus = s.providers.gemini.status || 'NOT_CONFIGURED';
+            const gBadge = document.getElementById('settings-gemini-badge');
+            if (gBadge) {
+              gBadge.textContent = gStatus.replace('_', ' ');
+              gBadge.className = 'badge ' + (gStatus === 'ACTIVE' || gStatus === 'CONFIGURED' ? 'badge-live' : 'badge-sim');
+            }
           }
         }
       } catch (err) {
