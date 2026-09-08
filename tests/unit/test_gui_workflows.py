@@ -66,7 +66,7 @@ def test_gui_html_shell_and_tokens(web_server: DashboardServer) -> None:
         assert "JetBrains Mono" in body or "ui-monospace" in body
 
         # Air-gap safety notices
-        assert "ADR 002 Air-Gapped Simulation Active" in body
+        assert "Paper simulation only. All executions route to local PaperBroker" in body
         assert "PAPER BROKER" in body
 
         # All 7 tabs present
@@ -80,8 +80,8 @@ def test_gui_html_shell_and_tokens(web_server: DashboardServer) -> None:
 
         # NIFTY CE Dynamic Premium Bands explicitly mentioned
         assert "₹50.00 – ₹59.50" in body or "50.00" in body
-        assert "₹100.00 – ₹109.50" in body or "109.50" in body
-        assert "NOT by hard-coded strike prices" in body
+        assert "₹100.00 – ₹109.50" in body or "109.50" in body        # Special features
+        assert "Entry price (the <em>premium</em>), not the strike, determines which contract to trade." in body
 
 
 def test_auth_session_lifecycle(web_server: DashboardServer) -> None:

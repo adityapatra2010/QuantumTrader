@@ -51,7 +51,7 @@ def test_dashboard_server_lifecycle_and_endpoints() -> None:
             body = res.read().decode("utf-8")
             assert "AdiTrader" in body
             assert "QuantumValidator" in body
-            assert "ADR 002 Air-Gapped Simulation Active" in body
+            assert "Paper simulation only. All executions route to local PaperBroker" in body
             assert "#0E1117" in body  # Design language theme color
             assert "#161B22" in body
 

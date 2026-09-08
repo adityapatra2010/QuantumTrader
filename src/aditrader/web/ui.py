@@ -601,8 +601,7 @@ else:
     <div class="air-gap-banner">
       <span style="font-size: 1.15rem;">🛡️</span>
       <div>
-        <strong>ADR 002 Air-Gapped Simulation Active:</strong>
-        All orders route strictly into local PaperBroker. Real live broker execution is physically disabled. Market data and options chains run in research isolation.
+        Paper simulation only. All executions route to local PaperBroker — live order routing is permanently disabled (ADR 002).
       </div>
     </div>
 

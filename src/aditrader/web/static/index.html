@@ -189,11 +189,11 @@
     }
 
     .card-title {
-      font-size: 0.72rem;
+      font-size: 0.78rem;
       font-weight: 600;
       color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+      text-transform: none;
+      letter-spacing: 0.01em;
       margin-bottom: 4px;
       display: flex;
       justify-content: space-between;
@@ -335,11 +335,11 @@
     }
 
     .form-label {
-      font-size: 0.75rem;
+      font-size: 0.78rem;
       font-weight: 600;
       color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+      text-transform: none;
+      letter-spacing: 0;
     }
 
     select, input[type="text"], input[type="number"], input[type="password"] {
@@ -353,7 +353,9 @@
       min-height: 44px;
     }
 
-    select:focus, input:focus {
+    :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+    select:focus, input:focus, button:focus-visible {
       outline: none;
       border-color: var(--blue);
     }
@@ -567,14 +569,14 @@
   </header>
 
   <!-- Workstation Navigation Tabs -->
-  <nav>
-    <button class="tab-btn active" onclick="switchTab('overview')">📊 Overview & Portfolio</button>
-    <button class="tab-btn" onclick="switchTab('strategies')">📜 Strategy Catalog</button>
-    <button class="tab-btn" onclick="switchTab('datasets')">🗄️ Dataset Library</button>
-    <button class="tab-btn" onclick="switchTab('validation')">🛡️ Validation Studio</button>
-    <button class="tab-btn" onclick="switchTab('simulation')">⚡ Simulation & Replay</button>
-    <button class="tab-btn" onclick="switchTab('results')">📁 Run Dossiers</button>
-    <button class="tab-btn" onclick="switchTab('settings')">⚙️ Settings & Security</button>
+  <nav role="tablist" aria-label="Workstation navigation">
+    <button class="tab-btn active" role="tab" aria-selected="true" onclick="switchTab('overview')">📊 Overview & Portfolio</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('strategies')">📜 Strategy Catalog</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('datasets')">🗄️ Dataset Library</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('validation')">🛡️ Validation Studio</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('simulation')">⚡ Simulation & Replay</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('results')">📁 Run Dossiers</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('settings')">⚙️ Settings & Security</button>
   </nav>
 
   <!-- Main Workstation Viewport -->
@@ -584,8 +586,7 @@
     <div class="air-gap-banner">
       <span style="font-size: 1.15rem;">🛡️</span>
       <div>
-        <strong>ADR 002 Air-Gapped Simulation Active:</strong>
-        All orders route strictly into local PaperBroker. Real live broker execution is physically disabled. Market data and options chains run in research isolation.
+        Paper simulation only. All executions route to local PaperBroker — live order routing is permanently disabled (ADR 002).
       </div>
     </div>
 
@@ -671,12 +672,12 @@
       <!-- NIFTY CE Dynamic Premium-Ladder Highlight -->
       <div class="strategy-callout">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-          <h3 style="color: var(--text-bright); font-size: 1.05rem;">🎯 Featured: NIFTY CE Dynamic Premium-Ladder (Options Replay Slice)</h3>
+          <h3 style="color: var(--text-bright); font-size: 1.05rem;">🎯 NIFTY CE Premium-Ladder Strategy</h3>
           <span class="badge badge-purple">OPTIONS REPLAY READY</span>
         </div>
         <p style="font-size: 0.83rem; color: var(--text-muted); margin-top: 6px;">
-          Institutional declarative strategy executing dynamic contract discovery across 6 discrete premium entry bands.
-          <strong>Contracts are identified by observed LTP inside each band — NOT by hard-coded strike prices.</strong>
+          Sells one NIFTY CE whose current price falls inside a target band, then buys 4 lower-priced CEs as a hedge.
+          Entry price (the <em>premium</em>), not the strike, determines which contract to trade.
         </p>
         <div class="premium-bands-grid">
           <div class="band-pill"><strong>Band 1</strong>₹50.00 – ₹59.50</div>
@@ -687,8 +688,8 @@
           <div class="band-pill"><strong>Band 6</strong>₹100.00 – ₹109.50</div>
         </div>
         <div style="font-size: 0.78rem; color: var(--text); margin-top: 10px; display: flex; flex-wrap: wrap; gap: 16px;">
-          <div>🛡️ <strong>Ratio Hedge:</strong> SELL 1 CE (in band) + BUY 4 CE hedges (target ₹5.00 ± ₹2.00)</div>
-          <div>📉 <strong>Contract-Bound Trailing Stop:</strong> Ratchet: 50 &rarr; 40 &rarr; SL 45; 40 &rarr; 30 &rarr; SL 35</div>
+          <div>🛡️ Sell 1 CE per band &nbsp;&middot;&nbsp; Buy 4 CE hedges priced near ₹5</div>
+          <div>📉 Trailing stop ratchets with each ₹10 move — e.g. premium 50&rarr;40 sets stop at 45</div>
         </div>
       </div>
 
@@ -811,11 +812,12 @@
             <label class="form-label">Validation Policy</label>
             <select id="val-policy-select">
               <option value="INSTITUTIONAL" selected>Institutional Mode (Expectancy > 0, PF >= 1.25, Max DD <= 15%, Tail Risk Veto)</option>
-              <option value="CONSERVATIVE">Conservative Mode (Expectancy > 0, PF >= 1.10, Max DD <= 25%)</option>
-              <option value="RETAIL">Retail Mode (Basic Filter)</option>
+              <option value="MODERATE">Moderate Mode (Expectancy > 0, PF >= 1.10, Max DD <= 25%)</option>
+              <option value="RESEARCH">Research Mode (Exploratory — warnings only, no hard floor)</option>
             </select>
           </div>
         </div>
+        <div class="validation-hint" id="val-strategy-hint" style="padding: 10px 0; font-size: 0.82rem; color: var(--text-muted);"></div>
         <button class="btn btn-primary" onclick="runValidation()">Run Full Validation & Payoff Analysis</button>
 
         <div id="val-results-panel" style="display: none; margin-top: 18px;">
@@ -1046,6 +1048,9 @@
         <!-- Workstation Session Security -->
         <div class="section-card" style="margin-top: 14px;">
           <div class="section-heading" style="font-size: 0.9rem; margin-bottom: 10px;">Workstation Session Authentication</div>
+          <div style="font-size: 0.78rem; color: var(--amber); background: var(--amber-bg); border: 1px solid var(--amber); border-radius: 4px; padding: 6px 10px; margin-bottom: 10px;">
+            ⚠ This lock is a local UI session gate. It does not encrypt data at rest. Use OS-level access controls for full security.
+          </div>
           <div style="font-size: 0.82rem; color: var(--text); margin-bottom: 12px;">
             Logged in as: <strong class="mono" id="session-researcher-id">local_researcher</strong> (Role: Quantitative Researcher)
           </div>
@@ -1097,7 +1102,7 @@
   <!-- Application JavaScript -->
   <script>
     // State Store
-    let currentToken = localStorage.getItem('aditrader_session_token') || 'tok_researcher_active';
+    let currentToken = 'tok_researcher_active';
     let registeredStrategies = [];
     let registeredDatasets = [];
     let activeRunPollInterval = null;
@@ -1145,6 +1150,8 @@
         return oc.includes(tabId);
       });
       if (targetBtn) targetBtn.classList.add('active');
+      document.querySelectorAll('.tab-btn').forEach(b => b.setAttribute('aria-selected', 'false'));
+      if (targetBtn) targetBtn.setAttribute('aria-selected', 'true');
       const targetPane = document.getElementById('tab-' + tabId);
       if (targetPane) targetPane.classList.add('active');
 
@@ -1251,7 +1258,12 @@
         registeredStrategies.forEach((s, idx) => {
           const tr = document.createElement('tr');
           const dna = s.dna || {};
-          const dnaTag = dna.delta_type ? `${dna.delta_type} | ${dna.theta_bias || 'NEUTRAL'}` : 'Directional Linear';
+          let dnaTag = 'Equity/Index Linear';
+          if (dna.delta_type) {
+            dnaTag = `${dna.delta_type} | ${dna.theta_bias || 'NEUTRAL'}`;
+          } else if ((s.legs && s.legs.length > 0) || /(Condor|Straddle|Spread|Ladder)/i.test(s.name || '')) {
+            dnaTag = 'Options Multi-Leg';
+          }
           tr.innerHTML = `
             <td>
               <strong style="color: var(--text-bright);">${s.name}</strong>
@@ -1260,7 +1272,7 @@
             <td class="mono">${s.underlying}</td>
             <td class="mono">${s.timeframe}</td>
             <td><span class="badge badge-sim">${dnaTag}</span></td>
-            <td><span class="badge badge-live">APPROVED</span></td>
+            <td><span class="badge badge-paper">LOADED</span></td>
             <td>
               <button class="btn btn-outline btn-sm" onclick="inspectStrategyAst('${s.id}')">Inspect AST</button>
             </td>
@@ -1370,6 +1382,20 @@
         opt.textContent = s.name + ' (' + s.underlying + ')';
         stratSel.appendChild(opt);
       });
+      stratSel.addEventListener('change', (e) => {
+        const hintEl = document.getElementById('val-strategy-hint');
+        if (hintEl) {
+          hintEl.style.display = 'block';
+          hintEl.textContent = 'Selected: ' + e.target.options[e.target.selectedIndex].text;
+        }
+      });
+      if (stratSel.options.length > 0) {
+        const hintEl = document.getElementById('val-strategy-hint');
+        if (hintEl) {
+          hintEl.textContent = 'Selected: ' + stratSel.options[0].text;
+          hintEl.style.display = 'block';
+        }
+      }
 
       const dsSel = document.getElementById('val-dataset-select');
       dsSel.innerHTML = '';
@@ -1399,6 +1425,8 @@
         }
 
         document.getElementById('val-results-panel').style.display = 'block';
+        const hintEl = document.getElementById('val-strategy-hint');
+        if (hintEl) hintEl.style.display = 'none';
         const banner = document.getElementById('val-banner');
         const icon = document.getElementById('val-banner-icon');
         const text = document.getElementById('val-banner-text');
@@ -1654,9 +1682,10 @@
         runs.forEach(r => {
           const tr = document.createElement('tr');
           const pnlVal = r.realized_pnl || 0;
+          const strategyName = (r.strategy && r.strategy !== 'Unknown') ? r.strategy : ('Session ' + (r.session_id || '').slice(-6));
           tr.innerHTML = `
             <td class="mono">${r.session_id}</td>
-            <td><strong>${r.strategy}</strong></td>
+            <td><strong>${strategyName}</strong></td>
             <td class="mono">${r.symbol}</td>
             <td><span class="badge ${r.status === 'COMPLETED' ? 'badge-live' : 'badge-sim'}">${r.status}</span></td>
             <td class="mono ${pnlVal >= 0 ? 'positive' : 'negative'}">${formatINR(pnlVal)}</td>
@@ -1764,7 +1793,6 @@
         const data = await res.json();
         if (res.ok && data.token) {
           currentToken = data.token;
-          localStorage.setItem('aditrader_session_token', currentToken);
           document.getElementById('lock-modal').classList.remove('active');
           document.getElementById('lock-password-input').value = '';
           loadStatus();
