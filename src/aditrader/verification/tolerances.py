@@ -57,6 +57,7 @@ def get_metric_tolerance(metric_name: str) -> float:
             "fee",
             "turnover",
             "inr",
+            "expectancy",
         )
     ):
         if "pct" in m or "percent" in m or "rate" in m or "factor" in m:

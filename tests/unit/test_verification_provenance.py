@@ -213,11 +213,11 @@ def test_provenance_tracer() -> None:
 
 def test_reproducibility_engine() -> None:
     """Verify fresh vs stored re-evaluation catches mismatches and tolerates numerical precision."""
-    # 1. Compare metrics
-    c_ok = ReproducibilityEngine.compare_metric("mathematical_expectancy", 120.0, 120.005)
-    assert c_ok.is_reproduced is False  # 0.005 > 0.0001
-    c_close = ReproducibilityEngine.compare_metric("mathematical_expectancy", 120.0, 120.00005)
-    assert c_close.is_reproduced is True
+    # 1. Compare metrics (mathematical_expectancy is INR currency with ₹0.01 / 1 paisa tolerance)
+    c_diverged = ReproducibilityEngine.compare_metric("mathematical_expectancy", 120.0, 120.02)
+    assert c_diverged.is_reproduced is False  # 0.02 > 0.01
+    c_close = ReproducibilityEngine.compare_metric("mathematical_expectancy", 120.0, 120.005)
+    assert c_close.is_reproduced is True  # 0.005 <= 0.01
 
     c_paisa = ReproducibilityEngine.compare_metric("net_profit", 10000.0, 10000.008)
     assert c_paisa.is_reproduced is True

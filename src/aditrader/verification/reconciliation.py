@@ -12,9 +12,11 @@ Audits:
 from __future__ import annotations
 
 import logging
+from collections import deque
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from aditrader.core.models.enums import OrderSide
 from aditrader.core.models.execution import Position, Trade
 from aditrader.verification.tolerances import TOLERANCE_MONETARY
 
@@ -76,6 +78,8 @@ class ReconciliationChecker:
         # 1. Closed roundtrip realized PnL
         if realized_roundtrip_pnls is not None:
             realized = round(sum(realized_roundtrip_pnls), 2)
+        elif trade_list:
+            realized = round(cls._calculate_gross_realized_from_trades(trade_list), 2)
         else:
             realized = round(sum(p.realized_pnl for p in pos_list), 2)
 
@@ -111,12 +115,17 @@ class ReconciliationChecker:
         equity_discrepancy = round(abs(observed_equity - expected_equity), 2)
 
         # 6. Substantive Net Profit Invariant: Net Profit == Realized + Unrealized - Charges
-        # Only evaluate if execution records (trades or positions) were provided
         has_execution_records = bool(trade_list or pos_list or realized_roundtrip_pnls is not None)
         computed_net_profit = round(realized + unrealized - charges, 2)
-        net_profit_discrepancy = (
-            round(abs(net_profit - computed_net_profit), 2) if has_execution_records else 0.0
-        )
+        if has_execution_records:
+            net_profit_discrepancy = round(abs(net_profit - computed_net_profit), 2)
+        else:
+            # Without execution records, non-zero profit/loss cannot be substantiated
+            net_profit_discrepancy = (
+                round(abs(net_profit), 2)
+                if abs(net_profit) > TOLERANCE_MONETARY or abs(charges) > TOLERANCE_MONETARY
+                else 0.0
+            )
 
         # 7. Cash Balance Reconciliation: Ending Equity == Cash Balance + Portfolio Market Value
         cash_discrepancy = 0.0
@@ -166,3 +175,40 @@ class ReconciliationChecker:
             tolerance=TOLERANCE_MONETARY,
             details=details,
         )
+
+    @classmethod
+    def _calculate_gross_realized_from_trades(cls, trades: list[Trade]) -> float:
+        """Compute cumulative gross realized P&L across all executed fills using FIFO matching."""
+        long_inv: dict[str, deque[tuple[int, float]]] = {}
+        short_inv: dict[str, deque[tuple[int, float]]] = {}
+        gross_pnl = 0.0
+
+        for t in trades:
+            sym = t.symbol
+            if sym not in long_inv:
+                long_inv[sym] = deque()
+                short_inv[sym] = deque()
+            remaining_qty = t.qty
+
+            if t.side == OrderSide.BUY:
+                while remaining_qty > 0 and short_inv[sym]:
+                    s_qty, s_price = short_inv[sym].popleft()
+                    match_qty = min(remaining_qty, s_qty)
+                    gross_pnl += (s_price - t.fill_price) * match_qty
+                    remaining_qty -= match_qty
+                    if s_qty > match_qty:
+                        short_inv[sym].appendleft((s_qty - match_qty, s_price))
+                if remaining_qty > 0:
+                    long_inv[sym].append((remaining_qty, t.fill_price))
+            else:  # SELL
+                while remaining_qty > 0 and long_inv[sym]:
+                    l_qty, l_price = long_inv[sym].popleft()
+                    match_qty = min(remaining_qty, l_qty)
+                    gross_pnl += (t.fill_price - l_price) * match_qty
+                    remaining_qty -= match_qty
+                    if l_qty > match_qty:
+                        long_inv[sym].appendleft((l_qty - match_qty, l_price))
+                if remaining_qty > 0:
+                    short_inv[sym].append((remaining_qty, t.fill_price))
+
+        return gross_pnl

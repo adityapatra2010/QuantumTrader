@@ -54,12 +54,13 @@ class VerificationService:
         )
         strat_id = strategy_id or getattr(dsl, "id", None) or f"STRAT-{dsl.name.upper()}"
         is_options = bool(dsl.legs)
+        bundle_assumptions: dict[str, Any] = {}
 
         # ----------------------------------------------------------------------
         # Pillar 1: Static AST Structural Validation
         # ----------------------------------------------------------------------
         ast_res = ASTValidator.validate(dsl)
-        ast_passed = ast_res.status != ValidationStatus.REJECTED
+        ast_passed = ast_res.status == ValidationStatus.APPROVED
         structural_pillar = VerificationPillarResult(
             pillar_name="Static AST Structural Validation",
             pillar_type=PillarType.STRUCTURAL,
@@ -144,6 +145,12 @@ class VerificationService:
             max_l = theo_res.metrics.get("max_loss")
             p_str = f"₹{max_p:.2f}" if max_p is not None else "Unlimited"
             l_str = f"₹{max_l:.2f}" if max_l is not None else "Unlimited"
+            bundle_assumptions["theoretical_metrics"] = {
+                "max_profit": max_p,
+                "max_loss": max_l,
+                "risk_reward_ratio": theo_res.metrics.get("risk_reward_ratio"),
+                "is_defined_risk": theo_res.metrics.get("is_defined_risk"),
+            }
             options_theoretical_pillar = VerificationPillarResult(
                 pillar_name="Options Theoretical Payoff & Greeks",
                 pillar_type=PillarType.OPTIONS_THEORETICAL,
@@ -215,6 +222,18 @@ class VerificationService:
                 )
                 emp_passed = hist_val_res.status == ValidationStatus.APPROVED
                 perf = backtest_result.performance
+                bundle_assumptions["baseline_metrics"] = {
+                    "expectancy": perf.expectancy,
+                    "mathematical_expectancy": perf.expectancy,
+                    "profit_factor": perf.profit_factor,
+                    "max_drawdown_pct": perf.max_drawdown_pct,
+                    "max_drawdown_amount": perf.max_drawdown_amount,
+                    "sharpe_ratio": perf.sharpe_ratio,
+                    "sortino_ratio": perf.sortino_ratio,
+                    "sqn": perf.sqn,
+                    "win_rate": perf.win_rate,
+                    "net_profit": perf.net_profit,
+                }
                 empirical_metrics_pillar = VerificationPillarResult(
                     pillar_name="Empirical Statistical Metrics",
                     pillar_type=PillarType.EMPIRICAL_METRICS,
@@ -297,6 +316,7 @@ class VerificationService:
             kat_passed=kat_suite.passed_tests,
             kat_total=kat_suite.total_tests,
             engine_version="1.0.0",
+            assumptions=bundle_assumptions,
         )
 
         return matrix, bundle, kat_suite

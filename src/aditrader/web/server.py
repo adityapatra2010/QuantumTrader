@@ -610,6 +610,15 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         policy_name = payload.get("policy", "InstitutionalPolicy")
         dataset_path = payload.get("dataset_path") or payload.get("dataset")
 
+        if dataset_path:
+            ds_path_obj = Path(dataset_path)
+            if not _is_safe_file_path(ds_path_obj):
+                self._send_error_json(
+                    f"Access denied: dataset path '{dataset_path}' is outside workspace boundaries.",
+                    status=HTTPStatus.FORBIDDEN,
+                )
+                return
+
         try:
             val_res = ValidationServiceBridge.validate_strategy_definition(
                 strategy_id=strategy_id,

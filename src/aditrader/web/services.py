@@ -729,9 +729,20 @@ class ValidationServiceBridge:
             matrix, bundle, kat_suite = v_service.evaluate_strategy(dsl, strategy_id=strategy_id)
             ValidationServiceBridge._store_evidence(bundle)
 
+            eff_status = val_result.status.value
+            if matrix.overall_status in (
+                OverallVerificationStatus.FAIL,
+                OverallVerificationStatus.BLOCKED,
+            ):
+                eff_status = "REJECTED"
+            elif matrix.overall_status == OverallVerificationStatus.THEORETICAL_PASS:
+                eff_status = (
+                    "APPROVED" if val_result.status.value == "APPROVED" else val_result.status.value
+                )
+
             return {
                 "strategy_name": val_result.strategy_name,
-                "status": val_result.status.value,
+                "status": eff_status,
                 "overall_verification_status": matrix.overall_status.value,
                 "verification_matrix": matrix.to_summary_dict(),
                 "evidence_bundle_id": bundle.bundle_id,
@@ -806,9 +817,18 @@ class ValidationServiceBridge:
                     )
                     ValidationServiceBridge._store_evidence(bundle)
 
+                    eff_status = val_result.status.value
+                    if matrix.overall_status in (
+                        OverallVerificationStatus.FAIL,
+                        OverallVerificationStatus.BLOCKED,
+                    ):
+                        eff_status = "REJECTED"
+                    elif matrix.overall_status == OverallVerificationStatus.INCOMPLETE:
+                        eff_status = "INCOMPLETE"
+
                     return {
                         "strategy_name": val_result.strategy_name,
-                        "status": val_result.status.value,
+                        "status": eff_status,
                         "overall_verification_status": matrix.overall_status.value,
                         "verification_matrix": matrix.to_summary_dict(),
                         "evidence_bundle_id": bundle.bundle_id,
@@ -1032,6 +1052,32 @@ class ValidationServiceBridge:
         metric_norm = target_metric.strip().lower()
 
         if metric_norm in ("trade", "trade_pnl", "realized_pnl"):
+            trade_id = params.get("trade_id")
+            run_id = params.get("run_id")
+            if run_id and trade_id:
+                d_path = Path("runs/forward") / f"session_{run_id}.json"
+                if not d_path.is_file():
+                    d_path = Path("runs/forward") / f"session_{run_id.lower()}.json"
+                if d_path.is_file():
+                    try:
+                        import json
+
+                        with open(d_path, encoding="utf-8") as f:
+                            d_data = json.load(f)
+                        match_t = next(
+                            (t for t in d_data.get("trades", []) if t.get("trade_id") == trade_id),
+                            None,
+                        )
+                        if match_t:
+                            params["symbol"] = match_t.get("symbol", params.get("symbol", "NIFTY"))
+                            params["qty"] = match_t.get("qty", params.get("qty", 50))
+                            params["exit_price"] = match_t.get(
+                                "fill_price", params.get("exit_price", 100.0)
+                            )
+                            params["side"] = match_t.get("side", params.get("side", "BUY"))
+                    except Exception:
+                        pass
+
             prov = ProvenanceTracer.trace_trade(
                 trade_id=params.get("trade_id", "TRD-001"),
                 symbol=params.get("symbol", "NIFTY"),
@@ -1049,45 +1095,145 @@ class ValidationServiceBridge:
 
         if metric_norm in ("expectancy", "mathematical_expectancy"):
             raw_pnls = params.get("trade_pnls")
+            trade_pnls: list[float] | None = None
             if isinstance(raw_pnls, str):
                 try:
                     import json
 
                     trade_pnls = [float(x) for x in json.loads(raw_pnls)]
                 except Exception:
-                    trade_pnls = [100.0, -50.0, 200.0, -50.0, 100.0]
+                    trade_pnls = None
             elif isinstance(raw_pnls, list):
                 trade_pnls = [float(x) for x in raw_pnls]
-            else:
+
+            if trade_pnls is None:
+                run_id = params.get("run_id")
+                if run_id:
+                    d_path = Path("runs/forward") / f"session_{run_id}.json"
+                    if not d_path.is_file():
+                        d_path = Path("runs/forward") / f"session_{run_id.lower()}.json"
+                    if d_path.is_file():
+                        try:
+                            import json
+
+                            with open(d_path, encoding="utf-8") as f:
+                                d_data = json.load(f)
+                            trade_pnls = [
+                                float(t.get("realized_pnl", t.get("pnl", 0.0)))
+                                for t in d_data.get("trades", [])
+                                if "realized_pnl" in t or "pnl" in t
+                            ]
+                        except Exception:
+                            trade_pnls = None
+
+            if trade_pnls is None and params.get("dataset_path"):
+                ds_p = Path(params["dataset_path"])
+                if ds_p.is_file():
+                    try:
+                        from aditrader.backtesting.runner import BacktestConfig, BacktestRunner
+                        from aditrader.data.feeds.nse_csv import NSECSVParser
+                        from aditrader.strategy.compiler.engine import ExecutableStrategy
+
+                        detail = cls.get_strategy_detail(strat_id)
+                        if detail:
+                            dsl = StrategyDSL.model_validate(detail["dsl"])
+                            bars, _ = NSECSVParser.parse_file(ds_p)
+                            if bars and not dsl.legs:
+                                runner = BacktestRunner(
+                                    config=BacktestConfig(initial_capital=1_000_000.0)
+                                )
+                                res = runner.run(strategy=ExecutableStrategy(dsl), data=bars)
+                                trade_pnls = runner._calculate_roundtrip_pnls(res.trades)
+                    except Exception:
+                        trade_pnls = None
+
+            is_benchmark = False
+            if not trade_pnls:
                 trade_pnls = [100.0, -50.0, 200.0, -50.0, 100.0]
+                is_benchmark = True
 
             prov = ProvenanceTracer.trace_expectancy(
                 trade_pnls=trade_pnls,
                 strategy_id=strat_id,
-                dataset_name=params.get("dataset_name"),
+                dataset_name=params.get("dataset_name")
+                or ("BENCHMARK_DEMO_VECTOR" if is_benchmark else None),
             )
-            return prov.model_dump(mode="json")
+            dump = prov.model_dump(mode="json")
+            dump["is_benchmark_vector"] = is_benchmark
+            if is_benchmark:
+                dump["notice"] = (
+                    f"Demonstration benchmark vector: no empirical trade execution records were found for strategy '{strat_id}'."
+                )
+            return dump
 
         if metric_norm in ("drawdown", "max_drawdown", "mdd"):
             raw_eq = params.get("equity_curve")
+            eq_curve: list[float] | None = None
             if isinstance(raw_eq, str):
                 try:
                     import json
 
                     eq_curve = [float(x) for x in json.loads(raw_eq)]
                 except Exception:
-                    eq_curve = [1000.0, 1200.0, 900.0, 1100.0, 800.0, 1300.0]
+                    eq_curve = None
             elif isinstance(raw_eq, list):
                 eq_curve = [float(x) for x in raw_eq]
-            else:
+
+            if eq_curve is None:
+                run_id = params.get("run_id")
+                if run_id:
+                    d_path = Path("runs/forward") / f"session_{run_id}.json"
+                    if not d_path.is_file():
+                        d_path = Path("runs/forward") / f"session_{run_id.lower()}.json"
+                    if d_path.is_file():
+                        try:
+                            import json
+
+                            with open(d_path, encoding="utf-8") as f:
+                                d_data = json.load(f)
+                            eq_curve = [float(x) for x in d_data.get("equity_curve", [])]
+                        except Exception:
+                            eq_curve = None
+
+            if eq_curve is None and params.get("dataset_path"):
+                ds_p = Path(params["dataset_path"])
+                if ds_p.is_file():
+                    try:
+                        from aditrader.backtesting.runner import BacktestConfig, BacktestRunner
+                        from aditrader.data.feeds.nse_csv import NSECSVParser
+                        from aditrader.strategy.compiler.engine import ExecutableStrategy
+
+                        detail = cls.get_strategy_detail(strat_id)
+                        if detail:
+                            dsl = StrategyDSL.model_validate(detail["dsl"])
+                            bars, _ = NSECSVParser.parse_file(ds_p)
+                            if bars and not dsl.legs:
+                                runner = BacktestRunner(
+                                    config=BacktestConfig(initial_capital=1_000_000.0)
+                                )
+                                res = runner.run(strategy=ExecutableStrategy(dsl), data=bars)
+                                eq_curve = res.equity_curve
+                    except Exception:
+                        eq_curve = None
+
+            is_benchmark = False
+            if not eq_curve:
                 eq_curve = [1000.0, 1200.0, 900.0, 1100.0, 800.0, 1300.0]
+                is_benchmark = True
 
             prov = ProvenanceTracer.trace_max_drawdown(
                 equity_curve=eq_curve,
                 strategy_id=strat_id,
-                dataset_name=params.get("dataset_name"),
+                dataset_name=params.get("dataset_name")
+                or ("BENCHMARK_DEMO_VECTOR" if is_benchmark else None),
             )
-            return prov.model_dump(mode="json")
+            dump = prov.model_dump(mode="json")
+            dump["is_benchmark_vector"] = is_benchmark
+            if is_benchmark:
+                dump["notice"] = (
+                    f"Demonstration benchmark vector: no empirical equity curve samples were found for strategy '{strat_id}'."
+                )
+            return dump
 
         return {
             "error": f"Trace not supported for target metric '{target_metric}'",
@@ -1145,11 +1291,19 @@ class ValidationServiceBridge:
                 ]
                 eq_curve = data.get("equity_curve") or []
 
+                starting_cap = float(sess.get("starting_capital", 1_000_000.0))
+                ending_cap = float(sess.get("ending_capital", starting_cap))
+                realized_pnl = float(sess.get("realized_pnl", 0.0))
+                unrealized_pnl = float(sess.get("unrealized_pnl", 0.0))
+                total_fees = sum(
+                    float(t.get("charges", 0.0)) + float(t.get("stt", 0.0)) for t in trades
+                )
+                net_profit = round(ending_cap - starting_cap, 2)
+
                 stored_metrics = {}
-                if "realized_pnl" in sess and sess["realized_pnl"] is not None:
-                    stored_metrics["net_profit"] = float(sess["realized_pnl"])
+                stored_metrics["net_profit"] = net_profit
                 if "ending_capital" in sess and sess["ending_capital"] is not None:
-                    stored_metrics["ending_equity"] = float(sess["ending_capital"])
+                    stored_metrics["ending_equity"] = ending_cap
 
                 summary = ReproducibilityEngine.audit_metrics_reproducibility(
                     strategy_id=strat_id,
@@ -1161,20 +1315,52 @@ class ValidationServiceBridge:
                 )
 
                 # Balance sheet reconciliation check
-                starting_cap = float(sess.get("starting_capital", 1_000_000.0))
-                ending_cap = float(sess.get("ending_capital", starting_cap))
-                realized_pnl = float(sess.get("realized_pnl", 0.0))
-                unrealized_pnl = float(sess.get("unrealized_pnl", 0.0))
-                total_fees = sum(
-                    float(t.get("charges", 0.0)) + float(t.get("stt", 0.0)) for t in trades
-                )
+                typed_trades: list[Trade] = []
+                for t in trades:
+                    try:
+                        from uuid import uuid4
+
+                        from aditrader.core.models.enums import OrderSide
+                        from aditrader.core.models.execution import Trade
+
+                        side_val = (
+                            OrderSide.BUY
+                            if str(t.get("side", "")).upper() == "BUY"
+                            else OrderSide.SELL
+                        )
+                        ts_str = (
+                            t.get("timestamp") or t.get("time") or datetime.now(UTC).isoformat()
+                        )
+                        ts_val = (
+                            datetime.fromisoformat(ts_str)
+                            if isinstance(ts_str, str)
+                            else datetime.now(UTC)
+                        )
+                        typed_trades.append(
+                            Trade(
+                                trade_id=str(t.get("trade_id", f"TRD-{uuid4().hex[:8]}")),
+                                order_id=str(t.get("order_id", f"ORD-{uuid4().hex[:8]}")),
+                                symbol=str(t.get("symbol", sess.get("symbol", "NIFTY"))),
+                                side=side_val,
+                                qty=int(t.get("qty", 1)),
+                                fill_price=float(t.get("fill_price", t.get("price", 100.0))),
+                                slippage=float(t.get("slippage", 0.0)),
+                                stt=float(t.get("stt", 0.0)),
+                                charges=float(t.get("charges", 0.0)),
+                                timestamp=ts_val,
+                            )
+                        )
+                    except Exception:
+                        pass
 
                 recon = ReconciliationChecker.audit_session(
                     starting_capital=starting_cap,
                     ending_equity=ending_cap,
-                    net_profit=realized_pnl,
+                    net_profit=net_profit,
+                    realized_roundtrip_pnls=[realized_pnl],
                     unrealized_pnl=unrealized_pnl,
                     total_statutory_charges=total_fees,
+                    trades=typed_trades if typed_trades else None,
                 )
 
                 overall_ok = summary.overall_reproduced and recon.is_reconciled
@@ -1273,161 +1459,220 @@ class ValidationServiceBridge:
                     "comparisons": [],
                 }
 
-        if dataset_path:
-            ds_file = Path(dataset_path)
+        # Strategy-level recalculation against stored baseline EvidenceBundle
+        detail = cls.get_strategy_detail(strategy_id)
+        if not detail:
+            return {
+                "reproduced": False,
+                "is_reproducible": False,
+                "status": "ERROR",
+                "reason": f"Strategy '{strategy_id}' not found in registry.",
+                "comparisons": [],
+            }
+
+        dsl = StrategyDSL.model_validate(detail["dsl"])
+
+        # Locate existing baseline EvidenceBundle
+        baseline_bundle = next(
+            (b for b in reversed(cls._evidence_store.values()) if b.strategy_id == strategy_id),
+            None,
+        )
+        if not baseline_bundle:
+            # Auto-establish initial baseline bundle from validation
+            cls.validate_strategy_definition(
+                strategy_id=strategy_id,
+                dataset_path=dataset_path,
+            )
+            baseline_bundle = next(
+                (b for b in reversed(cls._evidence_store.values()) if b.strategy_id == strategy_id),
+                None,
+            )
+
+        if not baseline_bundle:
+            return {
+                "reproduced": False,
+                "is_reproducible": False,
+                "status": "INCOMPLETE",
+                "reason": f"No baseline evidence bundle found for strategy '{strategy_id}'. Please validate the strategy first to establish a verifiable baseline.",
+                "comparisons": [],
+            }
+
+        # Check for STALE strategy definition
+        import hashlib
+        import json
+
+        dsl_json = json.dumps(dsl.model_dump(mode="json"), sort_keys=True)
+        fresh_strat_hash = hashlib.sha256(dsl_json.encode("utf-8")).hexdigest()
+        if baseline_bundle.strategy_hash != fresh_strat_hash:
+            return {
+                "reproduced": False,
+                "is_reproducible": False,
+                "status": "STALE",
+                "reason": f"Strategy '{strategy_id}' definition has been modified since baseline verification bundle was generated (stored hash {baseline_bundle.strategy_hash[:8]} vs current {fresh_strat_hash[:8]}). Evidence is STALE.",
+                "comparisons": [],
+            }
+
+        if dsl.legs:
+            # Options theoretical payoff recalculation
+            stored_metrics = baseline_bundle.assumptions.get("theoretical_metrics", {})
+            theo_res = OptionsTheoreticalValidator.validate(dsl)
+            fresh_metrics = {
+                "max_profit": theo_res.metrics.get("max_profit"),
+                "max_loss": theo_res.metrics.get("max_loss"),
+                "risk_reward_ratio": theo_res.metrics.get("risk_reward_ratio"),
+            }
+
+            comparisons = []
+            mismatches = 0
+            for metric_name in ("max_profit", "max_loss", "risk_reward_ratio"):
+                stored_val = stored_metrics.get(metric_name)
+                fresh_val = fresh_metrics.get(metric_name)
+                if stored_val is None or fresh_val is None:
+                    continue
+                comp = ReproducibilityEngine.compare_metric(
+                    metric_name, float(stored_val), float(fresh_val)
+                )
+                comparisons.append(comp)
+                if not comp.is_reproduced:
+                    mismatches += 1
+
+            reproduced = (mismatches == 0) and len(comparisons) > 0
+            return {
+                "reproduced": reproduced,
+                "is_reproducible": reproduced,
+                "status": "REPRODUCED" if reproduced else "MISMATCH",
+                "strategy_id": strategy_id,
+                "strategy_name": dsl.name,
+                "calculation_type": "THEORETICAL_BLACK_SCHOLES_PAYOFF",
+                "mismatch_count": mismatches,
+                "bundle_id": baseline_bundle.bundle_id,
+                "tamper_hash": baseline_bundle.tamper_hash,
+                "overall_verification_status": baseline_bundle.overall_status.value,
+                "comparisons": [c.model_dump(mode="json") for c in comparisons],
+                "reason": (
+                    "Theoretical Black-Scholes payoff bounds reproduced bit-for-bit against stored baseline."
+                    if reproduced
+                    else f"Theoretical payoff bounds diverged ({mismatches} mismatches)."
+                ),
+                "evaluated_at": datetime.now(UTC).isoformat(),
+            }
+
+        else:
+            # Linear backtest recalculation
+            ds_path_str = dataset_path or (
+                baseline_bundle.dataset_name if baseline_bundle else None
+            )
+            if not ds_path_str:
+                return {
+                    "reproduced": False,
+                    "is_reproducible": False,
+                    "status": "INCOMPLETE",
+                    "reason": "Recalculation of empirical backtest requires dataset_path.",
+                    "comparisons": [],
+                }
+            ds_file = Path(ds_path_str)
             if not ds_file.is_file():
-                return {
-                    "reproduced": False,
-                    "is_reproducible": False,
-                    "status": "BLOCKED",
-                    "reason": f"BLOCKED: Dataset '{dataset_path}' not found on disk.",
-                    "comparisons": [],
-                }
-
-            detail = cls.get_strategy_detail(strategy_id)
-            if not detail:
-                return {
-                    "reproduced": False,
-                    "is_reproducible": False,
-                    "status": "ERROR",
-                    "reason": f"Strategy '{strategy_id}' not found in registry.",
-                    "comparisons": [],
-                }
-
-            dsl = StrategyDSL.model_validate(detail["dsl"])
-
-            if dsl.legs:
-                theo_res = OptionsTheoreticalValidator.validate(dsl)
-                p_data = theo_res.metrics
-                v_service = VerificationService()
-                matrix, bundle, _ = v_service.evaluate_strategy(dsl, strategy_id=strategy_id)
-                cls._store_evidence(bundle)
-                return {
-                    "reproduced": True,
-                    "is_reproducible": True,
-                    "status": "REPRODUCED",
-                    "strategy_id": strategy_id,
-                    "strategy_name": dsl.name,
-                    "calculation_type": "THEORETICAL_BLACK_SCHOLES_PAYOFF",
-                    "mismatch_count": 0,
-                    "bundle_id": bundle.bundle_id,
-                    "tamper_hash": bundle.tamper_hash,
-                    "overall_verification_status": matrix.overall_status.value,
-                    "comparisons": [
-                        {
-                            "metric_name": "max_profit",
-                            "stored_value": p_data.get("max_profit"),
-                            "fresh_value": p_data.get("max_profit"),
-                            "delta": 0.0,
-                            "tolerance": 0.01,
-                            "is_reproduced": True,
-                            "details": "Theoretical max profit analytical bound reproduced bit-for-bit.",
-                        },
-                        {
-                            "metric_name": "max_loss",
-                            "stored_value": p_data.get("max_loss"),
-                            "fresh_value": p_data.get("max_loss"),
-                            "delta": 0.0,
-                            "tolerance": 0.01,
-                            "is_reproduced": True,
-                            "details": "Theoretical max loss analytical bound reproduced bit-for-bit.",
-                        },
-                    ],
-                    "reason": "Theoretical Black-Scholes payoff bounds reproduced bit-for-bit.",
-                    "evaluated_at": datetime.now(UTC).isoformat(),
-                }
-            else:
-                from aditrader.backtesting.runner import BacktestConfig, BacktestRunner
-                from aditrader.data.feeds.nse_csv import NSECSVParser
-                from aditrader.strategy.compiler.engine import ExecutableStrategy
-
-                bars, _ = NSECSVParser.parse_file(ds_file)
-                if not bars:
+                sample_alt = Path("data/sample_csv") / ds_file.name
+                if sample_alt.is_file():
+                    ds_file = sample_alt
+                else:
                     return {
                         "reproduced": False,
                         "is_reproducible": False,
                         "status": "BLOCKED",
-                        "reason": f"BLOCKED: Could not parse OHLC bars from '{dataset_path}'.",
+                        "reason": f"BLOCKED: Baseline dataset '{ds_file.name}' was moved or deleted from disk.",
                         "comparisons": [],
                     }
 
-                cfg = BacktestConfig(initial_capital=1_000_000.0)
-                runner1 = BacktestRunner(config=cfg)
-                compiled1 = ExecutableStrategy(dsl)
-                res1 = runner1.run(strategy=compiled1, data=bars)
+            # Verify dataset has not been tampered on disk
+            if baseline_bundle.dataset_hash:
+                import hashlib
 
-                runner2 = BacktestRunner(config=cfg)
-                compiled2 = ExecutableStrategy(dsl)
-                res2 = runner2.run(strategy=compiled2, data=bars)
+                with open(ds_file, "rb") as f:
+                    current_ds_hash = "sha256:" + hashlib.sha256(f.read()).hexdigest()
+                if current_ds_hash != baseline_bundle.dataset_hash:
+                    return {
+                        "reproduced": False,
+                        "is_reproducible": False,
+                        "status": "BLOCKED",
+                        "reason": f"BLOCKED: Dataset '{ds_file.name}' on disk has been modified since baseline verification (hash mismatch: stored {baseline_bundle.dataset_hash[:8]} vs disk {current_ds_hash[:8]}).",
+                        "comparisons": [],
+                    }
 
-                perf1 = res1.performance
-                perf2 = res2.performance
-
-                stored_m = {
-                    "mathematical_expectancy": perf1.expectancy,
-                    "profit_factor": perf1.profit_factor,
-                    "max_drawdown_pct": perf1.max_drawdown_pct,
-                    "max_drawdown_amount": perf1.max_drawdown_amount,
-                    "sharpe_ratio": perf1.sharpe_ratio,
-                    "sortino_ratio": perf1.sortino_ratio,
-                    "sqn": perf1.sqn,
-                    "win_rate": perf1.win_rate,
-                    "net_profit": perf1.net_profit,
-                }
-                fresh_m = {
-                    "mathematical_expectancy": perf2.expectancy,
-                    "profit_factor": perf2.profit_factor,
-                    "max_drawdown_pct": perf2.max_drawdown_pct,
-                    "max_drawdown_amount": perf2.max_drawdown_amount,
-                    "sharpe_ratio": perf2.sharpe_ratio,
-                    "sortino_ratio": perf2.sortino_ratio,
-                    "sqn": perf2.sqn,
-                    "win_rate": perf2.win_rate,
-                    "net_profit": perf2.net_profit,
-                }
-
-                comparisons = []
-                mismatches = 0
-                for metric_name, stored_val in stored_m.items():
-                    fresh_val = fresh_m.get(metric_name)
-                    comp = ReproducibilityEngine.compare_metric(metric_name, stored_val, fresh_val)
-                    comparisons.append(comp)
-                    if not comp.is_reproduced:
-                        mismatches += 1
-
-                overall_reproduced = mismatches == 0
-                v_service = VerificationService()
-                matrix, bundle, _ = v_service.evaluate_strategy(
-                    dsl,
-                    strategy_id=strategy_id,
-                    backtest_result=res2,
-                    dataset_path=ds_file,
-                )
-                ValidationServiceBridge._store_evidence(bundle)
-
+            stored_metrics = baseline_bundle.assumptions.get("baseline_metrics", {})
+            if not stored_metrics:
                 return {
-                    "reproduced": overall_reproduced,
-                    "is_reproducible": overall_reproduced,
-                    "status": "REPRODUCED" if overall_reproduced else "MISMATCH",
-                    "overall_verification_status": matrix.overall_status.value,
-                    "bundle_id": bundle.bundle_id,
-                    "tamper_hash": bundle.tamper_hash,
-                    "mismatch_count": mismatches,
-                    "comparisons": [c.model_dump(mode="json") for c in comparisons],
-                    "reason": (
-                        "All metrics reproduced bit-for-bit within institutional tolerances."
-                        if overall_reproduced
-                        else f"{mismatches} metric(s) diverged."
-                    ),
-                    "evaluated_at": datetime.now(UTC).isoformat(),
+                    "reproduced": False,
+                    "is_reproducible": False,
+                    "status": "INCOMPLETE",
+                    "reason": f"Baseline evidence bundle '{baseline_bundle.bundle_id}' contains no empirical baseline metrics to audit.",
+                    "comparisons": [],
                 }
 
-        return {
-            "reproduced": False,
-            "status": "INCOMPLETE",
-            "reason": "Provide either run_id or dataset_path to recalculate result.",
-            "comparisons": [],
-        }
+            from aditrader.backtesting.runner import BacktestConfig, BacktestRunner
+            from aditrader.data.feeds.nse_csv import NSECSVParser
+            from aditrader.strategy.compiler.engine import ExecutableStrategy
+
+            bars, _ = NSECSVParser.parse_file(ds_file)
+            if not bars:
+                return {
+                    "reproduced": False,
+                    "is_reproducible": False,
+                    "status": "BLOCKED",
+                    "reason": f"BLOCKED: Could not parse OHLC bars from '{ds_file}'.",
+                    "comparisons": [],
+                }
+
+            cfg = BacktestConfig(initial_capital=1_000_000.0)
+            runner = BacktestRunner(config=cfg)
+            compiled = ExecutableStrategy(dsl)
+            fresh_res = runner.run(strategy=compiled, data=bars)
+            fresh_perf = fresh_res.performance
+
+            fresh_m = {
+                "mathematical_expectancy": fresh_perf.expectancy,
+                "profit_factor": fresh_perf.profit_factor,
+                "max_drawdown_pct": fresh_perf.max_drawdown_pct,
+                "max_drawdown_amount": fresh_perf.max_drawdown_amount,
+                "sharpe_ratio": fresh_perf.sharpe_ratio,
+                "sortino_ratio": fresh_perf.sortino_ratio,
+                "sqn": fresh_perf.sqn,
+                "win_rate": fresh_perf.win_rate,
+                "net_profit": fresh_perf.net_profit,
+            }
+
+            comparisons = []
+            mismatches = 0
+            for metric_name, stored_val in stored_metrics.items():
+                if metric_name not in fresh_m:
+                    continue
+                fresh_val = fresh_m[metric_name]
+                if stored_val is None or fresh_val is None:
+                    continue
+                comp = ReproducibilityEngine.compare_metric(
+                    metric_name, float(stored_val), float(fresh_val)
+                )
+                comparisons.append(comp)
+                if not comp.is_reproduced:
+                    mismatches += 1
+
+            overall_reproduced = (mismatches == 0) and len(comparisons) > 0
+            return {
+                "reproduced": overall_reproduced,
+                "is_reproducible": overall_reproduced,
+                "status": "REPRODUCED" if overall_reproduced else "MISMATCH",
+                "overall_verification_status": baseline_bundle.overall_status.value,
+                "bundle_id": baseline_bundle.bundle_id,
+                "tamper_hash": baseline_bundle.tamper_hash,
+                "mismatch_count": mismatches,
+                "comparisons": [c.model_dump(mode="json") for c in comparisons],
+                "reason": (
+                    "All empirical metrics reproduced bit-for-bit against stored baseline EvidenceBundle."
+                    if overall_reproduced
+                    else f"{mismatches} metric(s) diverged from stored baseline."
+                ),
+                "evaluated_at": datetime.now(UTC).isoformat(),
+            }
 
 
 # ==============================================================================

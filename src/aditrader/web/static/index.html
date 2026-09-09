@@ -988,7 +988,7 @@
                   Bundle: <span id="v-bundle-id" style="color: var(--blue);">-</span> &nbsp;|&nbsp; SHA-256 Digest: <span id="v-tamper-digest" style="color: var(--green);">-</span>
                 </div>
                 <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;" id="v-kat-badge">
-                  ✓ 31/31 Clean Known-Answer Tests (Analytical KATs Passed)
+                  ✓ 37/37 Clean Known-Answer Tests (Analytical KATs Passed)
                 </div>
               </div>
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -1744,19 +1744,27 @@
           sourceBadge = ' <span class="badge badge-paper" style="font-size:0.72rem; margin-left:6px;">STATIC AST ANALYSIS (STRUCTURAL ONLY)</span>';
         }
 
-        if (rep.status === 'APPROVED' || rep.overall_verification_status === 'PASS' || rep.overall_verification_status === 'THEORETICAL_PASS') {
-          banner.className = 'alert-box success';
-          icon.textContent = '✓';
-          const titleText = rep.overall_verification_status === 'THEORETICAL_PASS' ? 'THEORETICAL PAYOFF VERIFIED' : 'STRATEGY APPROVED';
-          text.innerHTML = `<strong>${titleText}:</strong> ` + reasonText + sourceBadge;
-        } else if (rep.status === 'INCOMPLETE' || rep.overall_verification_status === 'INCOMPLETE') {
+        const oStatus = rep.overall_verification_status;
+        const vStatus = rep.status;
+
+        if (oStatus === 'FAIL' || oStatus === 'BLOCKED' || vStatus === 'REJECTED') {
+          banner.className = 'alert-box danger';
+          icon.textContent = '✗';
+          const failTitle = oStatus === 'BLOCKED' ? 'VERIFICATION BLOCKED' : 'VERIFICATION REJECTED';
+          text.innerHTML = `<strong>${failTitle}:</strong> ` + reasonText + sourceBadge;
+        } else if (oStatus === 'INCOMPLETE' || vStatus === 'INCOMPLETE' || vStatus === 'NOT_RECOMMENDED') {
           banner.className = 'alert-box warning';
           icon.textContent = '⚠';
           text.innerHTML = '<strong>VERIFICATION INCOMPLETE:</strong> ' + (rep.notice || 'Empirical historical replay dataset required for institutional verification.') + sourceBadge;
+        } else if ((oStatus === 'PASS' || oStatus === 'THEORETICAL_PASS') && vStatus === 'APPROVED') {
+          banner.className = 'alert-box success';
+          icon.textContent = '✓';
+          const titleText = oStatus === 'THEORETICAL_PASS' ? 'THEORETICAL PAYOFF VERIFIED' : 'STRATEGY APPROVED';
+          text.innerHTML = `<strong>${titleText}:</strong> ` + reasonText + sourceBadge;
         } else {
           banner.className = 'alert-box danger';
           icon.textContent = '✗';
-          text.innerHTML = '<strong>VALIDATION ' + rep.status + ':</strong> ' + reasonText + sourceBadge;
+          text.innerHTML = '<strong>VERIFICATION FAILED:</strong> ' + reasonText + sourceBadge;
         }
 
         const metrics = rep.metrics || {};
@@ -1895,12 +1903,20 @@
     async function showProvenanceTrace(metricName) {
       try {
         const stratId = lastValidatedStrategyId || (document.getElementById('val-strategy-select') ? document.getElementById('val-strategy-select').value : 'tpl-nifty-intraday-trend-v1');
-        const res = await apiFetch(`/api/verify/trace?metric=${encodeURIComponent(metricName)}&strategy_id=${encodeURIComponent(stratId)}`);
+        const dsPath = lastValidatedDatasetPath || (document.getElementById('val-dataset-select') ? document.getElementById('val-dataset-select').value : '');
+        let url = `/api/verify/trace?metric=${encodeURIComponent(metricName)}&strategy_id=${encodeURIComponent(stratId)}`;
+        if (dsPath) url += `&dataset_path=${encodeURIComponent(dsPath)}`;
+        const res = await apiFetch(url);
         if (!res.ok) {
-          alert('Could not fetch provenance trace.');
+          const errData = await res.json().catch(() => ({}));
+          alert('Could not fetch provenance trace: ' + (errData.error || res.statusText));
           return;
         }
         const data = await res.json();
+        if (data.error) {
+          alert('Provenance notice: ' + data.error);
+          return;
+        }
         document.getElementById('prov-modal-title').textContent = `Calculation Provenance: ${data.target_metric || metricName}`;
         document.getElementById('prov-modal-meta').innerHTML = `
           <strong>Calculation ID:</strong> <span class="mono">${data.calculation_id || '-'}</span> &nbsp;|&nbsp;
@@ -1947,7 +1963,12 @@
         const data = await res.json();
         const sumEl = document.getElementById('recalc-modal-summary');
         const isOk = data.is_reproducible || data.reproduced;
-        const statusBadge = `<span class="badge ${isOk ? 'badge-live' : 'badge-alert'}">${data.status || (isOk ? 'REPRODUCED' : 'MISMATCH')}</span>`;
+        let badgeClass = 'badge-alert';
+        if (data.status === 'REPRODUCED') badgeClass = 'badge-live';
+        else if (data.status === 'INCOMPLETE') badgeClass = 'badge-paper';
+        else if (data.status === 'STALE') badgeClass = 'badge-warning';
+        else if (data.status === 'BLOCKED') badgeClass = 'badge-alert';
+        const statusBadge = `<span class="badge ${badgeClass}">${data.status || (isOk ? 'REPRODUCED' : 'MISMATCH')}</span>`;
         sumEl.innerHTML = `
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <div><strong>Status:</strong> ${statusBadge} &nbsp;|&nbsp; <strong>Mismatches:</strong> <span class="mono">${data.mismatch_count || 0}</span></div>
