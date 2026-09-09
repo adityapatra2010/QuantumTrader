@@ -137,7 +137,10 @@ class ReproducibilityEngine:
             returns, risk_free_rate=rf_rate, periods_per_year=periods_per_year
         )
 
-        fresh_net_profit = round(sum(trade_pnls), 2)
+        if equity_curve and len(equity_curve) >= 2:
+            fresh_net_profit = round(equity_curve[-1] - equity_curve[0], 2)
+        else:
+            fresh_net_profit = round(sum(trade_pnls), 2)
         fresh_win_rate = (
             round(sum(1 for p in trade_pnls if p > 0) / len(trade_pnls), 6) if trade_pnls else 0.0
         )

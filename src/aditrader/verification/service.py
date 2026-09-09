@@ -304,6 +304,16 @@ class VerificationService:
             reconciliation_pillar=reconciliation_pillar,
         )
 
+        ledger_hash: str | None = None
+        event_stream_hash: str | None = None
+        if backtest_result is not None:
+            ledger_hash = getattr(backtest_result, "trade_ledger_merkle_root", None) or getattr(
+                backtest_result, "ledger_hash", None
+            )
+            event_stream_hash = getattr(
+                backtest_result, "event_stream_merkle_root", None
+            ) or getattr(backtest_result, "event_stream_hash", None)
+
         bundle = EvidenceBundle.create(
             bundle_id=f"EV-{uuid4().hex[:12].upper()}",
             strategy_id=strat_id,
@@ -317,6 +327,8 @@ class VerificationService:
             kat_total=kat_suite.total_tests,
             engine_version="1.0.0",
             assumptions=bundle_assumptions,
+            ledger_hash=ledger_hash,
+            event_stream_hash=event_stream_hash,
         )
 
         return matrix, bundle, kat_suite

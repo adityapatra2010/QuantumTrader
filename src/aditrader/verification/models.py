@@ -261,6 +261,12 @@ class EvidenceBundle(BaseModel):
     reproducibility_summary: ReproducibilitySummary | None = Field(
         default=None, description="Reproducibility audit"
     )
+    ledger_hash: str | None = Field(
+        default=None, description="SHA-256 Merkle root of executed trades"
+    )
+    event_stream_hash: str | None = Field(
+        default=None, description="SHA-256 Merkle root of execution events"
+    )
     generated_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC), description="Generation timestamp"
     )
@@ -282,6 +288,8 @@ class EvidenceBundle(BaseModel):
         assumptions: dict[str, Any],
         verification_matrix: VerificationMatrix,
         reproducibility_summary: ReproducibilitySummary | None,
+        ledger_hash: str | None = None,
+        event_stream_hash: str | None = None,
         generated_at: datetime,
     ) -> str:
         """Compute deterministic SHA-256 digest over the entire evidence bundle payload."""
@@ -298,9 +306,11 @@ class EvidenceBundle(BaseModel):
             "dataset_hash": dataset_hash,
             "dataset_name": dataset_name,
             "engine_version": engine_version,
+            "event_stream_hash": event_stream_hash,
             "generated_at": ts_str,
             "kat_passed": kat_passed,
             "kat_total": kat_total,
+            "ledger_hash": ledger_hash,
             "overall_status": overall_status.value,
             "reproducibility_summary": repro_dict,
             "strategy_hash": strategy_hash,
@@ -330,6 +340,8 @@ class EvidenceBundle(BaseModel):
         engine_version: str = "1.0.0",
         assumptions: dict[str, Any] | None = None,
         reproducibility_summary: ReproducibilitySummary | None = None,
+        ledger_hash: str | None = None,
+        event_stream_hash: str | None = None,
         generated_at: datetime | None = None,
     ) -> EvidenceBundle:
         """Construct an EvidenceBundle and compute its canonical SHA-256 tamper digest."""
@@ -349,6 +361,8 @@ class EvidenceBundle(BaseModel):
             assumptions=final_assumptions,
             verification_matrix=verification_matrix,
             reproducibility_summary=reproducibility_summary,
+            ledger_hash=ledger_hash,
+            event_stream_hash=event_stream_hash,
             generated_at=gen_ts,
         )
         return cls(
@@ -365,6 +379,8 @@ class EvidenceBundle(BaseModel):
             kat_passed=kat_passed,
             kat_total=kat_total,
             reproducibility_summary=reproducibility_summary,
+            ledger_hash=ledger_hash,
+            event_stream_hash=event_stream_hash,
             generated_at=gen_ts,
             tamper_hash=digest,
         )
@@ -385,6 +401,8 @@ class EvidenceBundle(BaseModel):
             assumptions=self.assumptions,
             verification_matrix=self.verification_matrix,
             reproducibility_summary=self.reproducibility_summary,
+            ledger_hash=self.ledger_hash,
+            event_stream_hash=self.event_stream_hash,
             generated_at=self.generated_at,
         )
 

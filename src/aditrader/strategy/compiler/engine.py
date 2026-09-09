@@ -46,10 +46,19 @@ class ExecutableStrategy:
             return False
         return self.evaluator.evaluate(self.dsl.exit_conditions, context)
 
+    def notify_order_rejected(self) -> None:
+        """Roll back optimistic position flag if order was rejected by risk engine or broker."""
+        self._position_active = False
+
+    def sync_position_state(self, is_active: bool) -> None:
+        """Synchronize internal position state with authoritative broker ledger."""
+        self._position_active = is_active
+
     def on_bar(
         self,
         history: list[Bar],
         *,
+        position_active: bool | None = None,
         greeks: Greeks | None = None,
         current_premium: float | None = None,
         entry_premium: float | None = None,
@@ -62,6 +71,7 @@ class ExecutableStrategy:
 
         Args:
             history: Chronological list of historical bars up to and including current bar.
+            position_active: Optional authoritative broker position state override.
             greeks: Optional live Greek sensitivities.
             current_premium: Optional current option/spread premium.
             entry_premium: Optional entry execution premium.
@@ -89,7 +99,9 @@ class ExecutableStrategy:
             extra_data=extra_data or {},
         )
 
-        if not self._position_active:
+        is_active = self._position_active if position_active is None else position_active
+
+        if not is_active:
             if self.evaluate_entry(context):
                 self._position_active = True
                 return Signal(

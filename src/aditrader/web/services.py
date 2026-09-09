@@ -18,7 +18,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from aditrader.config.settings import get_settings
 from aditrader.core.models.enums import OrderSide
@@ -49,7 +49,10 @@ from aditrader.verification.models import (
     VerificationMatrix,
     VerificationPillarResult,
 )
-from aditrader.verification.reconciliation import ReconciliationChecker
+from aditrader.verification.reconciliation import (
+    ReconciliationChecker,
+    ReconciliationReport,
+)
 from aditrader.verification.reproducer import ReproducibilityEngine
 from aditrader.verification.service import VerificationService
 from aditrader.verification.trace import ProvenanceTracer
@@ -439,6 +442,31 @@ class DatasetService:
 # ==============================================================================
 # 4. Strategy Validation & Compatibility Subsystem
 # ==============================================================================
+
+
+def find_dossier_path(run_id: str) -> Path | None:
+    """Locate dossier JSON file across backtest and forward run directories."""
+    cleaned = "".join(c for c in run_id if c.isalnum() or c in ("-", "_")).strip()
+    if not cleaned:
+        return None
+    candidates = [
+        Path("runs/backtest") / f"dossier_{cleaned}.json",
+        Path("runs/backtest") / f"dossier_{cleaned.lower()}.json",
+        Path("runs/backtest") / f"{cleaned}.json",
+        Path("runs/forward") / f"session_{cleaned}.json",
+        Path("runs/forward") / f"session_{cleaned.lower()}.json",
+        Path("runs/forward") / f"dossier_{cleaned}.json",
+        Path("runs/forward") / f"{cleaned}.json",
+    ]
+    for c in candidates:
+        if c.is_file():
+            return c
+    for directory in [Path("runs/backtest"), Path("runs/forward")]:
+        if directory.is_dir():
+            for p in directory.glob("*.json"):
+                if cleaned.lower() in p.stem.lower():
+                    return p
+    return None
 
 
 class ValidationServiceBridge:
@@ -1055,24 +1083,29 @@ class ValidationServiceBridge:
             trade_id = params.get("trade_id")
             run_id = params.get("run_id")
             if run_id and trade_id:
-                d_path = Path("runs/forward") / f"session_{run_id}.json"
-                if not d_path.is_file():
-                    d_path = Path("runs/forward") / f"session_{run_id.lower()}.json"
-                if d_path.is_file():
+                d_path = find_dossier_path(run_id)
+                if d_path and d_path.is_file():
                     try:
                         import json
 
                         with open(d_path, encoding="utf-8") as f:
                             d_data = json.load(f)
+                        trades_pool = d_data.get("ledger", d_data.get("trades", []))
                         match_t = next(
-                            (t for t in d_data.get("trades", []) if t.get("trade_id") == trade_id),
+                            (t for t in trades_pool if t.get("trade_id") == trade_id),
                             None,
                         )
                         if match_t:
                             params["symbol"] = match_t.get("symbol", params.get("symbol", "NIFTY"))
-                            params["qty"] = match_t.get("qty", params.get("qty", 50))
+                            params["qty"] = match_t.get(
+                                "quantity", match_t.get("qty", params.get("qty", 50))
+                            )
+                            params["entry_price"] = match_t.get(
+                                "entry_price", params.get("entry_price", 100.0)
+                            )
                             params["exit_price"] = match_t.get(
-                                "fill_price", params.get("exit_price", 100.0)
+                                "exit_price",
+                                match_t.get("fill_price", params.get("exit_price", 100.0)),
                             )
                             params["side"] = match_t.get("side", params.get("side", "BUY"))
                     except Exception:
@@ -1109,20 +1142,25 @@ class ValidationServiceBridge:
             if trade_pnls is None:
                 run_id = params.get("run_id")
                 if run_id:
-                    d_path = Path("runs/forward") / f"session_{run_id}.json"
-                    if not d_path.is_file():
-                        d_path = Path("runs/forward") / f"session_{run_id.lower()}.json"
-                    if d_path.is_file():
+                    d_path = find_dossier_path(run_id)
+                    if d_path and d_path.is_file():
                         try:
                             import json
 
                             with open(d_path, encoding="utf-8") as f:
                                 d_data = json.load(f)
-                            trade_pnls = [
-                                float(t.get("realized_pnl", t.get("pnl", 0.0)))
-                                for t in d_data.get("trades", [])
-                                if "realized_pnl" in t or "pnl" in t
-                            ]
+                            if "ledger" in d_data:
+                                trade_pnls = [
+                                    float(t.get("net_pnl", 0.0))
+                                    for t in d_data.get("ledger", [])
+                                    if t.get("is_closed", True)
+                                ]
+                            elif "trades" in d_data:
+                                trade_pnls = [
+                                    float(t.get("realized_pnl", t.get("pnl", 0.0)))
+                                    for t in d_data.get("trades", [])
+                                    if "realized_pnl" in t or "pnl" in t
+                                ]
                         except Exception:
                             trade_pnls = None
 
@@ -1249,15 +1287,13 @@ class ValidationServiceBridge:
     ) -> dict[str, Any]:
         """Recalculate metrics fresh from original inputs and compare with stored values."""
         if run_id:
-            dossier_path = Path("runs/forward") / f"session_{run_id}.json"
-            if not dossier_path.is_file():
-                dossier_path = Path("runs/forward") / f"session_{run_id.lower()}.json"
-            if not dossier_path.is_file():
+            dossier_path = find_dossier_path(run_id)
+            if not dossier_path or not dossier_path.is_file():
                 return {
                     "reproduced": False,
                     "is_reproducible": False,
                     "status": "BLOCKED",
-                    "reason": f"Session dossier for run '{run_id}' not found in runs/forward.",
+                    "reason": f"Dossier for run '{run_id}' not found in runs/backtest or runs/forward.",
                     "comparisons": [],
                 }
 
@@ -1269,10 +1305,14 @@ class ValidationServiceBridge:
 
                 sess = data.get("session", {})
                 strat_id = (
-                    strategy_id or sess.get("strategy_id") or sess.get("strategy_name") or "unknown"
+                    strategy_id
+                    or data.get("strategy_id")
+                    or sess.get("strategy_id")
+                    or sess.get("strategy_name")
+                    or "unknown"
                 )
-                strat_name = sess.get("strategy_name") or strat_id
-                ds_p = sess.get("dataset_path")
+                strat_name = data.get("strategy_id") or sess.get("strategy_name") or strat_id
+                ds_p = data.get("dataset_path") or sess.get("dataset_path")
 
                 if ds_p and not Path(ds_p).is_file():
                     return {
@@ -1283,27 +1323,65 @@ class ValidationServiceBridge:
                         "comparisons": [],
                     }
 
-                trades = data.get("trades", [])
-                trade_pnls = [
-                    float(t.get("realized_pnl", t.get("pnl", 0.0)))
-                    for t in trades
-                    if "realized_pnl" in t or "pnl" in t
-                ]
-                eq_curve = data.get("equity_curve") or []
-
-                starting_cap = float(sess.get("starting_capital", 1_000_000.0))
-                ending_cap = float(sess.get("ending_capital", starting_cap))
-                realized_pnl = float(sess.get("realized_pnl", 0.0))
-                unrealized_pnl = float(sess.get("unrealized_pnl", 0.0))
-                total_fees = sum(
-                    float(t.get("charges", 0.0)) + float(t.get("stt", 0.0)) for t in trades
+                trades = data.get("ledger", data.get("trades", []))
+                if "ledger" in data:
+                    trade_pnls = [
+                        float(t.get("net_pnl", 0.0)) for t in trades if t.get("is_closed", True)
+                    ]
+                else:
+                    trade_pnls = [
+                        float(t.get("realized_pnl", t.get("pnl", 0.0)))
+                        for t in trades
+                        if "realized_pnl" in t or "pnl" in t
+                    ]
+                starting_cap = float(
+                    data.get("starting_equity", sess.get("starting_capital", 1_000_000.0))
                 )
-                net_profit = round(ending_cap - starting_cap, 2)
+                ending_cap = float(
+                    data.get("ending_equity", sess.get("ending_capital", starting_cap))
+                )
 
-                stored_metrics = {}
-                stored_metrics["net_profit"] = net_profit
-                if "ending_capital" in sess and sess["ending_capital"] is not None:
-                    stored_metrics["ending_equity"] = ending_cap
+                eq_curve = data.get("equity_curve") or []
+                if not eq_curve and "events" in data:
+                    eq_curve = [
+                        float(e["details"]["equity"])
+                        for e in data["events"]
+                        if e.get("event_type") == "ACCOUNT_UPDATED"
+                        and isinstance(e.get("details"), dict)
+                        and "equity" in e["details"]
+                    ]
+                if not eq_curve:
+                    eq_curve = [starting_cap, ending_cap]
+
+                net_profit = float(data.get("net_profit", round(ending_cap - starting_cap, 2)))
+                realized_pnl = float(data.get("net_profit", sess.get("realized_pnl", 0.0)))
+                unrealized_pnl = float(
+                    data.get("terminal_unrealized_pnl", sess.get("unrealized_pnl", 0.0))
+                )
+                total_fees = sum(
+                    float(
+                        t.get("total_fees", float(t.get("charges", 0.0)) + float(t.get("stt", 0.0)))
+                    )
+                    for t in trades
+                )
+
+                stored_metrics = {
+                    "net_profit": net_profit,
+                    "ending_equity": ending_cap,
+                }
+                if "win_rate" in data:
+                    stored_metrics["win_rate"] = float(data["win_rate"])
+                if (
+                    "closed_trade_expectancy" in data
+                    and data["closed_trade_expectancy"] is not None
+                ):
+                    stored_metrics["expectancy"] = float(data["closed_trade_expectancy"])
+                elif "expectancy" in data and data["expectancy"] is not None:
+                    stored_metrics["expectancy"] = float(data["expectancy"])
+                if "profit_factor" in data and data["profit_factor"] is not None:
+                    stored_metrics["profit_factor"] = float(data["profit_factor"])
+                if "max_drawdown_amount" in data and data["max_drawdown_amount"] is not None:
+                    stored_metrics["max_drawdown_amount"] = float(data["max_drawdown_amount"])
 
                 summary = ReproducibilityEngine.audit_metrics_reproducibility(
                     strategy_id=strat_id,
@@ -1315,53 +1393,56 @@ class ValidationServiceBridge:
                 )
 
                 # Balance sheet reconciliation check
-                typed_trades: list[Trade] = []
-                for t in trades:
-                    try:
-                        from uuid import uuid4
+                if "reconciliation" in data and isinstance(data["reconciliation"], dict):
+                    recon = ReconciliationReport.model_validate(data["reconciliation"])
+                else:
+                    typed_trades: list[Trade] = []
+                    for t in trades:
+                        try:
+                            from uuid import uuid4
 
-                        from aditrader.core.models.enums import OrderSide
-                        from aditrader.core.models.execution import Trade
+                            from aditrader.core.models.enums import OrderSide
+                            from aditrader.core.models.execution import Trade
 
-                        side_val = (
-                            OrderSide.BUY
-                            if str(t.get("side", "")).upper() == "BUY"
-                            else OrderSide.SELL
-                        )
-                        ts_str = (
-                            t.get("timestamp") or t.get("time") or datetime.now(UTC).isoformat()
-                        )
-                        ts_val = (
-                            datetime.fromisoformat(ts_str)
-                            if isinstance(ts_str, str)
-                            else datetime.now(UTC)
-                        )
-                        typed_trades.append(
-                            Trade(
-                                trade_id=str(t.get("trade_id", f"TRD-{uuid4().hex[:8]}")),
-                                order_id=str(t.get("order_id", f"ORD-{uuid4().hex[:8]}")),
-                                symbol=str(t.get("symbol", sess.get("symbol", "NIFTY"))),
-                                side=side_val,
-                                qty=int(t.get("qty", 1)),
-                                fill_price=float(t.get("fill_price", t.get("price", 100.0))),
-                                slippage=float(t.get("slippage", 0.0)),
-                                stt=float(t.get("stt", 0.0)),
-                                charges=float(t.get("charges", 0.0)),
-                                timestamp=ts_val,
+                            side_val = (
+                                OrderSide.BUY
+                                if str(t.get("side", "")).upper() == "BUY"
+                                else OrderSide.SELL
                             )
-                        )
-                    except Exception:
-                        pass
+                            ts_str = (
+                                t.get("timestamp") or t.get("time") or datetime.now(UTC).isoformat()
+                            )
+                            ts_val = (
+                                datetime.fromisoformat(ts_str)
+                                if isinstance(ts_str, str)
+                                else datetime.now(UTC)
+                            )
+                            typed_trades.append(
+                                Trade(
+                                    trade_id=str(t.get("trade_id", f"TRD-{uuid4().hex[:8]}")),
+                                    order_id=str(t.get("order_id", f"ORD-{uuid4().hex[:8]}")),
+                                    symbol=str(t.get("symbol", sess.get("symbol", "NIFTY"))),
+                                    side=side_val,
+                                    qty=int(t.get("qty", 1)),
+                                    fill_price=float(t.get("fill_price", t.get("price", 100.0))),
+                                    slippage=float(t.get("slippage", 0.0)),
+                                    stt=float(t.get("stt", 0.0)),
+                                    charges=float(t.get("charges", 0.0)),
+                                    timestamp=ts_val,
+                                )
+                            )
+                        except Exception:
+                            pass
 
-                recon = ReconciliationChecker.audit_session(
-                    starting_capital=starting_cap,
-                    ending_equity=ending_cap,
-                    net_profit=net_profit,
-                    realized_roundtrip_pnls=[realized_pnl],
-                    unrealized_pnl=unrealized_pnl,
-                    total_statutory_charges=total_fees,
-                    trades=typed_trades if typed_trades else None,
-                )
+                    recon = ReconciliationChecker.audit_session(
+                        starting_capital=starting_cap,
+                        ending_equity=ending_cap,
+                        net_profit=net_profit,
+                        realized_roundtrip_pnls=[realized_pnl],
+                        unrealized_pnl=unrealized_pnl,
+                        total_statutory_charges=total_fees,
+                        trades=typed_trades if typed_trades else None,
+                    )
 
                 overall_ok = summary.overall_reproduced and recon.is_reconciled
                 bundle_id = f"EB-REPRO-{run_id.upper()}"
@@ -1673,6 +1754,169 @@ class ValidationServiceBridge:
                 ),
                 "evaluated_at": datetime.now(UTC).isoformat(),
             }
+
+    @classmethod
+    def run_deterministic_backtest(
+        cls,
+        *,
+        strategy_id: str,
+        dataset_path: str,
+        initial_capital: float = 1_000_000.0,
+        slippage_bps: float = 5.0,
+        execution_contract: str = "NEXT_BAR_OPEN",
+        allow_same_bar_execution: bool = False,
+        intraday_auto_squareoff: bool = True,
+        max_volume_participation_pct: float | None = None,
+        volume_limit_action: str = "REJECT",
+    ) -> dict[str, Any]:
+        """Execute deterministic historical backtest and persist cryptographically sealed RunDossier."""
+        from aditrader.backtesting.models import ExecutionContractType
+        from aditrader.backtesting.runner import (
+            BacktestConfig,
+            BacktestRunner,
+            UnsupportedStrategyError,
+        )
+        from aditrader.core.costs import SlippageModel
+        from aditrader.data.feeds.csv_feed import CSVDataFeed
+        from aditrader.strategy.compiler.engine import compile_strategy
+        from aditrader.verification.integrity import DataIntegrityChecker
+
+        # 1. Strategy lookup & verification
+        detail = cls.get_strategy_detail(strategy_id)
+        if not detail:
+            return {
+                "success": False,
+                "error": f"Strategy '{strategy_id}' not found in registry.",
+                "run_id": None,
+            }
+
+        dsl = StrategyDSL.model_validate(detail["dsl"])
+
+        # 2. Options Air-Gap Enforcement (ADR 011)
+        if dsl.legs:
+            return {
+                "success": False,
+                "error": (
+                    f"ADR 011 Violation: Strategy '{dsl.name}' contains {len(dsl.legs)} option legs. "
+                    "BacktestRunner strictly prohibits historical candle backtesting for options strategies. "
+                    "Use OptionsTheoreticalValidator for theoretical Black-Scholes payoff analysis."
+                ),
+                "run_id": None,
+            }
+
+        ds_path = Path(dataset_path)
+        if not ds_path.is_file():
+            return {
+                "success": False,
+                "error": f"Dataset file not found: {dataset_path}",
+                "run_id": None,
+            }
+
+        # 3. Pre-run Data Integrity Check
+        try:
+            csv_feed = CSVDataFeed(
+                file_path=ds_path,
+                symbol=dsl.underlying,
+                timeframe=dsl.timeframe,
+                session_filter=False,
+            )
+            bars = list(csv_feed.stream())
+        except Exception as exc:
+            return {
+                "success": False,
+                "error": f"Failed to parse CSV dataset: {exc}",
+                "run_id": None,
+            }
+
+        if not bars:
+            return {
+                "success": False,
+                "error": f"Dataset '{ds_path.name}' yielded zero valid bars for {dsl.underlying}.",
+                "run_id": None,
+            }
+
+        integrity_report = DataIntegrityChecker.audit_bars(
+            bars=bars,
+            source_identifier=ds_path.name,
+        )
+        if not integrity_report.is_valid:
+            return {
+                "success": False,
+                "error": f"Dataset failed integrity check: {integrity_report.details or integrity_report.errors}",
+                "diagnostics": integrity_report.model_dump(mode="json"),
+                "run_id": None,
+            }
+
+        # 4. Configure & Execute BacktestRunner
+        contract_enum = ExecutionContractType.INSTITUTIONAL_STRICT
+        if execution_contract.upper() in ("SAME_BAR_CLOSE", "ACADEMIC_EXPLORATORY"):
+            contract_enum = ExecutionContractType.ACADEMIC_EXPLORATORY
+            allow_same_bar_execution = True
+
+        vol_action: Literal["REJECT", "PARTIAL_FILL"] = (
+            "PARTIAL_FILL" if volume_limit_action.upper() == "PARTIAL_FILL" else "REJECT"
+        )
+
+        cfg = BacktestConfig(
+            initial_capital=initial_capital,
+            slippage_model=SlippageModel(percentage=slippage_bps / 10000.0),
+            allow_same_bar_execution=allow_same_bar_execution,
+            intraday_auto_squareoff=intraday_auto_squareoff,
+            max_volume_participation_pct=max_volume_participation_pct,
+            volume_limit_action=vol_action,
+            execution_contract=contract_enum,
+            dataset_path=str(ds_path),
+        )
+
+        runner = BacktestRunner(cfg)
+        compiled_strategy = compile_strategy(dsl)
+        try:
+            result = runner.run(compiled_strategy, bars)
+        except UnsupportedStrategyError as exc:
+            return {
+                "success": False,
+                "error": str(exc),
+                "run_id": None,
+            }
+
+        if not result.dossier:
+            return {
+                "success": False,
+                "error": "Failed to construct Run Dossier.",
+                "run_id": None,
+            }
+
+        dos = result.dossier
+        return {
+            "success": True,
+            "run_id": dos.run_id,
+            "strategy": dos.strategy_id,
+            "underlying": dos.symbol,
+            "net_profit": dos.net_profit,
+            "ending_equity": dos.ending_equity,
+            "return_pct": dos.return_pct,
+            "win_rate": dos.win_rate,
+            "expectancy": dos.closed_trade_expectancy,
+            "terminal_adjusted_expectancy": dos.terminal_adjusted_expectancy,
+            "profit_factor": dos.profit_factor,
+            "max_drawdown_amount": dos.max_drawdown_amount,
+            "max_drawdown_pct": dos.max_drawdown_pct,
+            "sharpe_ratio": dos.sharpe_ratio,
+            "sortino_ratio": dos.sortino_ratio,
+            "sqn": dos.sqn,
+            "trade_count": len(dos.ledger),
+            "event_count": len(dos.events),
+            "trade_ledger_merkle_root": dos.trade_ledger_merkle_root,
+            "event_stream_merkle_root": dos.event_stream_merkle_root,
+            "tamper_digest": dos.tamper_digest,
+            "verification_matrix": dos.verification_matrix.model_dump(mode="json")
+            if dos.verification_matrix
+            else None,
+            "reconciliation": dos.reconciliation.model_dump(mode="json")
+            if dos.reconciliation
+            else None,
+            "dossier_path": f"runs/backtest/dossier_{dos.run_id}.json",
+        }
 
 
 # ==============================================================================

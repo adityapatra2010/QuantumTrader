@@ -678,6 +678,22 @@ def cmd_backtest(args: argparse.Namespace) -> int:
         print(f"  Data Origin:         {assump.data_source_type.value} ({assump.data_source_name})")
         print(f"  Synthetic Flag:      {assump.is_synthetic_data}")
 
+    if result.dossier:
+        dos = result.dossier
+        print("\nRun Dossier & Cryptographic Verification:")
+        print(f"  Run ID:              {dos.run_id}")
+        print(f"  Execution Contract:  {dos.execution_contract.value}")
+        print(f"  Overall Status:      {dos.verification_matrix.overall_status.value}")
+        print(
+            f"  Reconciliation:      {'RECONCILED' if dos.reconciliation.is_reconciled else 'DISCREPANCY'}"
+        )
+        print(f"  Closed Expectancy:   ₹{dos.closed_trade_expectancy:.2f}")
+        print(f"  Terminal Adjusted:   ₹{dos.terminal_adjusted_expectancy:.2f}")
+        print(f"  Event Merkle Root:   {dos.event_stream_merkle_root[:16]}...")
+        print(f"  Trade Merkle Root:   {dos.trade_ledger_merkle_root[:16]}...")
+        print(f"  Tamper Digest:       {dos.tamper_digest[:16]}...")
+        print(f"  Dossier Path:        runs/backtest/dossier_{dos.run_id}.json")
+
     print("=" * 68)
     return 0
 

@@ -11,6 +11,14 @@ from aditrader.backtesting.analytics.metrics import (
     calculate_sqn,
     generate_performance_report,
 )
+from aditrader.backtesting.models import (
+    BacktestEvent,
+    ExecutionContractType,
+    ExecutionEventType,
+    RoundtripTrade,
+    RunDossier,
+    TradeLedger,
+)
 from aditrader.backtesting.options import OptionsBacktestConfig, OptionsBacktestRunner
 from aditrader.backtesting.runner import (
     BacktestConfig,
@@ -27,12 +35,18 @@ from aditrader.backtesting.splitters import (
 
 __all__ = [
     "BacktestConfig",
+    "BacktestEvent",
     "BacktestResult",
     "BacktestRunner",
     "DrawdownResult",
+    "ExecutionContractType",
+    "ExecutionEventType",
     "OptionsBacktestConfig",
     "OptionsBacktestRunner",
     "PerformanceReport",
+    "RoundtripTrade",
+    "RunDossier",
+    "TradeLedger",
     "UnsupportedStrategyError",
     "WalkForwardWindow",
     "calculate_expectancy",

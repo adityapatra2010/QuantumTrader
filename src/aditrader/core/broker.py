@@ -21,12 +21,16 @@ class PaperBroker:
         max_margin_utilization: float = 0.85,
         slippage_model: SlippageModel | None = None,
         default_instrument: InstrumentClass = "EQUITY_INTRADAY",
+        deterministic: bool = False,
     ):
         self.initial_capital: float = round(float(initial_capital), 2)
         self.cash_balance: float = self.initial_capital
         self.max_margin_utilization: float = max_margin_utilization
         self.slippage_model: SlippageModel = slippage_model or SlippageModel()
         self.default_instrument: InstrumentClass = default_instrument
+        self._deterministic: bool = deterministic
+        self._order_seq: int = 0
+        self._trade_seq: int = 0
 
         # Active state registries
         self._positions: dict[str, Position] = {}
@@ -111,8 +115,14 @@ class PaperBroker:
     ) -> Order:
         """Construct an immutable order in CREATED state."""
         ts = timestamp or self._now()
+        if self._deterministic:
+            self._order_seq += 1
+            order_id = f"ORD-{self._order_seq:06d}"
+        else:
+            order_id = f"ORD-{uuid4().hex[:12].upper()}"
+
         order = Order(
-            order_id=f"ORD-{uuid4().hex[:12].upper()}",
+            order_id=order_id,
             symbol=symbol,
             side=side,
             order_type=order_type,
@@ -133,6 +143,8 @@ class PaperBroker:
         timestamp: datetime | None = None,
         bid: float | None = None,
         ask: float | None = None,
+        exact_fill_price: float | None = None,
+        slippage: float | None = None,
     ) -> Order:
         """
         Validate risk gates and transition order from CREATED -> SUBMITTED (and FILLED if executable).
@@ -212,7 +224,14 @@ class PaperBroker:
                     if (submitted.side == OrderSide.SELL and bid is not None and bid > 0.0)
                     else market_price
                 )
-                return self._execute_fill(submitted, base_price, submitted.qty, ts)
+                return self._execute_fill(
+                    submitted,
+                    base_price,
+                    submitted.qty,
+                    ts,
+                    exact_fill_price=exact_fill_price,
+                    slippage=slippage,
+                )
             elif submitted.order_type == OrderType.LIMIT and submitted.price is not None:
                 comp_price = (
                     ask
@@ -227,7 +246,14 @@ class PaperBroker:
                     else comp_price >= submitted.price
                 )
                 if is_executable:
-                    return self._execute_fill(submitted, submitted.price, submitted.qty, ts)
+                    return self._execute_fill(
+                        submitted,
+                        submitted.price,
+                        submitted.qty,
+                        ts,
+                        exact_fill_price=exact_fill_price,
+                        slippage=slippage,
+                    )
 
         return submitted
 
@@ -367,19 +393,35 @@ class PaperBroker:
     # --------------------------------------------------------------------------
 
     def _execute_fill(
-        self, order: Order, raw_price: float, fill_qty: int, timestamp: datetime
+        self,
+        order: Order,
+        raw_price: float,
+        fill_qty: int,
+        timestamp: datetime,
+        exact_fill_price: float | None = None,
+        slippage: float | None = None,
     ) -> Order:
         """Apply slippage, statutory fees, update order state, positions, and cash balance atomically."""
-        fill_price, slippage = self.slippage_model.calculate_fill_price(raw_price, order.side)
+        if exact_fill_price is not None:
+            fill_price = exact_fill_price
+            slippage_amt = (
+                slippage
+                if slippage is not None
+                else max(0.0, round(abs(fill_price - raw_price), 2))
+            )
+        else:
+            fill_price, slippage_amt = self.slippage_model.calculate_fill_price(
+                raw_price, order.side
+            )
 
         # Exchange limit-order invariant: Limit orders must NEVER fill worse than limit price
         if order.order_type == OrderType.LIMIT and order.price is not None:
             if order.side == OrderSide.BUY and fill_price > order.price:
                 fill_price = order.price
-                slippage = max(0.0, round(fill_price - raw_price, 2))
+                slippage_amt = max(0.0, round(fill_price - raw_price, 2))
             elif order.side == OrderSide.SELL and fill_price < order.price:
                 fill_price = order.price
-                slippage = max(0.0, round(raw_price - fill_price, 2))
+                slippage_amt = max(0.0, round(raw_price - fill_price, 2))
 
         charges = CostCalculator.calculate(
             side=order.side,
@@ -388,14 +430,20 @@ class PaperBroker:
             instrument=self.default_instrument,
         )
 
+        if self._deterministic:
+            self._trade_seq += 1
+            trade_id = f"TRD-{self._trade_seq:06d}"
+        else:
+            trade_id = f"TRD-{uuid4().hex[:12].upper()}"
+
         trade = Trade(
-            trade_id=f"TRD-{uuid4().hex[:12].upper()}",
+            trade_id=trade_id,
             order_id=order.order_id,
             symbol=order.symbol,
             side=order.side,
             qty=fill_qty,
             fill_price=fill_price,
-            slippage=slippage,
+            slippage=slippage_amt,
             stt=charges.stt,
             charges=charges.total_charges - charges.stt,
             timestamp=timestamp,

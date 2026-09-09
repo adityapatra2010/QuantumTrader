@@ -39,12 +39,9 @@ def calculate_sma(values: list[float], period: int) -> list[float | None]:
         return [None] * n
 
     result: list[float | None] = [None] * (period - 1)
-    window_sum = sum(values[:period])
-    result.append(window_sum / period)
-
-    for i in range(period, n):
-        window_sum += values[i] - values[i - period]
-        result.append(window_sum / period)
+    for i in range(period - 1, n):
+        w_sum = math.fsum(values[i - period + 1 : i + 1])
+        result.append(w_sum / period)
 
     return result
 

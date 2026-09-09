@@ -101,17 +101,34 @@ class HistoricalStatisticalValidator:
         # 2. Mathematical Expectancy Hard Safety Floor (E > 0)
         # ----------------------------------------------------------------------
         expectancy = perf.expectancy
-        if expectancy <= 0.0:
+        # Prevent expectancy laundering through unclosed terminal positions (Finding 3.1)
+        term_adj_exp = getattr(result, "terminal_adjusted_expectancy", None)
+        if term_adj_exp is None and getattr(result, "dossier", None) is not None:
+            dos = result.dossier
+            if dos is not None:
+                term_adj_exp = getattr(dos, "terminal_adjusted_expectancy", None)
+
+        effective_expectancy = (
+            term_adj_exp if term_adj_exp is not None and term_adj_exp < expectancy else expectancy
+        )
+
+        if effective_expectancy <= 0.0:
+            detail_msg = (
+                f"Mathematical expectancy is non-positive ({effective_expectancy:.2f} per trade"
+                + (
+                    f", closed-trade expectancy: {expectancy:.2f}"
+                    if term_adj_exp is not None
+                    else ""
+                )
+                + "). By the Law of Large Numbers, the strategy has negative drift after friction."
+            )
             gate_results.append(
                 ValidationGateResult(
                     gate_name="POSITIVE_EXPECTANCY_FLOOR",
                     passed=False,
                     severity=GateSeverity.HARD_FLOOR,
-                    detail=(
-                        f"Mathematical expectancy ({expectancy:.2f}) is non-positive. "
-                        "By the Law of Large Numbers, the strategy has negative drift after friction."
-                    ),
-                    observed_value=expectancy,
+                    detail=detail_msg,
+                    observed_value=effective_expectancy,
                     threshold_value=0.0,
                 )
             )
@@ -119,13 +136,22 @@ class HistoricalStatisticalValidator:
                 "Improve win-rate or average win/loss payoff ratio to achieve positive expectancy."
             )
         else:
+            detail_msg = (
+                f"Mathematical expectancy is positive ({effective_expectancy:.2f} per trade"
+                + (
+                    f", closed-trade expectancy: {expectancy:.2f}"
+                    if term_adj_exp is not None
+                    else ""
+                )
+                + ")."
+            )
             gate_results.append(
                 ValidationGateResult(
                     gate_name="POSITIVE_EXPECTANCY_FLOOR",
                     passed=True,
                     severity=GateSeverity.HARD_FLOOR,
-                    detail=f"Mathematical expectancy is positive ({expectancy:.2f} per trade).",
-                    observed_value=expectancy,
+                    detail=detail_msg,
+                    observed_value=effective_expectancy,
                     threshold_value=0.0,
                 )
             )

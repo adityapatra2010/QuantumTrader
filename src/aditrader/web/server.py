@@ -42,6 +42,7 @@ from aditrader.web.services import (
     ProviderSettingsManager,
     SessionManager,
     ValidationServiceBridge,
+    find_dossier_path,
     mask_secret,
 )
 from aditrader.web.ui import DASHBOARD_HTML
@@ -108,9 +109,17 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _send_error_json(self, message: str, status: int = HTTPStatus.BAD_REQUEST) -> None:
+    def _send_error_json(
+        self,
+        message: str,
+        status: int = HTTPStatus.BAD_REQUEST,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
         """Send standardized JSON error response."""
-        self._send_json({"error": message, "status": status}, status=status)
+        payload: dict[str, Any] = {"error": message, "status": status}
+        if extra:
+            payload.update(extra)
+        self._send_json(payload, status=status)
 
     def _read_json_payload(self) -> dict[str, Any] | None:
         """Safely read and deserialize JSON request body."""
@@ -198,6 +207,21 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._handle_get_active_run(run_id)
             return
 
+        if path.startswith("/api/runs/") and path.endswith("/dossier"):
+            run_id = unquote(path[len("/api/runs/") : -len("/dossier")])
+            self._handle_get_run_dossier(run_id)
+            return
+
+        if path.startswith("/api/runs/") and path.endswith("/events"):
+            run_id = unquote(path[len("/api/runs/") : -len("/events")])
+            self._handle_get_run_events(run_id)
+            return
+
+        if path.startswith("/api/runs/") and path.endswith("/trades"):
+            run_id = unquote(path[len("/api/runs/") : -len("/trades")])
+            self._handle_get_run_trades(run_id)
+            return
+
         if path.startswith("/api/runs/"):
             session_id = unquote(path[len("/api/runs/") :])
             self._handle_get_run_detail(session_id)
@@ -256,7 +280,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._handle_post_verify_recalculate()
             return
 
-        # 4. Simulation Runs
+        # 4. Simulation & Backtest Runs
+        if path == "/api/backtest/run":
+            self._handle_post_backtest_run()
+            return
+
         if path == "/api/runs/start":
             self._handle_post_start_run()
             return
@@ -760,14 +788,166 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return
         self._send_json({"run_id": clean_id, "status": "STOPPING", "message": "Stop requested."})
 
-    def _handle_get_runs(self) -> None:
-        """Return list of historical forward session dossiers from runs/."""
-        runs_dir = Path("runs/forward")
-        results: list[dict[str, Any]] = []
+    def _handle_post_backtest_run(self) -> None:
+        """Launch deterministic historical backtest and return cryptographically sealed RunDossier."""
+        payload = self._read_json_payload()
+        if payload is None:
+            return
 
-        if runs_dir.is_dir():
-            files = sorted(runs_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-            for json_file in files[:100]:
+        strategy_id = str(payload.get("strategy_id", "")).strip()
+        raw_dataset = str(payload.get("dataset_path") or payload.get("dataset_name") or "").strip()
+        if raw_dataset and not Path(raw_dataset).exists() and Path("data", raw_dataset).exists():
+            dataset_path = str(Path("data", raw_dataset))
+        else:
+            dataset_path = raw_dataset
+        capital = float(payload.get("initial_capital", 1_000_000.0))
+        slippage_bps = float(payload.get("slippage_bps", 5.0))
+        execution_contract = str(payload.get("execution_contract", "NEXT_BAR_OPEN")).strip()
+        allow_same_bar = bool(payload.get("allow_same_bar_execution", False))
+        intraday_sqoff = bool(payload.get("intraday_auto_squareoff", True))
+
+        if not strategy_id or not dataset_path:
+            self._send_error_json(
+                "Missing required parameters: 'strategy_id' and 'dataset_path'",
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        path = Path(dataset_path)
+        if not _is_safe_file_path(path):
+            self._send_error_json(
+                "Access to specified dataset path is forbidden",
+                status=HTTPStatus.FORBIDDEN,
+            )
+            return
+
+        try:
+            res = ValidationServiceBridge.run_deterministic_backtest(
+                strategy_id=strategy_id,
+                dataset_path=dataset_path,
+                initial_capital=capital,
+                slippage_bps=slippage_bps,
+                execution_contract=execution_contract,
+                allow_same_bar_execution=allow_same_bar,
+                intraday_auto_squareoff=intraday_sqoff,
+            )
+            if not res.get("success"):
+                self._send_error_json(
+                    res.get("error", "Backtest execution failed"),
+                    status=HTTPStatus.BAD_REQUEST,
+                    extra=res,
+                )
+                return
+            self._send_json(res)
+        except Exception as exc:
+            self._send_error_json(
+                f"Backtest execution crashed: {exc}",
+                status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    def _handle_get_run_dossier(self, run_id: str) -> None:
+        """Return raw RunDossier JSON payload for a completed run."""
+        clean_id = "".join(c for c in run_id if c.isalnum() or c in ("-", "_"))
+        d_path = find_dossier_path(clean_id)
+        if not d_path or not d_path.is_file():
+            self._send_error_json(
+                f"Dossier for run '{clean_id}' not found", status=HTTPStatus.NOT_FOUND
+            )
+            return
+        if not _is_safe_file_path(d_path):
+            self._send_error_json("Access denied", status=HTTPStatus.FORBIDDEN)
+            return
+        try:
+            with open(d_path, encoding="utf-8") as f:
+                data = json.load(f)
+            self._send_json(data)
+        except Exception as exc:
+            self._send_error_json(
+                f"Failed reading dossier: {exc}", status=HTTPStatus.INTERNAL_SERVER_ERROR
+            )
+
+    def _handle_get_run_events(self, run_id: str) -> None:
+        """Return execution event stream from RunDossier."""
+        clean_id = "".join(c for c in run_id if c.isalnum() or c in ("-", "_"))
+        d_path = find_dossier_path(clean_id)
+        if not d_path or not d_path.is_file():
+            self._send_error_json(
+                f"Events for run '{clean_id}' not found", status=HTTPStatus.NOT_FOUND
+            )
+            return
+        if not _is_safe_file_path(d_path):
+            self._send_error_json("Access denied", status=HTTPStatus.FORBIDDEN)
+            return
+        try:
+            with open(d_path, encoding="utf-8") as f:
+                data = json.load(f)
+            events = data.get("events", [])
+            self._send_json({"run_id": clean_id, "event_count": len(events), "events": events})
+        except Exception as exc:
+            self._send_error_json(
+                f"Failed reading events: {exc}", status=HTTPStatus.INTERNAL_SERVER_ERROR
+            )
+
+    def _handle_get_run_trades(self, run_id: str) -> None:
+        """Return trade ledger from RunDossier."""
+        clean_id = "".join(c for c in run_id if c.isalnum() or c in ("-", "_"))
+        d_path = find_dossier_path(clean_id)
+        if not d_path or not d_path.is_file():
+            self._send_error_json(
+                f"Trades for run '{clean_id}' not found", status=HTTPStatus.NOT_FOUND
+            )
+            return
+        if not _is_safe_file_path(d_path):
+            self._send_error_json("Access denied", status=HTTPStatus.FORBIDDEN)
+            return
+        try:
+            with open(d_path, encoding="utf-8") as f:
+                data = json.load(f)
+            trades = data.get("ledger", data.get("trades", []))
+            self._send_json({"run_id": clean_id, "trade_count": len(trades), "trades": trades})
+        except Exception as exc:
+            self._send_error_json(
+                f"Failed reading trades: {exc}", status=HTTPStatus.INTERNAL_SERVER_ERROR
+            )
+
+    def _handle_get_runs(self) -> None:
+        """Return list of historical backtest dossiers and forward session dossiers from runs/."""
+        all_runs: list[dict[str, Any]] = []
+
+        # 1. Backtest runs
+        bt_dir = Path("runs/backtest")
+        if bt_dir.is_dir():
+            for json_file in bt_dir.glob("*.json"):
+                try:
+                    with open(json_file, encoding="utf-8") as f:
+                        data = json.load(f)
+                    run_id = data.get("run_id", json_file.stem.replace("dossier_", ""))
+                    all_runs.append(
+                        {
+                            "session_id": run_id,
+                            "run_id": run_id,
+                            "start_time": data.get("created_at") or data.get("start_time"),
+                            "strategy": data.get("strategy_id") or "Unknown Strategy",
+                            "symbol": data.get("symbol", "NIFTY"),
+                            "status": "COMPLETED",
+                            "run_type": "BACKTEST",
+                            "realized_pnl": data.get("net_profit", 0.0),
+                            "net_profit": data.get("net_profit", 0.0),
+                            "trades_count": data.get("trade_count", len(data.get("ledger", []))),
+                            "bars_count": data.get("bar_count", 0),
+                            "event_count": data.get("event_count", len(data.get("events", []))),
+                            "dossier_path": str(json_file),
+                            "tamper_digest": data.get("tamper_digest"),
+                            "mtime": json_file.stat().st_mtime,
+                        }
+                    )
+                except Exception:
+                    continue
+
+        # 2. Forward runs
+        fwd_dir = Path("runs/forward")
+        if fwd_dir.is_dir():
+            for json_file in fwd_dir.glob("*.json"):
                 try:
                     with open(json_file, encoding="utf-8") as f:
                         data = json.load(f)
@@ -780,26 +960,35 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     bars_cnt = sess.get("bars_count")
                     if bars_cnt is None:
                         bars_cnt = len(bars_list)
+                    run_id = sess.get("session_id", json_file.stem)
 
-                    results.append(
+                    all_runs.append(
                         {
-                            "session_id": sess.get("session_id", json_file.stem),
+                            "session_id": run_id,
+                            "run_id": run_id,
                             "start_time": sess.get("started_at") or sess.get("start_time"),
                             "strategy": sess.get("strategy_name")
                             or sess.get("strategy_id")
                             or f"Session {json_file.stem[-6:]}",
                             "symbol": sess.get("symbol", "NIFTY"),
                             "status": sess.get("status", "UNKNOWN"),
+                            "run_type": "FORWARD",
                             "realized_pnl": sess.get("realized_pnl", 0.0),
+                            "net_profit": sess.get("realized_pnl", 0.0),
                             "trades_count": trades_cnt,
                             "bars_count": bars_cnt,
                             "dossier_path": str(json_file),
+                            "mtime": json_file.stat().st_mtime,
                         }
                     )
                 except Exception:
                     continue
 
-        self._send_json(results)
+        all_runs.sort(key=lambda r: float(r.get("mtime", 0.0)), reverse=True)
+        for r in all_runs:
+            r.pop("mtime", None)
+
+        self._send_json(all_runs[:100])
 
     def _handle_get_run_detail(self, session_id: str) -> None:
         """Return full JSON dossier for a specific session_id with path traversal defense."""
@@ -808,24 +997,12 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._send_error_json("Invalid session ID", status=HTTPStatus.BAD_REQUEST)
             return
 
-        runs_dir = Path("runs/forward")
-        target = runs_dir / f"{clean_id}.json"
-
-        if not target.is_file():
-            # Check prefix / suffix / case-insensitively
-            clean_lower = clean_id.lower()
-            matched = [
-                p
-                for p in runs_dir.glob("*.json")
-                if clean_lower in p.name.lower() or p.stem.lower() == clean_lower
-            ]
-            if matched and matched[0].is_file():
-                target = matched[0]
-            else:
-                self._send_error_json(
-                    f"Session '{clean_id}' not found", status=HTTPStatus.NOT_FOUND
-                )
-                return
+        target = find_dossier_path(clean_id)
+        if not target or not target.is_file():
+            self._send_error_json(
+                f"Session/Run '{clean_id}' not found", status=HTTPStatus.NOT_FOUND
+            )
+            return
 
         if not _is_safe_file_path(target):
             self._send_error_json("Access denied", status=HTTPStatus.FORBIDDEN)
@@ -839,6 +1016,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 data["status"] = data["session"].get("status")
                 data["strategy_id"] = data["session"].get("strategy_id")
                 data["realized_pnl"] = data["session"].get("realized_pnl")
+            elif "session_id" not in data and "run_id" in data:
+                data["session_id"] = data["run_id"]
+                data["status"] = "COMPLETED"
             self._send_json(data)
         except Exception as exc:
             self._send_error_json(

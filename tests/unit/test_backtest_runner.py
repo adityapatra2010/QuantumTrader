@@ -496,12 +496,12 @@ def test_backtest_runner_intraday_circuit_breaker_session_reset() -> None:
             oi=0,
         ),
         # Day 2: Session transition resets intraday circuit breaker
-        Bar(timestamp=day2, open=130.0, high=135.0, low=128.0, close=130.0, volume=1000, oi=0),
+        Bar(timestamp=day2, open=200.0, high=205.0, low=198.0, close=200.0, volume=1000, oi=0),
         Bar(
             timestamp=day2 + timedelta(minutes=1),
-            open=130.0,
-            high=200.0,
-            low=130.0,
+            open=200.0,
+            high=202.0,
+            low=199.0,
             close=200.0,
             volume=1000,
             oi=0,

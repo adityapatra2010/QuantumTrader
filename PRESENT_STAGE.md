@@ -1,15 +1,15 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-07 20:40 IST  
-**Current Phase**: NIFTY CE Premium-Ladder Vertical Slice & Options Chain Replay Foundation — COMPLETE & VERIFIED ✅  
-**Last Verified By**: AGY CLI Quality Verification Suite (Ruff Clean, Mypy Strict Clean across 179 files, Pytest 494 passed, 6 skipped)  
+**Last Updated**: 2026-09-09 22:25 IST  
+**Current Phase**: Deterministic Historical Backtesting & Sealed Run Dossier Layer — COMPLETE & VERIFIED ✅  
+**Last Verified By**: AGY CLI Quality Verification Suite (Ruff Clean, Mypy Strict Clean across 193 files, Pytest 519 passed, 6 skipped)  
 
 ---
 
 ## Repository State
 
 - **Branch**: `main`
-- **Working Tree**: Core domain entities, order state machine, paper broker with net equity accounting, local SQLite ledger persistence, market data feeds, multi-format NSE CSV parser (intraday split date/time, CM Bhavcopy, FO Bhavcopy, Index Historical), pre-replay dataset inspector (`NSECSVInspector`), zero-dependency responsive Web Dashboard (`DashboardServer` and `aditrader dashboard --serve`), official Kotak Neo async SFeed market data adapter (`kotakneoapi>=3.0.0`), Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, static indicators, category condition evaluators, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine with options air-gap guards and volume participation constraints, walk-forward analysis & OOS splitters, hardened pre-trade risk engine with lot-aware position limits and session-boundary resets, finite performance analytics with strict timeframe resolution, static AST structural validation, institutional historical statistical validation for linear assets, theoretical payoff/Greek risk validation for multi-leg option strategies, high-performance Instrument Search & Selection Subsystem with hierarchical derivatives resolution, runnable ForwardTestRunner with options air-gap enforcement, point-in-time timestamp causality, exchange limit-order clamping, symmetrical margin checks, instrument-aware cost resolution, safe partial-bar shutdown, truthful feed status reporting, traded-volume VWAP aggregation, atomic JSON persistence, UTC ledger normalization, canonical NIFTY CE Premium Ladder strategy specification, and deterministic point-in-time option chain replay vertical slice sealed and verified.
+- **Working Tree**: Core domain entities, order state machine, paper broker with deterministic execution mode and net equity accounting, local SQLite ledger persistence, market data feeds, multi-format NSE CSV parser, pre-replay dataset inspector (`NSECSVInspector`), zero-dependency responsive Web Dashboard, official Kotak Neo async SFeed market data adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine with strict NEXT_BAR_OPEN execution contracts, two-sided price envelope clamping, volume participation ceilings, FIFO penny fee attribution, terminal unclosed position mark-to-market friction accounting without synthetic exit trades, binary Merkle tree cryptographic event stream & trade ledger roots, cryptographically sealed Run Dossier persistence, 7-pillar institutional verification matrix with fail-closed statistical gating, ADR 011 options air-gap guards, and bit-for-bit reproducibility engine.
 
 ---
 
