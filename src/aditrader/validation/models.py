@@ -98,6 +98,19 @@ class ValidationResult(BaseModel):
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(UTC), description="Evaluation timestamp"
     )
+    overall_verification_status: str | None = Field(
+        default=None, description="Authoritative multi-pillar verification verdict"
+    )
+    verification_matrix: dict[str, Any] | None = Field(
+        default=None, description="Granular multi-pillar verification matrix"
+    )
+    evidence_bundle_id: str | None = Field(
+        default=None, description="Unique evidence bundle identifier"
+    )
+    tamper_hash: str | None = Field(default=None, description="Cryptographic SHA-256 tamper digest")
+    kat_summary: dict[str, Any] | None = Field(
+        default=None, description="Known-answer test summary (passed/total)"
+    )
 
 
 class ResearchAvailability(BaseModel):

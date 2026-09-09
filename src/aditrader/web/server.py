@@ -28,7 +28,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from aditrader.config.settings import get_settings
 from aditrader.core.ledger.repository import LedgerRepository
@@ -203,7 +203,21 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._handle_get_run_detail(session_id)
             return
 
-        # 5. Settings & Providers APIs
+        # 5. Verification & Provenance APIs
+        if path == "/api/verify/kat":
+            self._handle_get_verify_kat()
+            return
+
+        if path == "/api/verify/trace":
+            self._handle_get_verify_trace(parsed.query)
+            return
+
+        if path.startswith("/api/verify/evidence/"):
+            bundle_id = unquote(path[len("/api/verify/evidence/") :])
+            self._handle_get_verify_evidence(bundle_id)
+            return
+
+        # 6. Settings & Providers APIs
         if path == "/api/settings":
             self._handle_get_settings()
             return
@@ -236,6 +250,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         if path == "/api/check-compatibility":
             self._handle_post_check_compatibility()
+            return
+
+        if path == "/api/verify/recalculate":
+            self._handle_post_verify_recalculate()
             return
 
         # 4. Simulation Runs
@@ -909,6 +927,76 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         res = ProviderSettingsManager.test_provider_connection(provider_id)
         self._send_json(res)
+
+    def _handle_get_verify_kat(self) -> None:
+        """Return execution results for the deterministic Known-Answer Test suite."""
+        try:
+            suite_data = ValidationServiceBridge.get_kat_suite()
+            self._send_json(suite_data)
+        except Exception as exc:
+            self._send_error_json(f"KAT execution failed: {exc}")
+
+    def _handle_get_verify_trace(self, query_string: str) -> None:
+        """Return step-by-step mathematical provenance trace for a target metric or trade."""
+        try:
+            params = {k: v[0] for k, v in parse_qs(query_string).items()}
+            target_metric = params.get("metric", "expectancy")
+            trace_data = ValidationServiceBridge.get_trace(target_metric, params)
+            self._send_json(trace_data)
+        except Exception as exc:
+            self._send_error_json(f"Trace generation failed: {exc}")
+
+    def _handle_get_verify_evidence(self, bundle_id: str) -> None:
+        """Return evidence bundle by ID."""
+        bundle_data = ValidationServiceBridge.get_evidence_bundle(bundle_id)
+        if not bundle_data:
+            self._send_error_json(
+                f"Evidence bundle '{bundle_id}' not found", status=HTTPStatus.NOT_FOUND
+            )
+            return
+        self._send_json(bundle_data)
+
+    def _handle_post_verify_recalculate(self) -> None:
+        """Recalculate stored result fresh and return side-by-side reproducibility comparison."""
+        payload = self._read_json_payload()
+        if not payload:
+            return
+
+        strategy_id = payload.get("strategy_id")
+        run_id = payload.get("run_id")
+        dataset_path = payload.get("dataset_path")
+
+        if not strategy_id and not run_id:
+            self._send_error_json("Either 'strategy_id' or 'run_id' must be specified.")
+            return
+
+        # Security: sanitize run_id against directory traversal
+        if run_id:
+            import re
+
+            sanitized_run_id = re.sub(r"[^A-Za-z0-9_-]", "", str(run_id))
+            if sanitized_run_id != run_id:
+                self._send_error_json("Invalid characters in 'run_id'")
+                return
+            run_id = sanitized_run_id
+
+        # Security: sanitize dataset_path to prevent path traversal outside workspace
+        if dataset_path:
+            norm_path = Path(dataset_path).resolve()
+            project_root = Path.cwd().resolve()
+            if not str(norm_path).startswith(str(project_root)):
+                self._send_error_json("Access denied: 'dataset_path' must reside within workspace")
+                return
+
+        try:
+            result = ValidationServiceBridge.recalculate_result(
+                strategy_id=strategy_id or "",
+                run_id=run_id,
+                dataset_path=dataset_path,
+            )
+            self._send_json(result)
+        except Exception as exc:
+            self._send_error_json(f"Recalculation failed: {exc}")
 
 
 class DashboardServer:
