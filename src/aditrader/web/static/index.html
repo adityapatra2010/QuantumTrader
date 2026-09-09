@@ -708,7 +708,7 @@
       <div class="strategy-callout">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
           <h3 style="color: var(--text-bright); font-size: 1.05rem;">🎯 NIFTY CE Premium-Ladder Strategy</h3>
-          <span class="badge badge-purple">OPTIONS REPLAY READY</span>
+          <span class="badge badge-purple">THEORETICAL MODEL &middot; REQUIRES OPTIONS CHAIN DATA</span>
         </div>
         <p style="font-size: 0.83rem; color: var(--text-muted); margin-top: 6px;">
           Sells one NIFTY CE whose current price falls inside a target band, then buys 4 lower-priced CEs as a hedge.
@@ -871,22 +871,22 @@
           <div class="metric-grid">
             <div class="card">
               <div class="card-title">Mathematical Expectancy</div>
-              <div class="metric-val mono" id="v-expectancy">+0.00</div>
+              <div class="metric-val mono" id="v-expectancy">Not calculated</div>
               <div class="metric-sub" id="v-expectancy-sub">Edge per trade</div>
             </div>
             <div class="card">
               <div class="card-title">Profit Factor</div>
-              <div class="metric-val mono" id="v-pf">0.00</div>
+              <div class="metric-val mono" id="v-pf">Not calculated</div>
               <div class="metric-sub">Min Institutional: 1.25</div>
             </div>
             <div class="card">
               <div class="card-title">Win Rate</div>
-              <div class="metric-val mono" id="v-winrate">0.0%</div>
+              <div class="metric-val mono" id="v-winrate">Not calculated</div>
               <div class="metric-sub" id="v-trades-sample">0 sample trades</div>
             </div>
             <div class="card">
               <div class="card-title">Max Drawdown</div>
-              <div class="metric-val mono" id="v-drawdown">0.0%</div>
+              <div class="metric-val mono" id="v-drawdown">Not calculated</div>
               <div class="metric-sub">Ceiling: 15.0%</div>
             </div>
           </div>
@@ -1267,13 +1267,15 @@
         const realVal = port.realized_pnl || 0;
         realElem.textContent = formatINR(realVal);
         realElem.className = 'metric-val mono ' + (realVal > 0 ? 'positive' : realVal < 0 ? 'negative' : '');
-        document.getElementById('m-trades-count').textContent = (data.recent_trades ? data.recent_trades.length : 0) + ' paper trades';
+        const totalTrades = port.total_trades_count !== undefined ? port.total_trades_count : (data.recent_trades ? data.recent_trades.length : 0);
+        document.getElementById('m-trades-count').textContent = totalTrades + ' total paper trades';
 
         const unElem = document.getElementById('m-unrealized');
         const unVal = port.unrealized_pnl || 0;
         unElem.textContent = formatINR(unVal);
         unElem.className = 'metric-val mono ' + (unVal > 0 ? 'positive' : unVal < 0 ? 'negative' : '');
-        document.getElementById('m-positions-count').textContent = (data.active_positions ? data.active_positions.length : 0) + ' open positions';
+        const activePos = port.active_positions_count !== undefined ? port.active_positions_count : (data.active_positions ? data.active_positions.length : 0);
+        document.getElementById('m-positions-count').textContent = activePos + ' open positions';
 
         const utilPct = ((port.margin_utilization || 0) * 100).toFixed(1);
         document.getElementById('m-margin-pct').textContent = utilPct + '%';
@@ -1339,6 +1341,9 @@
           } else if ((s.legs && s.legs.length > 0) || /(Condor|Straddle|Spread|Ladder)/i.test(s.name || '')) {
             dnaTag = 'Options Multi-Leg';
           }
+          const scoreBadge = (s.validation_score !== null && s.validation_score !== undefined)
+            ? `<span class="badge badge-live">SCORE: ${Number(s.validation_score).toFixed(0)}</span>`
+            : `<span class="badge badge-paper">UNVETTED</span>`;
           tr.innerHTML = `
             <td>
               <strong style="color: var(--text-bright);">${s.name}</strong>
@@ -1347,7 +1352,7 @@
             <td class="mono">${s.underlying}</td>
             <td class="mono">${s.timeframe}</td>
             <td><span class="badge badge-sim">${dnaTag}</span></td>
-            <td><span class="badge badge-paper">LOADED</span></td>
+            <td>${scoreBadge}</td>
             <td>
               <button class="btn btn-outline btn-sm" onclick="inspectStrategyAst('${s.id}')">View Details</button>
             </td>
@@ -1439,6 +1444,9 @@
         }
         registeredDatasets.forEach(d => {
           const tr = document.createElement('tr');
+          const sampleTag = (d.is_sample || d.dataset_type === 'SAMPLE_FIXTURE')
+            ? ' <span class="badge badge-sim" style="font-size:0.65rem; padding: 2px 6px;">SAMPLE</span>'
+            : '';
           const chainBadge = d.is_chain_aware
             ? '<span class="badge badge-purple">OPTIONS CHAIN</span>'
             : '<span class="badge badge-sim">SPOT / LINEAR</span>';
@@ -1446,7 +1454,7 @@
             ? '<span class="badge badge-live">REPLAYABLE</span>'
             : `<span class="badge badge-alert">INSPECT ONLY</span>${d.ineligibility_reason ? '<div style="font-size:0.7rem;color:var(--text-muted);margin-top:3px;white-space:normal;max-width:200px;">' + d.ineligibility_reason.split('per ADR')[0].trim() + '</div>' : ''}`;
           tr.innerHTML = `
-            <td class="mono"><strong>${d.path}</strong></td>
+            <td class="mono"><strong>${d.path}</strong>${sampleTag}</td>
             <td class="mono">${(d.size_bytes / 1024).toFixed(1)} KB</td>
             <td><span class="badge badge-paper">${d.detected_format || 'UNKNOWN'}</span></td>
             <td>${chainBadge}</td>
@@ -1561,36 +1569,59 @@
 
         const defaultReason = rep.status === 'APPROVED' ? 'Meets institutional standards and risk gate criteria.' : 'Failed institutional standards or risk gate veto.';
         const reasonText = rep.reason || rep.message || defaultReason;
+        let sourceBadge = '';
+        if (rep.is_options) {
+          sourceBadge = ' <span class="badge badge-purple" style="font-size:0.72rem; margin-left:6px;">THEORETICAL OPTIONS MODEL (ADR 011)</span>';
+        } else if (rep.validation_scope === 'HISTORICAL') {
+          sourceBadge = ' <span class="badge badge-live" style="font-size:0.72rem; margin-left:6px;">ENGINE BACKTEST PASS (EMPIRICAL)</span>';
+        } else {
+          sourceBadge = ' <span class="badge badge-paper" style="font-size:0.72rem; margin-left:6px;">STATIC AST ANALYSIS (STRUCTURAL ONLY)</span>';
+        }
+
         if (rep.status === 'APPROVED') {
           banner.className = 'alert-box success';
           icon.textContent = '✓';
-          text.innerHTML = '<strong>STRATEGY APPROVED:</strong> ' + reasonText;
+          text.innerHTML = '<strong>STRATEGY APPROVED:</strong> ' + reasonText + sourceBadge;
         } else {
           banner.className = 'alert-box danger';
           icon.textContent = '✗';
-          text.innerHTML = '<strong>VALIDATION ' + rep.status + ':</strong> ' + reasonText;
+          text.innerHTML = '<strong>VALIDATION ' + rep.status + ':</strong> ' + reasonText + sourceBadge;
         }
 
         const metrics = rep.metrics || {};
-        const hasExp = metrics.mathematical_expectancy !== null && metrics.mathematical_expectancy !== undefined;
+        const sampleSize = metrics.sample_size;
+        const hasSample = sampleSize !== null && sampleSize !== undefined && sampleSize > 0;
+
+        const hasExp = metrics.mathematical_expectancy !== null && metrics.mathematical_expectancy !== undefined && hasSample;
         if (hasExp) {
           const expVal = Number(metrics.mathematical_expectancy);
           document.getElementById('v-expectancy').textContent = (expVal >= 0 ? '+' : '') + expVal.toFixed(2);
           document.getElementById('v-expectancy-sub').textContent = 'Edge per trade (INR)';
         } else {
           document.getElementById('v-expectancy').textContent = 'Not calculated';
-          document.getElementById('v-expectancy-sub').textContent = rep.is_options ? 'Options: Theoretical analysis (ADR 011)' : 'Select dataset to compute';
+          if (rep.is_options) {
+            document.getElementById('v-expectancy-sub').textContent = 'Options: Theoretical analysis (ADR 011)';
+          } else if (sampleSize === 0) {
+            document.getElementById('v-expectancy-sub').textContent = 'Insufficient sample (0 trades)';
+          } else {
+            document.getElementById('v-expectancy-sub').textContent = 'Select dataset to compute';
+          }
         }
 
-        const hasPf = metrics.profit_factor !== null && metrics.profit_factor !== undefined;
+        const hasPf = metrics.profit_factor !== null && metrics.profit_factor !== undefined && hasSample;
         document.getElementById('v-pf').textContent = hasPf ? Number(metrics.profit_factor).toFixed(2) : 'Not calculated';
 
-        const hasWinRate = metrics.win_rate !== null && metrics.win_rate !== undefined;
+        const hasWinRate = metrics.win_rate !== null && metrics.win_rate !== undefined && hasSample;
         document.getElementById('v-winrate').textContent = hasWinRate ? (Number(metrics.win_rate) * 100).toFixed(1) + '%' : 'Not calculated';
-        document.getElementById('v-trades-sample').textContent = (metrics.sample_size !== null && metrics.sample_size !== undefined) ? (metrics.sample_size + ' sample trades') : 'No historical trades';
+        
+        if (sampleSize !== null && sampleSize !== undefined) {
+          document.getElementById('v-trades-sample').textContent = sampleSize + ' sample trades';
+        } else {
+          document.getElementById('v-trades-sample').textContent = rep.is_options ? 'Not applicable (Options model)' : 'No historical trades';
+        }
 
-        const hasDd = metrics.max_drawdown_pct !== null && metrics.max_drawdown_pct !== undefined;
-        document.getElementById('v-drawdown').textContent = hasDd ? (Number(metrics.max_drawdown_pct) * 100).toFixed(1) + '%' : 'Not calculated';
+        const hasDd = metrics.max_drawdown_pct !== null && metrics.max_drawdown_pct !== undefined && (hasSample || metrics.max_drawdown_pct > 0);
+        document.getElementById('v-drawdown').textContent = hasDd ? (Number(metrics.max_drawdown_pct) * 100).toFixed(1) + '%' : (sampleSize === 0 ? '0.0% (0 trades)' : 'Not calculated');
 
         // Risk gates
         const gatesContainer = document.getElementById('v-risk-gates');
@@ -1873,12 +1904,16 @@
           `).join('');
         }
 
+        const totalFees = trades.reduce((acc, t) => acc + (t.stt || 0) + (t.charges || 0), 0);
+        const totalSlippage = trades.reduce((acc, t) => acc + (t.slippage || 0), 0);
+        const netPnl = pnl - totalFees - totalSlippage;
+
         cont.innerHTML = `
           <div class="metric-grid" style="margin-bottom: 14px;">
             <div class="card"><div class="card-title">Strategy</div><div class="metric-val mono neutral" style="font-size: 1.05rem;">${sess.strategy_name || sess.strategy_id || '-'}</div></div>
-            <div class="card"><div class="card-title">Realized P&L</div><div class="metric-val mono ${pnl >= 0 ? 'positive' : 'negative'}" style="font-size: 1.05rem;">${formatINR(pnl)}</div></div>
-            <div class="card"><div class="card-title">Executed Trades</div><div class="metric-val mono" style="font-size: 1.05rem;">${trades.length}</div></div>
-            <div class="card"><div class="card-title">Bars Evaluated</div><div class="metric-val mono" style="font-size: 1.05rem;">${sess.bars_count || '-'}</div></div>
+            <div class="card"><div class="card-title">Realized Gross P&L</div><div class="metric-val mono ${pnl >= 0 ? 'positive' : 'negative'}" style="font-size: 1.05rem;">${formatINR(pnl)}</div><div class="metric-sub">Net: ${formatINR(netPnl)}</div></div>
+            <div class="card"><div class="card-title">Executed Trades</div><div class="metric-val mono" style="font-size: 1.05rem;">${trades.length}</div><div class="metric-sub">Fees: ${formatINR(totalFees)}</div></div>
+            <div class="card"><div class="card-title">Bars Evaluated</div><div class="metric-val mono" style="font-size: 1.05rem;">${sess.bars_count || '-'}</div><div class="metric-sub">Slippage: ${formatINR(totalSlippage)}</div></div>
           </div>
           <div class="section-card" style="margin-bottom: 14px;">
             <div class="section-heading" style="font-size: 0.85rem; margin-bottom: 8px;">Executed Paper Trades</div>

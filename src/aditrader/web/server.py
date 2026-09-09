@@ -295,21 +295,38 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         initial_capital = 1_000_000.0
         current_cash = 1_000_000.0
         total_capital = 1_000_000.0
+        blocked_margin = 0.0
         realized_pnl = 0.0
         unrealized_pnl = 0.0
         margin_utilization = 0.0
+        total_trades_count = 0
+        total_orders_count = 0
 
         try:
             repo = LedgerRepository(database_url=settings.database_url)
             repo.create_tables()
             db_connected = True
-            tables = ["ledger_orders", "ledger_trades", "ledger_positions", "ledger_bars"]
 
-            from sqlalchemy import select
+            from sqlalchemy import func, inspect, select
 
-            from aditrader.core.ledger.schema import OrderRecord, PositionRecord, TradeRecord
+            from aditrader.core.ledger.schema import (
+                AccountBalanceRecord,
+                OrderRecord,
+                PositionRecord,
+                TradeRecord,
+            )
+
+            inspector = inspect(repo.engine)
+            tables = inspector.get_table_names()
 
             with repo.SessionLocal() as session:
+                total_trades_count = (
+                    session.execute(select(func.count(TradeRecord.id))).scalar() or 0
+                )
+                total_orders_count = (
+                    session.execute(select(func.count(OrderRecord.id))).scalar() or 0
+                )
+
                 trades_stmt = select(TradeRecord).order_by(TradeRecord.timestamp.desc()).limit(10)
                 db_trades = session.execute(trades_stmt).scalars().all()
                 recent_trades = [
@@ -359,9 +376,30 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     for o in db_orders
                 ]
 
-                realized_pnl = sum(p.realized_pnl for p in db_positions)
-                unrealized_pnl = sum(p.unrealized_pnl for p in db_positions)
-                total_capital = initial_capital + realized_pnl + unrealized_pnl
+                bal_stmt = (
+                    select(AccountBalanceRecord)
+                    .order_by(AccountBalanceRecord.timestamp.desc(), AccountBalanceRecord.id.desc())
+                    .limit(1)
+                )
+                latest_bal = session.execute(bal_stmt).scalars().first()
+                if latest_bal is not None:
+                    total_capital = latest_bal.total_capital
+                    current_cash = latest_bal.available_margin
+                    blocked_margin = latest_bal.used_margin
+                    realized_pnl = latest_bal.realized_pnl
+                    unrealized_pnl = latest_bal.unrealized_pnl
+                    margin_utilization = (
+                        (latest_bal.used_margin / latest_bal.total_capital)
+                        if latest_bal.total_capital > 0
+                        else 0.0
+                    )
+                else:
+                    realized_pnl = sum(p.realized_pnl for p in db_positions)
+                    unrealized_pnl = sum(p.unrealized_pnl for p in db_positions)
+                    total_capital = initial_capital + realized_pnl + unrealized_pnl
+                    current_cash = total_capital
+                    blocked_margin = 0.0
+                    margin_utilization = 0.0
 
         except Exception as exc:
             logger.debug("Database status check completed with notice: %s", exc)
@@ -408,7 +446,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "total_capital": total_capital,
                 "realized_pnl": realized_pnl,
                 "unrealized_pnl": unrealized_pnl,
+                "blocked_margin": blocked_margin,
                 "margin_utilization": margin_utilization,
+                "total_trades_count": total_trades_count,
+                "total_orders_count": total_orders_count,
+                "active_positions_count": len(active_positions),
             },
             "active_positions": active_positions,
             "recent_trades": recent_trades,
@@ -697,11 +739,21 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         results: list[dict[str, Any]] = []
 
         if runs_dir.is_dir():
-            for json_file in sorted(runs_dir.glob("*.json"), reverse=True):
+            files = sorted(runs_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+            for json_file in files[:100]:
                 try:
                     with open(json_file, encoding="utf-8") as f:
                         data = json.load(f)
                     sess = data.get("session", {})
+                    trades_list = data.get("trades", [])
+                    bars_list = data.get("bars", [])
+                    trades_cnt = sess.get("trades_count")
+                    if trades_cnt is None:
+                        trades_cnt = len(trades_list)
+                    bars_cnt = sess.get("bars_count")
+                    if bars_cnt is None:
+                        bars_cnt = len(bars_list)
+
                     results.append(
                         {
                             "session_id": sess.get("session_id", json_file.stem),
@@ -712,8 +764,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                             "symbol": sess.get("symbol", "NIFTY"),
                             "status": sess.get("status", "UNKNOWN"),
                             "realized_pnl": sess.get("realized_pnl", 0.0),
-                            "trades_count": sess.get("trades_count", 0),
-                            "bars_count": sess.get("bars_count", 0),
+                            "trades_count": trades_cnt,
+                            "bars_count": bars_cnt,
                             "dossier_path": str(json_file),
                         }
                     )

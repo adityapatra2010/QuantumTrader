@@ -173,7 +173,8 @@ def test_strategy_catalog_and_nifty_ce_ladder(web_server: DashboardServer) -> No
     payoff = detail.get("theoretical_payoff", {})
     assert "lower_breakeven" in payoff
     assert "upper_breakeven" in payoff
-    assert payoff.get("max_profit") is not None
+    assert "max_profit" in payoff
+    assert payoff.get("max_loss") is not None
 
 
 def test_dataset_scanning_and_classification(web_server: DashboardServer) -> None:

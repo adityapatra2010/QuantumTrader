@@ -29,6 +29,7 @@ from aditrader.data.feeds.nse_csv import NSECSVFormat, NSECSVInspector
 from aditrader.data.session import EXCHANGE_TIMEZONE
 from aditrader.strategy.builder.schema import StrategyDSL
 from aditrader.strategy.library.registry import StrategyRegistry
+from aditrader.validation.institutional.options_payoff import OptionsTheoreticalValidator
 from aditrader.validation.policies import (
     ValidationPolicy,
     create_institutional_policy,
@@ -383,6 +384,8 @@ class DatasetService:
 
                 try:
                     rep = NSECSVInspector.inspect_file(csv_file)
+                    is_sample = "sample" in csv_file.name.lower() or "test" in str(csv_file).lower()
+                    dataset_type = "SAMPLE_FIXTURE" if is_sample else "MARKET_ARCHIVE"
                     datasets.append(
                         {
                             "name": csv_file.name,
@@ -398,6 +401,8 @@ class DatasetService:
                             "start_time": rep.start_time,
                             "end_time": rep.end_time,
                             "is_parsed": True,
+                            "is_sample": is_sample,
+                            "dataset_type": dataset_type,
                             "is_chain_aware": rep.detected_format == NSECSVFormat.DERIVATIVE_QUOTE
                             or len(rep.expiries_found) > 0,
                             "is_replayable": rep.is_valid_replayable,
@@ -496,14 +501,74 @@ class ValidationServiceBridge:
             for b in (dsl.premium_bands or [])
         ]
 
-        # Trailing stop configuration
-        ts_step = 10.0
-        ts_dist = 5.0
+        # Trailing stop configuration - dynamically resolved from legs
+        trailing_stop: dict[str, Any] | None = None
         for leg in dsl.legs:
             if leg.trailing_stop:
-                ts_dist = leg.trailing_stop.initial_gap
-                ts_step = leg.trailing_stop.trail_step
+                trailing_stop = {
+                    "ratchet_step": leg.trailing_stop.trail_step,
+                    "stop_distance": leg.trailing_stop.initial_gap,
+                    "model": "CONTRACT_BOUND_TRAILING_RATCHET"
+                    if getattr(leg.trailing_stop, "ratchet", True)
+                    else "FIXED_TRAILING",
+                    "description": (
+                        f"Initial SL {leg.trailing_stop.initial_gap} pts above entry; "
+                        f"ratchet by {leg.trailing_stop.trail_step} pts as LTP moves favorably"
+                    ),
+                }
                 break
+
+        # Ratio hedge configuration - dynamically resolved from hedge legs
+        ratio_hedge: dict[str, Any] | None = None
+        sell_legs = [leg for leg in dsl.legs if leg.side == OrderSide.SELL]
+        buy_legs = [leg for leg in dsl.legs if leg.side == OrderSide.BUY]
+        if sell_legs and buy_legs:
+            for b_leg in buy_legs:
+                if b_leg.contract_selector and b_leg.contract_selector.target_ltp is not None:
+                    target_p = b_leg.contract_selector.target_ltp
+                    tol = b_leg.contract_selector.tolerance or 2.0
+                    c_type = (
+                        b_leg.contract_type
+                        or (
+                            b_leg.contract_selector.option_type if b_leg.contract_selector else "CE"
+                        )
+                        or "CE"
+                    )
+                    ratio_hedge = {
+                        "target_premium": target_p,
+                        "tolerance": tol,
+                        "buy_ratio": b_leg.lots,
+                        "side": "BUY",
+                        "contract_type": c_type,
+                        "description": f"BUY {b_leg.lots} {c_type} hedges in ₹{target_p - tol:.2f}–₹{target_p + tol:.2f} range (target ₹{target_p:.2f})",
+                    }
+                    break
+
+        # Theoretical payoff - calculated genuinely via OptionsTheoreticalValidator for options
+        theoretical_payoff: dict[str, Any] | None = None
+        if dsl.legs:
+            try:
+                theo_result = OptionsTheoreticalValidator.validate(dsl)
+                m = theo_result.metrics
+                bes = m.get("breakevens") or []
+                theoretical_payoff = {
+                    "lower_breakeven": bes[0] if len(bes) > 0 else None,
+                    "upper_breakeven": bes[1]
+                    if len(bes) > 1
+                    else (bes[0] if len(bes) == 1 else None),
+                    "breakevens": bes,
+                    "max_profit": m.get("max_profit"),
+                    "max_loss": m.get("max_loss"),
+                    "risk_reward_ratio": m.get("risk_reward_ratio"),
+                    "net_debit_credit": m.get("net_debit_credit"),
+                    "is_defined_risk": m.get("is_defined_risk", True),
+                    "calculation_type": "THEORETICAL_BLACK_SCHOLES",
+                }
+            except Exception as exc:
+                logger.warning(
+                    "Could not calculate theoretical payoff for %s: %s", strategy_id, exc
+                )
+                theoretical_payoff = None
 
         return {
             "id": record.id,
@@ -523,26 +588,9 @@ class ValidationServiceBridge:
                 "formatted": bands,
                 "bands": explicit_bands,
             },
-            "ratio_hedge": {
-                "target_premium": 5.0,
-                "tolerance": 2.0,
-                "buy_ratio": 4,
-                "side": "BUY",
-                "contract_type": "CE",
-                "description": "BUY 4 CE hedges in ₹3.00–₹7.00 range (target ₹5.00)",
-            },
-            "trailing_stop": {
-                "ratchet_step": ts_step,
-                "stop_distance": ts_dist,
-                "model": "CONTRACT_BOUND_TRAILING_RATCHET",
-                "description": f"Initial SL {ts_dist} pts above entry; ratchet by {ts_step} pts as LTP drops by {ts_step} pts",
-            },
-            "theoretical_payoff": {
-                "lower_breakeven": 45.0,
-                "upper_breakeven": 115.0,
-                "max_profit": 5500.0,
-                "max_loss": -2200.0,
-            },
+            "ratio_hedge": ratio_hedge,
+            "trailing_stop": trailing_stop,
+            "theoretical_payoff": theoretical_payoff,
             "target_regime": dsl.target_regime or "Intraday Harvesting",
             "dna": {
                 "directionality": getattr(
@@ -955,7 +1003,7 @@ class ActiveRunManager:
         # Inspect bars count
         path = Path(dataset_path)
         report = NSECSVInspector.inspect_file(path)
-        total_bars = report.parsed_bars or 10
+        total_bars = report.parsed_bars or 0
 
         run_state = ActiveRunState(
             run_id=run_id,
@@ -1094,6 +1142,10 @@ class ActiveRunManager:
 
         orders_list: list[dict[str, Any]] = []
         trades_list: list[dict[str, Any]] = []
+        positions_list: list[dict[str, Any]] = []
+        quality_report: dict[str, Any] | None = None
+        ending_balance: dict[str, Any] | None = None
+
         if runner_result is not None:
             trades_list = [
                 t.model_dump(mode="json") if hasattr(t, "model_dump") else t
@@ -1103,6 +1155,16 @@ class ActiveRunManager:
                 o.model_dump(mode="json") if hasattr(o, "model_dump") else o
                 for o in getattr(runner_result, "orders", [])
             ]
+            positions_list = [
+                p.model_dump(mode="json") if hasattr(p, "model_dump") else p
+                for p in getattr(runner_result, "positions", [])
+            ]
+            qr = getattr(runner_result, "quality_report", None)
+            if qr is not None and hasattr(qr, "model_dump"):
+                quality_report = qr.model_dump(mode="json")
+            eb = getattr(runner_result, "ending_balance", None)
+            if eb is not None and hasattr(eb, "model_dump"):
+                ending_balance = eb.model_dump(mode="json")
 
         dossier_data = {
             "session": {
@@ -1129,6 +1191,9 @@ class ActiveRunManager:
             },
             "orders": orders_list,
             "trades": trades_list,
+            "positions": positions_list,
+            "quality_report": quality_report,
+            "ending_balance": ending_balance,
             "equity_snapshots": [
                 {
                     "timestamp": state.started_at.isoformat(),

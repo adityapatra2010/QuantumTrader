@@ -315,7 +315,7 @@ def build_template_record(
     dsl: StrategyDSL,
     template_id: str,
     version: str = "1.0.0",
-    validation_score: float = 95.0,
+    validation_score: float | None = None,
 ) -> StrategyRecord:
     """Wrap a declarative template into a versioned StrategyRecord with computed DNA."""
     dna = profile_strategy_dna(dsl)
@@ -345,30 +345,30 @@ def get_builtin_templates() -> dict[str, StrategyRecord]:
             iron_condor_dsl,
             template_id="tpl-iron-condor-v1",
             version="1.0.0",
-            validation_score=94.0,
+            validation_score=None,
         ),
         "long_straddle": build_template_record(
             long_straddle_dsl,
             template_id="tpl-long-straddle-v1",
             version="1.0.0",
-            validation_score=90.0,
+            validation_score=None,
         ),
         "bull_call_spread": build_template_record(
             bull_call_spread_dsl,
             template_id="tpl-bull-call-spread-v1",
             version="1.0.0",
-            validation_score=92.0,
+            validation_score=None,
         ),
         "nifty_ce_premium_ladder": build_template_record(
             nifty_ce_premium_ladder_dsl,
             template_id="tpl-nifty-ce-premium-ladder-v1",
             version="1.0.0",
-            validation_score=95.0,
+            validation_score=None,
         ),
         "nifty_intraday_trend": build_template_record(
             nifty_intraday_trend_dsl,
             template_id="tpl-nifty-intraday-trend-v1",
             version="1.0.0",
-            validation_score=93.0,
+            validation_score=None,
         ),
     }
