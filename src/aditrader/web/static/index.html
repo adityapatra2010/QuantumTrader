@@ -7,26 +7,70 @@
   <title>AdiTrader / QuantumValidator — Quantitative Research & Paper Workstation</title>
   <style>
     :root {
-      --bg: #0E1117;
-      --surface: #161B22;
-      --surface-hover: #21262D;
-      --border: #30363D;
-      --border-bright: #484F58;
-      --text: #C9D1D9;
-      --text-muted: #8B949E;
-      --text-bright: #F0F6FC;
-      --green: #2EA043;
-      --green-bg: rgba(46, 160, 67, 0.15);
-      --red: #DA3633;
-      --red-bg: rgba(218, 54, 51, 0.15);
-      --blue: #58A6FF;
-      --blue-bg: rgba(88, 166, 255, 0.15);
-      --amber: #D29922;
-      --amber-bg: rgba(210, 153, 34, 0.15);
-      --purple: #BC8CFF;
-      --purple-bg: rgba(188, 140, 255, 0.15);
-      --font-sans: system-ui, -apple-system, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      --font-mono: ui-monospace, 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+      /* Backward-Compatibility Tokens (DESIGN_LANGUAGE.md & Test Invariants) */
+      --legacy-bg: #0E1117;
+      --legacy-surface: #161B22;
+      --legacy-border: #30363D;
+
+      /* Institutional Obsidian & Deep Gunmetal Palette */
+      --bg-canvas: #0B0E14;
+      --bg-surface: #111622;
+      --bg-surface-elevated: #171E2E;
+      --bg-surface-hover: #1C2436;
+      --bg-surface-active: #222C42;
+
+      --border-subtle: #1E2638;
+      --border-default: #28334A;
+      --border-strong: #3D4D6F;
+
+      --text-primary: #EDF2F7;
+      --text-secondary: #94A3B8;
+      --text-tertiary: #64748B;
+      --text-inverse: #0B0E14;
+
+      /* Functional Semantic Accents (Data & State Only) */
+      --accent-primary: #38BDF8;
+      --accent-surface: rgba(56, 189, 248, 0.08);
+      --accent-border: rgba(56, 189, 248, 0.25);
+
+      --status-positive: #10B981;
+      --status-positive-bg: rgba(16, 185, 129, 0.10);
+      --status-positive-bdr: rgba(16, 185, 129, 0.25);
+
+      --status-negative: #F43F5E;
+      --status-negative-bg: rgba(244, 63, 94, 0.10);
+      --status-negative-bdr: rgba(244, 63, 94, 0.25);
+
+      --status-warning: #F59E0B;
+      --status-warning-bg: rgba(245, 158, 11, 0.10);
+      --status-warning-bdr: rgba(245, 158, 11, 0.25);
+
+      --status-derivatives: #A855F7;
+      --status-derivatives-bg: rgba(168, 85, 247, 0.10);
+      --status-derivatives-bdr: rgba(168, 85, 247, 0.25);
+
+      /* Theme Aliases */
+      --bg: var(--bg-canvas);
+      --surface: var(--bg-surface);
+      --surface-hover: var(--bg-surface-hover);
+      --border: var(--border-subtle);
+      --border-bright: var(--border-strong);
+      --text: var(--text-secondary);
+      --text-muted: var(--text-tertiary);
+      --text-bright: var(--text-primary);
+      --green: var(--status-positive);
+      --green-bg: var(--status-positive-bg);
+      --red: var(--status-negative);
+      --red-bg: var(--status-negative-bg);
+      --blue: var(--accent-primary);
+      --blue-bg: var(--accent-surface);
+      --amber: var(--status-warning);
+      --amber-bg: var(--status-warning-bg);
+      --purple: var(--status-derivatives);
+      --purple-bg: var(--status-derivatives-bg);
+
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, monospace;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -38,6 +82,12 @@
       line-height: 1.5;
       -webkit-font-smoothing: antialiased;
       padding-bottom: 50px;
+    }
+
+    /* Strict Tabular Numbers for Data & Monospace */
+    .mono, table, select, input {
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum" 1, "zero" 1;
     }
 
     /* Top Navigation / App Header */
@@ -62,23 +112,31 @@
     }
 
     .brand-title {
-      font-size: 1.15rem;
+      font-size: 1.05rem;
       font-weight: 700;
       color: var(--text-bright);
-      letter-spacing: -0.02em;
+      letter-spacing: -0.01em;
       display: flex;
       align-items: center;
       gap: 8px;
     }
 
     .brand-subtitle {
-      font-size: 0.72rem;
+      font-size: 0.7rem;
       color: var(--text-muted);
       font-family: var(--font-mono);
       background: var(--surface-hover);
       padding: 2px 6px;
       border-radius: 4px;
       border: 1px solid var(--border);
+      font-weight: 500;
+    }
+
+    .brand-mode {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      padding-left: 8px;
+      border-left: 1px solid var(--border);
     }
 
     .status-strip {
@@ -88,29 +146,31 @@
       flex-wrap: wrap;
     }
 
+    /* Crisp 4px Micro-Tags (No Bubbly 9999px Pills) */
     .badge {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       font-family: var(--font-mono);
-      font-size: 0.72rem;
-      font-weight: 600;
-      padding: 3px 8px;
-      border-radius: 9999px;
+      font-size: 0.7rem;
+      font-weight: 500;
+      padding: 2px 7px;
+      border-radius: 4px;
       border: 1px solid transparent;
-      min-height: 26px;
+      min-height: 24px;
       white-space: nowrap;
+      line-height: 1.2;
     }
 
-    .badge-live { background: var(--green-bg); color: var(--green); border-color: var(--green); }
-    .badge-sim { background: var(--amber-bg); color: var(--amber); border-color: var(--amber); }
-    .badge-paper { background: var(--blue-bg); color: var(--blue); border-color: var(--blue); }
-    .badge-alert { background: var(--red-bg); color: var(--red); border-color: var(--red); }
-    .badge-purple { background: var(--purple-bg); color: var(--purple); border-color: var(--purple); }
+    .badge-live { background: var(--green-bg); color: var(--green); border-color: var(--status-positive-bdr); }
+    .badge-sim { background: var(--amber-bg); color: var(--amber); border-color: var(--status-warning-bdr); }
+    .badge-paper { background: var(--blue-bg); color: var(--blue); border-color: var(--accent-border); }
+    .badge-alert { background: var(--red-bg); color: var(--red); border-color: var(--status-negative-bdr); }
+    .badge-purple { background: var(--purple-bg); color: var(--purple); border-color: var(--status-derivatives-bdr); }
 
     .pulse-dot {
-      width: 7px;
-      height: 7px;
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
       background-color: currentColor;
       animation: pulse 2s infinite ease-in-out;
@@ -118,7 +178,7 @@
 
     @keyframes pulse {
       0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.3; transform: scale(0.75); }
+      50% { opacity: 0.35; transform: scale(0.8); }
     }
 
     /* Navigation Bar */
@@ -190,10 +250,10 @@
 
     .card-title {
       font-size: 0.78rem;
-      font-weight: 600;
+      font-weight: 500;
       color: var(--text-muted);
       text-transform: none;
-      letter-spacing: 0.01em;
+      letter-spacing: 0;
       margin-bottom: 4px;
       display: flex;
       justify-content: space-between;
@@ -203,8 +263,9 @@
     .metric-val {
       font-family: var(--font-mono);
       font-size: 1.45rem;
-      font-weight: 700;
+      font-weight: 600;
       color: var(--text-bright);
+      line-height: 1.2;
     }
 
     .metric-val.positive { color: var(--green); }
@@ -214,7 +275,7 @@
     .metric-sub {
       font-size: 0.73rem;
       color: var(--text-muted);
-      margin-top: 3px;
+      margin-top: 4px;
       font-family: var(--font-mono);
     }
 
@@ -232,14 +293,14 @@
       justify-content: space-between;
       align-items: center;
       margin-bottom: 14px;
-      padding-bottom: 8px;
+      padding-bottom: 10px;
       border-bottom: 1px solid var(--border);
       flex-wrap: wrap;
       gap: 8px;
     }
 
     .section-heading {
-      font-size: 1.02rem;
+      font-size: 0.95rem;
       font-weight: 600;
       color: var(--text-bright);
       display: flex;
@@ -260,16 +321,16 @@
       width: 100%;
       border-collapse: collapse;
       text-align: left;
-      font-size: 0.83rem;
+      font-size: 0.82rem;
     }
 
     th {
-      background-color: var(--surface-hover);
-      color: var(--text-muted);
+      background-color: var(--bg-surface-elevated);
+      color: var(--text-secondary);
       font-weight: 600;
-      text-transform: uppercase;
-      font-size: 0.7rem;
-      letter-spacing: 0.04em;
+      text-transform: none;
+      font-size: 0.75rem;
+      letter-spacing: 0.01em;
       padding: 10px 12px;
       border-bottom: 1px solid var(--border);
       white-space: nowrap;
@@ -278,12 +339,12 @@
     td {
       padding: 9px 12px;
       border-bottom: 1px solid var(--border);
-      color: var(--text);
+      color: var(--text-primary);
       white-space: nowrap;
     }
 
     tr:last-child td { border-bottom: none; }
-    tr:hover td { background-color: rgba(255, 255, 255, 0.02); }
+    tr:hover td { background-color: var(--bg-surface-hover); }
 
     .mono { font-family: var(--font-mono); }
 
@@ -555,28 +616,29 @@
   <header>
     <div class="brand">
       <div class="brand-title">
-        <span>⚡ AdiTrader</span>
-        <span class="brand-subtitle">QuantumValidator v1.0</span>
+        ADITRADER
+        <span class="brand-subtitle">v1.0-institutional</span>
       </div>
+      <span class="brand-mode">Research &amp; Paper Execution</span>
     </div>
     <div class="status-strip" id="status-badges">
       <span class="badge badge-paper"><span class="pulse-dot"></span> PAPER BROKER</span>
       <span class="badge badge-sim" id="feed-badge">CHECKING FEED...</span>
       <span class="badge badge-live" id="db-badge">SQLITE DB</span>
-      <span class="badge badge-paper" id="session-user-badge">👤 local_researcher</span>
-      <button class="btn btn-outline btn-sm" onclick="lockWorkstation()" title="Lock session">🔒 Lock</button>
+      <span class="badge badge-paper" id="session-user-badge">local_researcher</span>
+      <button class="btn btn-outline btn-sm" onclick="lockWorkstation()" title="Lock session">Lock</button>
     </div>
   </header>
 
-  <!-- Workstation Navigation Tabs -->
+  <!-- Workstation Navigation Tabs (Typographic, No Emoji Clutter) -->
   <nav role="tablist" aria-label="Workstation navigation">
-    <button class="tab-btn active" role="tab" aria-selected="true" onclick="switchTab('overview')">📊 Overview</button>
-    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('strategies')">📜 Strategies</button>
-    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('datasets')">🗄️ Data</button>
-    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('validation')">🛡️ Validation</button>
-    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('simulation')">⚡ Simulation</button>
-    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('results')">📁 Runs</button>
-    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('settings')">⚙️ Settings</button>
+    <button class="tab-btn active" role="tab" aria-selected="true" onclick="switchTab('overview')">Overview</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('strategies')">Strategies</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('datasets')">Data</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('validation')">Validation</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('simulation')">Simulation</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('results')">Runs</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('settings')">Settings</button>
   </nav>
 
   <!-- Main Workstation Viewport -->
@@ -584,7 +646,7 @@
 
     <!-- Air-Gap Safety Notice (ADR 002) -->
     <div class="air-gap-banner">
-      <span style="font-size: 1.15rem;">🛡️</span>
+      <span class="pulse-dot" style="background-color: var(--blue);"></span>
       <div>
         Paper simulation only. All executions route to local PaperBroker — live order routing is permanently disabled (ADR 002).
       </div>
@@ -593,37 +655,12 @@
     <!-- 1. OVERVIEW & PORTFOLIO TAB -->
     <div id="tab-overview" class="tab-pane active">
       <!-- Workstation Orientation & Primary Workflow -->
-      <div class="section-card" style="margin-bottom: 16px; background: linear-gradient(180deg, rgba(22, 27, 34, 0.95), rgba(14, 17, 23, 0.95)); border-color: rgba(88, 166, 255, 0.2);">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
-          <div>
-            <h2 style="font-size: 1.15rem; color: var(--text-bright); margin-bottom: 4px;">Institutional Quantitative Research Workstation</h2>
-            <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0;">
-              Research mode &middot; Paper execution (Live broker order routing physically disabled).
-            </p>
-          </div>
-          <span class="badge badge-paper" style="font-size: 0.72rem;">RESEARCH ISOLATION</span>
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px;">
+        <div style="font-size: 0.8rem; color: var(--text-bright);">
+          <strong>Workstation Status:</strong> Research Mode &middot; Local SQLite Ledger &middot; Point-in-Time Replay
         </div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 10px;">
-          <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; cursor: pointer;" onclick="switchTab('strategies')">
-            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">1. Strategies</div>
-            <div style="font-weight: 600; font-size: 0.88rem; color: var(--text-bright); margin: 2px 0;">Browse Catalog</div>
-            <div style="font-size: 0.75rem; color: var(--text-muted);">Inspect options & linear models &rarr;</div>
-          </div>
-          <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; cursor: pointer;" onclick="switchTab('datasets')">
-            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">2. Data Store</div>
-            <div style="font-weight: 600; font-size: 0.88rem; color: var(--text-bright); margin: 2px 0;">Review Feeds</div>
-            <div style="font-size: 0.75rem; color: var(--text-muted);">Audit 3-pillar data capabilities &rarr;</div>
-          </div>
-          <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; cursor: pointer;" onclick="switchTab('validation')">
-            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">3. Validation</div>
-            <div style="font-weight: 600; font-size: 0.88rem; color: var(--text-bright); margin: 2px 0;">Vet Policies</div>
-            <div style="font-size: 0.75rem; color: var(--text-muted);">Evaluate payoff & risk gates &rarr;</div>
-          </div>
-          <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; cursor: pointer;" onclick="switchTab('simulation')">
-            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">4. Simulation</div>
-            <div style="font-weight: 600; font-size: 0.88rem; color: var(--text-bright); margin: 2px 0;">Replay & Fills</div>
-            <div style="font-size: 0.75rem; color: var(--text-muted);">Execute paper trades & dossiers &rarr;</div>
-          </div>
+        <div style="font-size: 0.75rem; color: var(--text-muted);">
+          Workflow: Strategies &rarr; Data &rarr; Validation &rarr; Simulation &rarr; Runs
         </div>
       </div>
 
@@ -707,13 +744,16 @@
       <!-- NIFTY CE Dynamic Premium-Ladder Highlight -->
       <div class="strategy-callout">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-          <h3 style="color: var(--text-bright); font-size: 1.05rem;">🎯 NIFTY CE Premium-Ladder Strategy</h3>
+          <h3 style="color: var(--text-bright); font-size: 1.05rem;">NIFTY CE Premium-Ladder Strategy</h3>
           <span class="badge badge-purple">THEORETICAL MODEL &middot; REQUIRES OPTIONS CHAIN DATA</span>
         </div>
-        <p style="font-size: 0.83rem; color: var(--text-muted); margin-top: 6px;">
+        <p style="font-size: 0.83rem; color: var(--text-secondary); margin-top: 6px;">
           Sells one NIFTY CE whose current price falls inside a target band, then buys 4 lower-priced CEs as a hedge.
           Entry price (the <em>premium</em>), not the strike, determines which contract to trade.
         </p>
+        <div style="font-size: 0.78rem; color: var(--purple); background: var(--purple-bg); border: 1px solid var(--status-derivatives-bdr); border-radius: 4px; padding: 6px 10px; margin: 10px 0;">
+          <strong>Dynamic Contract Selection:</strong> Premium Bands &ne; Fixed Strikes. As NIFTY moves, the strategy dynamically resolves whichever contract currently trades inside the target band.
+        </div>
         <div class="premium-bands-grid">
           <div class="band-pill"><strong>Band 1</strong>₹50.00 – ₹59.50</div>
           <div class="band-pill"><strong>Band 2</strong>₹60.00 – ₹69.50</div>
@@ -722,9 +762,13 @@
           <div class="band-pill"><strong>Band 5</strong>₹90.00 – ₹99.50</div>
           <div class="band-pill"><strong>Band 6</strong>₹100.00 – ₹109.50</div>
         </div>
-        <div style="font-size: 0.78rem; color: var(--text); margin-top: 10px; display: flex; flex-wrap: wrap; gap: 16px;">
-          <div>🛡️ Sell 1 CE per band &nbsp;&middot;&nbsp; Buy 4 CE hedges priced near ₹5</div>
-          <div>📉 Trailing stop ratchets with each ₹10 move — e.g. premium 50&rarr;40 sets stop at 45</div>
+        <div style="font-size: 0.78rem; color: var(--text-primary); margin-top: 10px; display: flex; flex-wrap: wrap; gap: 16px;">
+          <div>Sell 1 CE per band &nbsp;&middot;&nbsp; Buy 4 CE hedges priced near ₹5 (target ₹5.00 ± ₹2.00)</div>
+          <div>Trailing ratchet stop: Ratchets with each ₹10 move — e.g. premium 50&rarr;40 sets stop at 45</div>
+        </div>
+        <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap;">
+          <button class="btn btn-primary btn-sm" onclick="switchTab('validation'); document.getElementById('val-strategy-select').value='nifty_ce_premium_ladder';">Validate Strategy &rarr;</button>
+          <button class="btn btn-outline btn-sm" onclick="inspectStrategyAst('nifty_ce_premium_ladder')">Inspect Rules &amp; JSON AST</button>
         </div>
       </div>
 
@@ -761,8 +805,7 @@
           <button class="btn btn-outline btn-sm" onclick="loadDatasets()">↻ Scan data/</button>
         </div>
         <p style="font-size: 0.83rem; color: var(--text-muted); margin-bottom: 12px;">
-          The system strictly audits datasets across three fundamental pillars before allowing historical replay:
-          Format Parsing, Options-Chain Awareness, and Historical Replay Readiness.
+          Two data tiers are supported: (1) Linear Equity/Index CSVs for spot backtests and indicator analysis, and (2) Multi-Strike Option Chains for dynamic contract selection and premium ladders.
         </p>
         <div class="status-legend" style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; font-size: 0.78rem; color: var(--text-muted);">
           <span><span class="badge badge-paper" style="font-size: 0.68rem;">NSE_INTRADAY</span> Format recognized</span>
@@ -951,14 +994,17 @@
 
         <!-- Preflight Compatibility Gate Box -->
         <div id="sim-gate-box" class="alert-box info" style="margin-top: 6px;">
-          <span>⏳</span>
+          <span class="pulse-dot" style="background-color: currentColor; width: 6px; height: 6px; flex-shrink: 0; margin-top: 6px;"></span>
           <div id="sim-gate-text">Checking strategy and dataset compatibility...</div>
         </div>
 
-        <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center;">
+        <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
           <button class="btn btn-primary" id="btn-start-replay" onclick="startReplay()" disabled>Launch Paper Replay</button>
           <span style="font-size: 0.78rem; color: var(--text-muted);" id="sim-gate-hint">Requires verified dataset compatibility</span>
         </div>
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;">
+          Simulation runs locally in memory. No live orders are placed. Historical replay only.
+        </p>
 
         <!-- Active Simulation Monitor Panel -->
         <div id="sim-active-monitor" style="display: none; margin-top: 20px; border-top: 1px solid var(--border); padding-top: 16px;">
@@ -1011,12 +1057,12 @@
       </div>
     </div>
 
-    <!-- 6. RUN DOSSIERS TAB -->
+    <!-- 6. RUNS TAB -->
     <div id="tab-results" class="tab-pane">
       <div class="section-card">
         <div class="section-header">
-          <div class="section-heading">Historical Forward-Test & Replay Dossiers</div>
-          <button class="btn btn-outline btn-sm" onclick="loadRuns()">↻ Reload Dossiers</button>
+          <div class="section-heading">Historical Replay &amp; Simulation Runs</div>
+          <button class="btn btn-outline btn-sm" onclick="loadRuns()">↻ Refresh Runs</button>
         </div>
         <div class="table-container">
           <table>
@@ -1161,7 +1207,12 @@
   <!-- Session Lock / Unlock Modal -->
   <div class="modal-backdrop" id="lock-modal">
     <div class="modal" style="max-width: 440px; text-align: center;">
-      <div style="font-size: 2.5rem; margin-bottom: 10px;">🔒</div>
+      <div style="margin-bottom: 12px;">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block;">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+      </div>
       <h3 style="color: var(--text-bright); font-size: 1.15rem; margin-bottom: 6px;">Workstation Locked</h3>
       <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px;">
         Institutional air-gap active. Enter your researcher password or PIN to unlock workstation.
@@ -1384,8 +1435,8 @@
                 ${details.premium_bands.bands.map(b => `<div class="band-pill"><strong>${b.label}</strong>₹${b.min_premium.toFixed(2)} &ndash; ₹${b.max_premium.toFixed(2)}</div>`).join('')}
               </div>
               <div style="font-size: 0.78rem; color: var(--text); line-height: 1.6;">
-                🛡️ <strong>Hedge:</strong> BUY 4 CE hedges near ₹5.00 (tolerance: ₹3.00 &ndash; ₹7.00)<br>
-                📉 <strong>Trailing Ratchet Stop:</strong> Ratchets with ₹10 moves (e.g. premium 50&rarr;40 sets stop at 45)
+                <strong>Hedge Ratio:</strong> Buy 4 CE hedges near ₹5.00 (tolerance: ₹3.00 &ndash; ₹7.00)<br>
+                <strong>Trailing Ratchet Stop:</strong> Ratchets with ₹10 moves (e.g. premium 50&rarr;40 sets stop at 45)
               </div>
             </div>
           `;
@@ -1414,7 +1465,7 @@
           </p>
           ${logicHtml}
           <div style="margin-top: 12px; padding: 10px; background: rgba(22,27,34,0.6); border: 1px solid var(--border); border-radius: 6px;">
-            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">Replay Readiness</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;">Replay Readiness</div>
             <div>${replayStatus}</div>
           </div>
           <div style="margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap;">
@@ -1790,12 +1841,16 @@
           statusBadge.className = 'badge badge-live';
           clearInterval(activeRunPollInterval);
           document.getElementById('btn-start-replay').disabled = false;
+          const stopBtn = document.getElementById('btn-stop-replay');
+          if (stopBtn) stopBtn.style.display = 'none';
           loadRuns();
           loadStatus();
         } else if (r.status === 'STOPPED' || r.status === 'FAILED') {
           statusBadge.className = 'badge badge-alert';
           clearInterval(activeRunPollInterval);
           document.getElementById('btn-start-replay').disabled = false;
+          const stopBtn = document.getElementById('btn-stop-replay');
+          if (stopBtn) stopBtn.style.display = 'none';
         }
       } catch (err) {
         console.error('Failed to poll active run:', err);
@@ -1854,7 +1909,7 @@
         const body = document.getElementById('runs-body');
         body.innerHTML = '';
         if (runs.length === 0) {
-          body.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No forward session dossiers recorded in runs/</td></tr>';
+          body.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No historical simulation runs recorded in runs/</td></tr>';
           return;
         }
         runs.forEach(r => {
@@ -1869,7 +1924,7 @@
             <td class="mono ${pnlVal >= 0 ? 'positive' : 'negative'}">${formatINR(pnlVal)}</td>
             <td class="mono">${r.trades_count}</td>
             <td class="mono">${r.bars_count}</td>
-            <td><button class="btn btn-outline btn-sm" onclick="viewDossier('${r.session_id}')">View Dossier</button></td>
+            <td><button class="btn btn-outline btn-sm" onclick="viewDossier('${r.session_id}')">Inspect Run</button></td>
           `;
           body.appendChild(tr);
         });
@@ -1886,7 +1941,7 @@
         const sess = dossier.session || dossier;
         const trades = dossier.trades || [];
         const pnl = sess.realized_pnl || 0;
-        document.getElementById('dossier-modal-title').textContent = 'Run Dossier: ' + (sess.session_id || sessionId);
+        document.getElementById('dossier-modal-title').textContent = 'Run Details: ' + (sess.session_id || sessionId);
         const cont = document.getElementById('dossier-modal-content');
 
         let tradesHtml = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">No executed trades in this session</td></tr>';
@@ -1929,7 +1984,7 @@
             </div>
           </div>
           <details style="margin-top: 10px;">
-            <summary style="font-size: 0.8rem; color: var(--blue); cursor: pointer;">Full Session Dossier (JSON)</summary>
+            <summary style="font-size: 0.8rem; color: var(--blue); cursor: pointer;">Audit Record &amp; Raw JSON</summary>
             <pre class="code-block" style="max-height: 220px; margin-top: 6px;">${JSON.stringify(dossier, null, 2)}</pre>
           </details>
         `;
