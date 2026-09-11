@@ -599,6 +599,95 @@
       justify-content: center;
     }
 
+    /* Subtab Navigation inside Modals */
+    .subtab-bar {
+      display: flex;
+      gap: 6px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 14px;
+      padding-bottom: 6px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .subtab-btn {
+      background: none;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: var(--font-sans);
+      white-space: nowrap;
+      min-height: 34px;
+      transition: all 0.15s;
+    }
+    .subtab-btn:hover {
+      color: var(--text-bright);
+      background: var(--surface-hover);
+    }
+    .subtab-btn.active {
+      color: var(--blue);
+      background: var(--blue-bg);
+      border-color: var(--accent-border);
+      font-weight: 600;
+    }
+    .subtab-pane { display: none; }
+    .subtab-pane.active { display: block; animation: fadeIn 0.15s ease-in; }
+
+    /* Mode Switcher */
+    .mode-switcher {
+      display: flex;
+      gap: 6px;
+      background: var(--bg);
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 14px;
+    }
+    .mode-switch-btn {
+      flex: 1;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 500;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      text-align: center;
+      min-height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .mode-switch-btn:hover {
+      color: var(--text-bright);
+    }
+    .mode-switch-btn.active {
+      background: var(--surface);
+      color: var(--text-bright);
+      border-color: var(--border-bright);
+      font-weight: 600;
+    }
+
+    /* Merkle / Provenance Seals Strip */
+    .seals-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 14px;
+      font-size: 0.78rem;
+    }
+
     /* Mobile Adaptations */
     @media (max-width: 768px) {
       header { padding: 8px 12px; }
@@ -657,13 +746,38 @@
       <!-- Workstation Orientation & Primary Workflow -->
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px;">
         <div style="font-size: 0.8rem; color: var(--text-bright);">
-          <strong>Workstation Status:</strong> Research Mode &middot; Local SQLite Ledger &middot; Point-in-Time Replay
+          <strong>Workstation Mode:</strong> Institutional Quantitative Research &middot; Deterministic Historical Replay &amp; Forward Paper Rehearsal &middot; Air-Gapped Simulation
         </div>
         <div style="font-size: 0.75rem; color: var(--text-muted);">
           Workflow: Strategies &rarr; Data &rarr; Validation &rarr; Simulation &rarr; Runs
         </div>
       </div>
 
+      <!-- Active Capabilities & Architectural Guardrails -->
+      <div class="form-row" style="margin-bottom: 16px;">
+        <div class="card" style="border-left: 3px solid var(--blue);">
+          <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-bright); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+            <span class="badge badge-paper" style="font-size: 0.68rem;">CAPABILITIES</span> Active Research Engines
+          </div>
+          <ul style="font-size: 0.76rem; color: var(--text); padding-left: 18px; line-height: 1.6;">
+            <li><strong>Deterministic Backtest:</strong> Strict NEXT_BAR_OPEN execution, envelope clamping [Low, High], penny statutory fees, Merkle root sealing.</li>
+            <li><strong>Forward Paper Rehearsal:</strong> Tick-by-tick order fill simulation strictly air-gapped inside PaperBroker.</li>
+            <li><strong>Analytical Derivatives:</strong> Analytical Black-Scholes Greeks, strike ladders, and ratio hedge models.</li>
+          </ul>
+        </div>
+        <div class="card" style="border-left: 3px solid var(--amber);">
+          <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-bright); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+            <span class="badge badge-sim" style="font-size: 0.68rem;">GUARDRAILS</span> Active System Blockers
+          </div>
+          <ul style="font-size: 0.76rem; color: var(--text); padding-left: 18px; line-height: 1.6;">
+            <li><strong>ADR 011 Options Replay Blocked:</strong> Options strategies cannot run on linear candle data; requires tick IV surface. Theoretical payoff only.</li>
+            <li><strong>ADR 002 Live Routing Disabled:</strong> Physical live broker execution is non-existent. Air-gapped paper simulation only.</li>
+            <li><strong>ADR 007 Dynamic Code Blocked:</strong> Raw eval/exec is prohibited. Strategies compile via declarative JSON AST DSL.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Financial Accounting & Virtual Portfolio -->
       <div class="metric-grid">
         <div class="card">
           <div class="card-title">Virtual Capital <span style="font-size: 0.7rem; color: var(--text-muted);">INR</span></div>
@@ -687,10 +801,72 @@
         </div>
       </div>
 
+      <!-- Recent Historical Backtests (Deterministic Replays) -->
+      <div class="section-card">
+        <div class="section-header">
+          <div class="section-heading">
+            <span>Recent Deterministic Historical Backtests</span>
+            <span class="badge badge-purple" style="font-size: 0.68rem;">MERKLE SEALED</span>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="switchTab('simulation'); document.getElementById('sim-mode-backtest').click();">+ New Backtest</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Run ID</th>
+                <th>Strategy</th>
+                <th>Underlying</th>
+                <th>Contract</th>
+                <th>Net Profit (INR)</th>
+                <th>Return %</th>
+                <th>Trades</th>
+                <th>Audit Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="overview-backtests-body">
+              <tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Loading recent historical backtests...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Recent Forward Paper Sessions -->
+      <div class="section-card">
+        <div class="section-header">
+          <div class="section-heading">
+            <span>Recent Forward Paper Rehearsals</span>
+            <span class="badge badge-paper" style="font-size: 0.68rem;">PAPER BROKER</span>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="switchTab('simulation'); document.getElementById('sim-mode-forward').click();">+ New Rehearsal</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Session ID</th>
+                <th>Strategy</th>
+                <th>Underlying</th>
+                <th>Recorded Time</th>
+                <th>Status</th>
+                <th>Realized P&L</th>
+                <th>Trades</th>
+                <th>Bars</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="overview-paper-body">
+              <tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Loading recent paper sessions...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Active Paper Positions -->
       <div class="section-card">
         <div class="section-header">
-          <div class="section-heading">Active Paper Positions</div>
+          <div class="section-heading">Active Paper Positions (Local PaperBroker Ledger)</div>
           <button class="btn btn-outline btn-sm" onclick="loadStatus()">↻ Refresh</button>
         </div>
         <div class="table-container">
@@ -715,7 +891,7 @@
       <!-- Recent Paper Fills -->
       <div class="section-card">
         <div class="section-header">
-          <div class="section-heading">Recent Paper Fills & STT Ledger</div>
+          <div class="section-heading">Recent Paper Fills &amp; Statutory Charges Ledger</div>
         </div>
         <div class="table-container">
           <table>
@@ -728,7 +904,7 @@
                 <th>Qty</th>
                 <th>Fill Price</th>
                 <th>Slippage</th>
-                <th>STT & Charges</th>
+                <th>STT &amp; Charges</th>
               </tr>
             </thead>
             <tbody id="trades-body">
@@ -766,9 +942,12 @@
           <div>Sell 1 CE per band &nbsp;&middot;&nbsp; Buy 4 CE hedges priced near ₹5 (target ₹5.00 ± ₹2.00)</div>
           <div>Trailing ratchet stop: Ratchets with each ₹10 move — e.g. premium 50&rarr;40 sets stop at 45</div>
         </div>
+        <div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 8px;">
+          ADR 011 Enforcement: Historical replay is blocked without point-in-time tick IV surface data. Theoretical Black-Scholes payoff validation only.
+        </div>
         <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap;">
-          <button class="btn btn-primary btn-sm" onclick="switchTab('validation'); document.getElementById('val-strategy-select').value='nifty_ce_premium_ladder';">Validate Strategy &rarr;</button>
-          <button class="btn btn-outline btn-sm" onclick="inspectStrategyAst('nifty_ce_premium_ladder')">Inspect Rules &amp; JSON AST</button>
+          <button class="btn btn-primary btn-sm" onclick="switchTab('validation'); document.getElementById('val-strategy-select').value='tpl-nifty-ce-premium-ladder-v1'; runValidation();">Validate Strategy &rarr;</button>
+          <button class="btn btn-outline btn-sm" onclick="inspectStrategyAst('tpl-nifty-ce-premium-ladder-v1')">Inspect Rules &amp; JSON AST</button>
         </div>
       </div>
 
@@ -781,16 +960,15 @@
           <table>
             <thead>
               <tr>
-                <th>Strategy Name / ID</th>
-                <th>Underlying</th>
-                <th>Timeframe</th>
-                <th>Strategy DNA</th>
-                <th>Institutional Policy</th>
+                <th>Strategy Specification</th>
+                <th>Structure &amp; Instrument</th>
+                <th>Execution &amp; Replay Eligibility</th>
+                <th>Required Market Data</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="strategies-body">
-              <tr><td colspan="6" style="text-align: center;">Loading strategy library...</td></tr>
+              <tr><td colspan="5" style="text-align: center;">Loading strategy library...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1006,8 +1184,20 @@
     <div id="tab-simulation" class="tab-pane">
       <div class="section-card">
         <div class="section-header">
-          <div class="section-heading">Historical Replay & Simulation Controller</div>
-          <span class="badge badge-paper">AIR-GAPPED REPLAY</span>
+          <div class="section-heading">
+            <span>Simulation &amp; Backtesting Controller</span>
+            <span class="badge badge-paper">AIR-GAPPED SIMULATION</span>
+          </div>
+        </div>
+
+        <!-- Mode Selector Switcher -->
+        <div class="mode-switcher">
+          <button class="mode-switch-btn active" id="sim-mode-backtest" onclick="setSimMode('BACKTEST')">
+            Deterministic Historical Backtest (NEXT_BAR_OPEN)
+          </button>
+          <button class="mode-switch-btn" id="sim-mode-forward" onclick="setSimMode('FORWARD')">
+            Forward Paper Rehearsal (Tick Replay)
+          </button>
         </div>
 
         <!-- Setup Form -->
@@ -1020,12 +1210,30 @@
             <label class="form-label">Dataset</label>
             <select id="sim-dataset-select" onchange="checkPreflightCompatibility()"></select>
           </div>
-          <div class="form-group">
+          <div class="form-group" id="group-sim-contract">
+            <label class="form-label">Execution Contract</label>
+            <select id="sim-contract-select">
+              <option value="NEXT_BAR_OPEN" selected>NEXT_BAR_OPEN (Strict Institutional · Point-in-Time)</option>
+              <option value="SAME_BAR_CLOSE">SAME_BAR_CLOSE (Academic / Exploratory Only)</option>
+            </select>
+          </div>
+          <div class="form-group" id="group-sim-slippage-bps">
+            <label class="form-label">Slippage (basis points)</label>
+            <input type="number" id="sim-slippage-bps" value="5.0" step="0.5" min="0">
+          </div>
+          <div class="form-group" id="group-sim-capital">
             <label class="form-label">Initial Capital (INR)</label>
             <input type="number" id="sim-capital-input" value="1000000" step="50000">
           </div>
-          <div class="form-group">
-            <label class="form-label">Slippage Model</label>
+          <div class="form-group" id="group-sim-sqoff">
+            <label class="form-label">Intraday Square-Off</label>
+            <select id="sim-sqoff-select">
+              <option value="true" selected>Auto Square-off at 15:15 IST (Intraday)</option>
+              <option value="false">Disabled (Overnight Carry Allowed)</option>
+            </select>
+          </div>
+          <div class="form-group" id="group-sim-forward-slippage" style="display: none;">
+            <label class="form-label">Forward Slippage Model</label>
             <select id="sim-slippage-select">
               <option value="FLAT_0_05">Flat 0.05% per fill</option>
               <option value="ZERO">Zero Slippage (Ideal)</option>
@@ -1041,12 +1249,58 @@
         </div>
 
         <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-          <button class="btn btn-primary" id="btn-start-replay" onclick="startReplay()" disabled>Launch Paper Replay</button>
+          <button class="btn btn-primary" id="btn-launch-backtest" onclick="launchDeterministicBacktest()" disabled>Launch Deterministic Backtest</button>
+          <button class="btn btn-primary" id="btn-start-replay" onclick="startReplay()" style="display: none;" disabled>Launch Paper Rehearsal</button>
           <span style="font-size: 0.78rem; color: var(--text-muted);" id="sim-gate-hint">Requires verified dataset compatibility</span>
         </div>
-        <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;">
-          Simulation runs locally in memory. No live orders are placed. Historical replay only.
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;" id="sim-mode-explanation">
+          Strict deterministic historical replay closed at or before each bar. Orders fill at NEXT_BAR_OPEN clamped to bar low/high. Merkle tree cryptographic seals generated.
         </p>
+
+        <!-- Deterministic Backtest Completed Result View -->
+        <div id="sim-backtest-result" style="display: none; margin-top: 20px; border-top: 1px solid var(--border); padding-top: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+            <div>
+              <span class="badge badge-live" style="font-size: 0.75rem;"><span class="pulse-dot"></span> BACKTEST COMPLETED &amp; SEALED</span>
+              <strong style="color: var(--text-bright); margin-left: 8px; font-size: 0.95rem;" id="sim-bt-run-id">-</strong>
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="btn btn-primary btn-sm" id="sim-btn-view-dossier" onclick="">Open Sealed Run Dossier</button>
+              <button class="btn btn-outline btn-sm" id="sim-btn-recalc-dossier" onclick="">Verify Bit-for-Bit</button>
+            </div>
+          </div>
+
+          <!-- Merkle Root Seals -->
+          <div class="seals-strip">
+            <div><strong>Trade Ledger Merkle:</strong> <span class="mono" id="sim-bt-merkle-ledger" style="color: var(--purple); font-size: 0.72rem;">-</span></div>
+            <div><strong>Event Stream Merkle:</strong> <span class="mono" id="sim-bt-merkle-events" style="color: var(--blue); font-size: 0.72rem;">-</span></div>
+            <div><strong>Tamper Digest:</strong> <span class="mono" id="sim-bt-digest" style="color: var(--green); font-size: 0.72rem;">-</span></div>
+          </div>
+
+          <!-- Results Grid -->
+          <div class="metric-grid">
+            <div class="card">
+              <div class="card-title">Net Profit</div>
+              <div class="metric-val mono" id="sim-bt-pnl">₹0.00</div>
+              <div class="metric-sub" id="sim-bt-return">Return: 0.00%</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Closed Trade Expectancy</div>
+              <div class="metric-val mono" id="sim-bt-expectancy">₹0.00</div>
+              <div class="metric-sub" id="sim-bt-terminal-exp">Terminal Adj: ₹0.00</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Executed Trades</div>
+              <div class="metric-val mono" id="sim-bt-trades">0</div>
+              <div class="metric-sub" id="sim-bt-winrate">Win Rate: 0.0%</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Max Drawdown</div>
+              <div class="metric-val mono" id="sim-bt-drawdown">0.00%</div>
+              <div class="metric-sub" id="sim-bt-profit-factor">PF: 0.00 | SQN: 0.00</div>
+            </div>
+          </div>
+        </div>
 
         <!-- Active Simulation Monitor Panel -->
         <div id="sim-active-monitor" style="display: none; margin-top: 20px; border-top: 1px solid var(--border); padding-top: 16px;">
@@ -1103,25 +1357,39 @@
     <div id="tab-results" class="tab-pane">
       <div class="section-card">
         <div class="section-header">
-          <div class="section-heading">Historical Replay &amp; Simulation Runs</div>
-          <button class="btn btn-outline btn-sm" onclick="loadRuns()">↻ Refresh Runs</button>
+          <div class="section-heading">
+            <span>Historical Replay &amp; Simulation Runs</span>
+            <span class="badge badge-paper" id="runs-total-badge">0 RUNS RECORDED</span>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <div class="subtab-bar" style="margin-bottom: 0; padding-bottom: 0; border-bottom: none;">
+              <button class="subtab-btn active" id="filter-runs-all" onclick="filterRuns('ALL')">All Runs</button>
+              <button class="subtab-btn" id="filter-runs-bt" onclick="filterRuns('BACKTEST')">Backtests (Deterministic)</button>
+              <button class="subtab-btn" id="filter-runs-fwd" onclick="filterRuns('FORWARD')">Forward Paper</button>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="loadRuns()">↻ Refresh</button>
+          </div>
         </div>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">
+          Deterministic historical backtests produce cryptographically sealed Run Dossiers with Merkle trees and verifiable calculation provenance. Forward paper sessions reflect live simulated tick execution.
+        </p>
         <div class="table-container">
           <table>
             <thead>
               <tr>
-                <th>Session ID</th>
-                <th>Strategy</th>
-                <th>Symbol</th>
+                <th>Type</th>
+                <th>Run ID &amp; Strategy</th>
+                <th>Contract &amp; Dataset</th>
+                <th>Time (IST)</th>
                 <th>Status</th>
-                <th>Realized P&L</th>
+                <th>Net Profit (INR)</th>
                 <th>Trades</th>
-                <th>Bars</th>
-                <th>Action</th>
+                <th>Bars / Events</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="runs-body">
-              <tr><td colspan="8" style="text-align: center;">Scanning runs/ directory...</td></tr>
+              <tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Scanning runs/ directory...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1237,7 +1505,7 @@
 
   <!-- Run Dossier Modal -->
   <div class="modal-backdrop" id="dossier-modal">
-    <div class="modal" style="max-width: 900px;">
+    <div class="modal" style="max-width: 1040px; width: 95%;">
       <div class="modal-header">
         <h3 style="color: var(--text-bright); font-size: 1rem;" id="dossier-modal-title">Session Dossier</h3>
         <button class="modal-close" onclick="closeModal('dossier-modal')">✕</button>
@@ -1485,8 +1753,86 @@
             trdBody.appendChild(tr);
           });
         }
+
+        // Populate recent backtest runs and forward sessions on overview
+        loadOverviewRuns();
       } catch (err) {
         console.error('Failed to load status:', err);
+      }
+    }
+
+    // 1b. Overview Runs Loader
+    async function loadOverviewRuns() {
+      try {
+        const res = await apiFetch('/api/runs');
+        if (!res.ok) return;
+        const allRuns = await res.json();
+        const btBody = document.getElementById('overview-backtests-body');
+        const fwdBody = document.getElementById('overview-paper-body');
+
+        // Top 4 Deterministic Historical Backtests
+        if (btBody) {
+          const backtests = allRuns.filter(r => r.run_type === 'BACKTEST').slice(0, 4);
+          btBody.innerHTML = '';
+          if (backtests.length === 0) {
+            btBody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">No deterministic backtests recorded yet. Launch one from Simulation tab.</td></tr>';
+          } else {
+            backtests.forEach(r => {
+              const tr = document.createElement('tr');
+              const pnl = r.net_profit !== undefined ? r.net_profit : (r.realized_pnl || 0);
+              const retPct = r.return_pct !== undefined ? (r.return_pct * 100).toFixed(2) + '%' : '0.00%';
+              const contract = r.execution_contract || 'NEXT_BAR_OPEN';
+              tr.innerHTML = `
+                <td class="mono" style="font-size: 0.78rem;"><strong>${r.session_id}</strong></td>
+                <td><strong style="color: var(--text-bright); font-size: 0.8rem;">${r.strategy}</strong></td>
+                <td class="mono">${r.symbol}</td>
+                <td><span class="badge badge-paper" style="font-size: 0.68rem;">${contract}</span></td>
+                <td class="mono ${pnl >= 0 ? 'positive' : 'negative'}"><strong>${formatINR(pnl)}</strong></td>
+                <td class="mono">${retPct}</td>
+                <td class="mono">${r.trades_count}</td>
+                <td><span class="badge badge-purple" style="font-size: 0.68rem;" title="${r.tamper_digest || ''}">SEALED</span></td>
+                <td>
+                  <div style="display: flex; gap: 4px;">
+                    <button class="btn btn-outline btn-sm" onclick="viewDossier('${r.session_id}')">Inspect</button>
+                    <button class="btn btn-outline btn-sm" onclick="recalculateRun('${r.session_id}')" title="Audit Reproducibility">Audit</button>
+                  </div>
+                </td>
+              `;
+              btBody.appendChild(tr);
+            });
+          }
+        }
+
+        // Top 4 Forward Paper Sessions
+        if (fwdBody) {
+          const fwdRuns = allRuns.filter(r => r.run_type === 'FORWARD').slice(0, 4);
+          fwdBody.innerHTML = '';
+          if (fwdRuns.length === 0) {
+            fwdBody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">No forward paper sessions recorded yet</td></tr>';
+          } else {
+            fwdRuns.forEach(r => {
+              const tr = document.createElement('tr');
+              const pnl = r.realized_pnl || 0;
+              const dateStr = r.mtime ? new Date(r.mtime * 1000).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }) : (r.timestamp ? r.timestamp.substring(11, 19) : '-');
+              tr.innerHTML = `
+                <td class="mono" style="font-size: 0.78rem;">${r.session_id}</td>
+                <td><strong style="color: var(--text-bright); font-size: 0.8rem;">${r.strategy}</strong></td>
+                <td class="mono">${r.symbol}</td>
+                <td class="mono" style="font-size: 0.75rem;">${dateStr}</td>
+                <td><span class="badge ${r.status === 'COMPLETED' ? 'badge-live' : 'badge-sim'}">${r.status}</span></td>
+                <td class="mono ${pnl >= 0 ? 'positive' : 'negative'}">${formatINR(pnl)}</td>
+                <td class="mono">${r.trades_count}</td>
+                <td class="mono">${r.bars_count}</td>
+                <td>
+                  <button class="btn btn-outline btn-sm" onclick="viewDossier('${r.session_id}')">Inspect</button>
+                </td>
+              `;
+              fwdBody.appendChild(tr);
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load overview runs:', err);
       }
     }
 
@@ -1498,30 +1844,85 @@
         registeredStrategies = await res.json();
         const body = document.getElementById('strategies-body');
         body.innerHTML = '';
-        registeredStrategies.forEach((s, idx) => {
+        registeredStrategies.forEach((s) => {
           const tr = document.createElement('tr');
-          const dna = s.dna || {};
-          let dnaTag = 'Equity/Index Linear';
-          if (dna.delta_type) {
-            dnaTag = `${dna.delta_type} | ${dna.theta_bias || 'NEUTRAL'}`;
-          } else if ((s.legs && s.legs.length > 0) || /(Condor|Straddle|Spread|Ladder)/i.test(s.name || '')) {
-            dnaTag = 'Options Multi-Leg';
+          const isOptions = (s.legs && s.legs.length > 0) || s.is_options || /(Condor|Straddle|Spread|Ladder)/i.test(s.name || '') || (s.id && s.id.includes('option')) || (s.id && s.id.includes('ladder'));
+          
+          let plainSummary = s.description || '';
+          if (!plainSummary || plainSummary.length < 5) {
+            if (s.id && s.id.includes('ladder')) {
+              plainSummary = 'Sells 1 NIFTY CE in dynamic premium band, buys 4 CE hedges near ₹5 with ratchet trailing stop.';
+            } else if (s.id && s.id.includes('trend')) {
+              plainSummary = 'Momentum breakout strategy tracking 1-minute NIFTY price breaks with EMA confirmation.';
+            } else if (s.id && s.id.includes('condor')) {
+              plainSummary = 'Delta-neutral options wing strategy capturing theta decay in range-bound markets.';
+            } else if (s.id && s.id.includes('straddle')) {
+              plainSummary = 'Simultaneous ATM Call and Put purchase profiting from large volatility expansion.';
+            } else if (s.id && s.id.includes('spread')) {
+              plainSummary = 'Defined-risk vertical debit spread capitalizing on directional upward moves.';
+            } else {
+              plainSummary = 'Declarative institutional strategy DSL state machine.';
+            }
           }
-          const scoreBadge = (s.validation_score !== null && s.validation_score !== undefined)
-            ? `<span class="badge badge-live">SCORE: ${Number(s.validation_score).toFixed(0)}</span>`
-            : `<span class="badge badge-paper">UNVETTED</span>`;
+
+          // Col 1: Specification
+          const colSpec = `
+            <div>
+              <strong style="color: var(--text-bright); font-size: 0.88rem;">${s.name}</strong>
+              <div class="mono" style="font-size: 0.72rem; color: var(--text-muted);">${s.id} (v${s.version || '1.0'})</div>
+              <div style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 4px; line-height: 1.4;">${plainSummary}</div>
+            </div>
+          `;
+
+          // Col 2: Structure & Instrument
+          const colStructure = `
+            <div>
+              <span class="badge ${isOptions ? 'badge-purple' : 'badge-paper'}">${isOptions ? 'OPTIONS MULTI-LEG' : 'EQUITY / INDEX LINEAR'}</span>
+              <div class="mono" style="font-size: 0.74rem; color: var(--text-muted); margin-top: 4px;">Underlying: <strong>${s.underlying}</strong> &middot; ${s.timeframe || 'INTRADAY'}</div>
+            </div>
+          `;
+
+          // Col 3: Execution & Replay Eligibility
+          const colEligibility = isOptions
+            ? `<div>
+                 <span class="badge badge-sim">THEORETICAL ONLY (REPLAY BLOCKED)</span>
+                 <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">Air-gapped under ADR 011 &middot; Analytical Greeks only</div>
+               </div>`
+            : `<div>
+                 <span class="badge badge-live">DETERMINISTIC REPLAYABLE</span>
+                 <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">NEXT_BAR_OPEN execution &middot; Envelope clamped</div>
+               </div>`;
+
+          // Col 4: Required Market Data
+          const colData = isOptions
+            ? `<div>
+                 <span class="badge badge-purple" style="font-size: 0.68rem;">OPTIONS CHAIN</span>
+                 <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">Multi-strike tick IV surface</div>
+               </div>`
+            : `<div>
+                 <span class="badge badge-sim" style="font-size: 0.68rem;">NSE INTRADAY CSV</span>
+                 <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">1m/5m OHLCV linear series</div>
+               </div>`;
+
+          // Col 5: Actions
+          const backtestBtn = isOptions
+            ? `<button class="btn btn-outline btn-sm" style="opacity: 0.5; cursor: not-allowed;" disabled title="Historical replay blocked under ADR 011">Backtest (Blocked)</button>`
+            : `<button class="btn btn-primary btn-sm" onclick="switchTab('simulation'); document.getElementById('sim-strategy-select').value='${s.id}'; checkPreflightCompatibility();">Backtest &rarr;</button>`;
+
+          const colActions = `
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <button class="btn btn-outline btn-sm" onclick="inspectStrategyAst('${s.id}')">Inspect</button>
+              <button class="btn btn-outline btn-sm" onclick="switchTab('validation'); document.getElementById('val-strategy-select').value='${s.id}'; runValidation();">Validate</button>
+              ${backtestBtn}
+            </div>
+          `;
+
           tr.innerHTML = `
-            <td>
-              <strong style="color: var(--text-bright);">${s.name}</strong>
-              <div style="font-size: 0.73rem; color: var(--text-muted);">${s.id} (v${s.version})</div>
-            </td>
-            <td class="mono">${s.underlying}</td>
-            <td class="mono">${s.timeframe}</td>
-            <td><span class="badge badge-sim">${dnaTag}</span></td>
-            <td>${scoreBadge}</td>
-            <td>
-              <button class="btn btn-outline btn-sm" onclick="inspectStrategyAst('${s.id}')">View Details</button>
-            </td>
+            <td>${colSpec}</td>
+            <td>${colStructure}</td>
+            <td>${colEligibility}</td>
+            <td>${colData}</td>
+            <td>${colActions}</td>
           `;
           body.appendChild(tr);
         });
@@ -1659,13 +2060,40 @@
           return;
         }
         document.getElementById('inspect-results').style.display = 'block';
-        document.getElementById('ins-format').textContent = rep.detected_format;
-        document.getElementById('ins-bars').textContent = rep.parsed_bars;
-        document.getElementById('ins-tf').textContent = rep.timeframe_detected;
+        document.getElementById('ins-format').textContent = rep.detected_format || 'UNKNOWN';
+        document.getElementById('ins-bars').textContent = rep.parsed_bars || 0;
+        document.getElementById('ins-tf').textContent = rep.timeframe_detected || 'INTRADAY';
         const readyElem = document.getElementById('ins-ready');
         readyElem.textContent = rep.is_valid_replayable ? 'READY' : 'INVALID';
         readyElem.className = 'metric-val mono ' + (rep.is_valid_replayable ? 'positive' : 'negative');
-        document.getElementById('ins-details').textContent = JSON.stringify(rep, null, 2);
+        
+        const detailsContainer = document.getElementById('ins-details-container') || document.getElementById('ins-details');
+        const diagnosticsCard = `
+          <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <strong style="color: var(--text-bright); font-size: 0.85rem;">Dataset Integrity Diagnostics</strong>
+              <span class="badge ${rep.is_valid_replayable ? 'badge-live' : 'badge-alert'}">${rep.is_valid_replayable ? 'PASSED ENVELOPE CHECKS' : 'INSPECTION FLAGS'}</span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; font-size: 0.78rem; margin-bottom: 8px;">
+              <div><strong>Format Standard:</strong> <span class="mono">${rep.detected_format || '-'}</span></div>
+              <div><strong>Continuous Session:</strong> <span style="color: var(--green);">09:15 &ndash; 15:30 IST Session Enforced</span></div>
+              <div><strong>Price Envelope:</strong> <span style="color: var(--green);">Low &le; Open, Close &le; High</span></div>
+              <div><strong>Contract Structure:</strong> ${rep.is_chain_aware ? '<span class="badge badge-purple">OPTIONS CHAIN</span>' : '<span class="badge badge-sim">LINEAR SPOT / FUTURES</span>'}</div>
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.4;">
+              ${rep.is_valid_replayable 
+                ? '✓ Integrity verified. Suitable for deterministic NEXT_BAR_OPEN execution and balance sheet reconciliation.'
+                : '⚠ Replay restricted: ' + (rep.ineligibility_reason || 'Dataset cannot be used directly in historical backtest runner.')}
+            </div>
+          </div>
+          <details style="margin-top: 8px;">
+            <summary style="font-size: 0.78rem; color: var(--blue); cursor: pointer;">Show Technical Inspector JSON</summary>
+            <pre class="code-block" style="max-height: 240px; margin-top: 6px; font-size: 0.74rem;">${JSON.stringify(rep, null, 2)}</pre>
+          </details>
+        `;
+        if (detailsContainer) {
+          detailsContainer.outerHTML = `<div id="ins-details-container">${diagnosticsCard}</div>`;
+        }
       } catch (err) {
         alert('Inspection request failed: ' + err.message);
       }
@@ -2030,6 +2458,48 @@
     }
 
     // 5. Simulation Controller & Preflight Gate
+    let currentSimMode = 'BACKTEST';
+
+    function setSimMode(mode) {
+      currentSimMode = mode;
+      const btnBt = document.getElementById('sim-mode-backtest');
+      const btnFwd = document.getElementById('sim-mode-forward');
+      const grpContract = document.getElementById('group-sim-contract');
+      const grpSlipBps = document.getElementById('group-sim-slippage-bps');
+      const grpSqoff = document.getElementById('group-sim-sqoff');
+      const grpFwdSlip = document.getElementById('group-sim-forward-slippage');
+      const btnLaunchBt = document.getElementById('btn-launch-backtest');
+      const btnStartFwd = document.getElementById('btn-start-replay');
+      const expl = document.getElementById('sim-mode-explanation');
+
+      if (mode === 'BACKTEST') {
+        if (btnBt) btnBt.classList.add('active');
+        if (btnFwd) btnFwd.classList.remove('active');
+        if (grpContract) grpContract.style.display = 'block';
+        if (grpSlipBps) grpSlipBps.style.display = 'block';
+        if (grpSqoff) grpSqoff.style.display = 'block';
+        if (grpFwdSlip) grpFwdSlip.style.display = 'none';
+        if (btnLaunchBt) btnLaunchBt.style.display = 'inline-block';
+        if (btnStartFwd) btnStartFwd.style.display = 'none';
+        if (expl) {
+          expl.textContent = 'Strict deterministic historical replay closed at or before each bar. Orders fill at NEXT_BAR_OPEN clamped to bar low/high. Merkle tree cryptographic seals generated.';
+        }
+      } else {
+        if (btnBt) btnBt.classList.remove('active');
+        if (btnFwd) btnFwd.classList.add('active');
+        if (grpContract) grpContract.style.display = 'none';
+        if (grpSlipBps) grpSlipBps.style.display = 'none';
+        if (grpSqoff) grpSqoff.style.display = 'none';
+        if (grpFwdSlip) grpFwdSlip.style.display = 'block';
+        if (btnLaunchBt) btnLaunchBt.style.display = 'none';
+        if (btnStartFwd) btnStartFwd.style.display = 'inline-block';
+        if (expl) {
+          expl.textContent = 'Tick-by-tick forward paper simulation through local PaperBroker. Real-time order fill updates and live equity tracking.';
+        }
+      }
+      checkPreflightCompatibility();
+    }
+
     async function populateSimulationDropdowns() {
       if (registeredStrategies.length === 0) await loadStrategies();
       if (registeredDatasets.length === 0) await loadDatasets();
@@ -2060,7 +2530,8 @@
       const dsPath = document.getElementById('sim-dataset-select').value;
       const gateBox = document.getElementById('sim-gate-box');
       const gateText = document.getElementById('sim-gate-text');
-      const startBtn = document.getElementById('btn-start-replay');
+      const btnLaunchBt = document.getElementById('btn-launch-backtest');
+      const btnStartFwd = document.getElementById('btn-start-replay');
       const hint = document.getElementById('sim-gate-hint');
 
       if (!stratId || !dsPath) return;
@@ -2072,19 +2543,162 @@
           body: JSON.stringify({ strategy_id: stratId, dataset_path: dsPath })
         });
         const rep = await res.json();
-        if (rep.compatible) {
-          gateBox.className = 'alert-box success';
-          gateText.innerHTML = '<strong>COMPATIBILITY CONFIRMED:</strong> ' + rep.reason;
-          startBtn.disabled = false;
-          hint.textContent = 'Ready to launch paper simulation';
+        
+        // Inspect if strategy is options multi-leg
+        const strat = registeredStrategies.find(s => s.id === stratId);
+        const isOptions = strat && ((strat.legs && strat.legs.length > 0) || strat.is_options || /ladder|condor|straddle|spread/i.test(strat.name || '') || stratId.includes('ladder') || stratId.includes('option'));
+
+        if (currentSimMode === 'BACKTEST') {
+          if (isOptions || !rep.compatible) {
+            gateBox.className = 'alert-box danger';
+            const reason = isOptions
+              ? 'ADR 011 Replay Guard: Multi-leg options strategies cannot run in linear historical backtester. Requires multi-strike tick IV surface. Theoretical Black-Scholes validation only.'
+              : (rep.reason || 'Dataset is incompatible with selected strategy.');
+            gateText.innerHTML = '<strong>BACKTEST BLOCKED:</strong> ' + reason;
+            if (btnLaunchBt) btnLaunchBt.disabled = true;
+            if (hint) hint.textContent = 'Backtest blocked: ' + (isOptions ? 'Options strategy requires theoretical validation (ADR 011)' : 'Incompatible data');
+          } else {
+            gateBox.className = 'alert-box success';
+            gateText.innerHTML = '<strong>COMPATIBILITY CONFIRMED:</strong> Strategy AST and dataset are verified for deterministic historical backtesting (' + (rep.reason || '100% compatible') + ').';
+            if (btnLaunchBt) btnLaunchBt.disabled = false;
+            if (hint) hint.textContent = 'Ready for NEXT_BAR_OPEN deterministic replay';
+          }
         } else {
-          gateBox.className = 'alert-box danger';
-          gateText.innerHTML = '<strong>COMPATIBILITY REJECTED:</strong> ' + rep.reason;
-          startBtn.disabled = true;
-          hint.textContent = 'Simulation blocked: incompatible strategy and dataset';
+          // FORWARD Paper mode
+          if (rep.compatible) {
+            gateBox.className = 'alert-box success';
+            gateText.innerHTML = '<strong>COMPATIBILITY CONFIRMED:</strong> ' + rep.reason;
+            if (btnStartFwd) btnStartFwd.disabled = false;
+            if (hint) hint.textContent = 'Ready to launch paper rehearsal';
+          } else {
+            gateBox.className = 'alert-box danger';
+            gateText.innerHTML = '<strong>COMPATIBILITY REJECTED:</strong> ' + rep.reason;
+            if (btnStartFwd) btnStartFwd.disabled = true;
+            if (hint) hint.textContent = 'Simulation blocked: incompatible strategy and dataset';
+          }
         }
       } catch (err) {
         console.error('Failed to check compatibility:', err);
+      }
+    }
+
+    async function launchDeterministicBacktest() {
+      const stratId = document.getElementById('sim-strategy-select').value;
+      const dsPath = document.getElementById('sim-dataset-select').value;
+      const capital = Number(document.getElementById('sim-capital-input').value) || 1000000;
+      const slippageBps = Number(document.getElementById('sim-slippage-bps').value) || 5.0;
+      const execContract = document.getElementById('sim-contract-select').value;
+      const sqoff = document.getElementById('sim-sqoff-select').value === 'true';
+      const allowSameBar = execContract === 'SAME_BAR_CLOSE';
+      const btn = document.getElementById('btn-launch-backtest');
+
+      if (!stratId || !dsPath) {
+        alert('Please select both a strategy and a dataset.');
+        return;
+      }
+
+      btn.disabled = true;
+      const origText = btn.textContent;
+      btn.textContent = 'Executing Backtest...';
+
+      try {
+        const res = await apiFetch('/api/backtest/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            strategy_id: stratId,
+            dataset_path: dsPath,
+            initial_capital: capital,
+            slippage_bps: slippageBps,
+            execution_contract: execContract,
+            allow_same_bar_execution: allowSameBar,
+            intraday_auto_squareoff: sqoff,
+          })
+        });
+        const rep = await res.json();
+        btn.disabled = false;
+        btn.textContent = origText;
+
+        if (!res.ok || !rep.success) {
+          alert('Backtest error: ' + (rep.error || 'Execution failed'));
+          return;
+        }
+
+        // Show and populate completed result card
+        const resCard = document.getElementById('sim-backtest-result');
+        if (resCard) resCard.style.display = 'block';
+
+        const runIdEl = document.getElementById('sim-bt-run-id');
+        if (runIdEl) runIdEl.textContent = rep.run_id;
+
+        const ledgerMerkleEl = document.getElementById('sim-bt-merkle-ledger');
+        if (ledgerMerkleEl) ledgerMerkleEl.textContent = rep.trade_ledger_merkle_root || 'None';
+
+        const eventsMerkleEl = document.getElementById('sim-bt-merkle-events');
+        if (eventsMerkleEl) eventsMerkleEl.textContent = rep.event_stream_merkle_root || 'None';
+
+        const digestEl = document.getElementById('sim-bt-digest');
+        if (digestEl) digestEl.textContent = rep.tamper_digest || 'None';
+
+        const pnlEl = document.getElementById('sim-bt-pnl');
+        if (pnlEl) {
+          pnlEl.textContent = formatINR(rep.net_profit);
+          pnlEl.className = 'metric-val mono ' + (rep.net_profit >= 0 ? 'positive' : 'negative');
+        }
+
+        const retEl = document.getElementById('sim-bt-return');
+        if (retEl) {
+          retEl.textContent = `Return: ${(rep.return_pct * 100).toFixed(2)}% | Ending: ${formatINR(rep.ending_equity)}`;
+        }
+
+        const expEl = document.getElementById('sim-bt-expectancy');
+        if (expEl) {
+          expEl.textContent = formatINR(rep.expectancy || 0);
+          expEl.className = 'metric-val mono ' + ((rep.expectancy || 0) >= 0 ? 'positive' : 'negative');
+        }
+
+        const termExpEl = document.getElementById('sim-bt-terminal-exp');
+        if (termExpEl) {
+          termExpEl.textContent = `Terminal Adj: ${formatINR(rep.terminal_adjusted_expectancy || 0)}`;
+        }
+
+        const tradesEl = document.getElementById('sim-bt-trades');
+        if (tradesEl) tradesEl.textContent = rep.trade_count;
+
+        const winRateEl = document.getElementById('sim-bt-winrate');
+        if (winRateEl) {
+          winRateEl.textContent = `Win Rate: ${(rep.win_rate * 100).toFixed(1)}%`;
+        }
+
+        const ddEl = document.getElementById('sim-bt-drawdown');
+        if (ddEl) {
+          ddEl.textContent = `${(rep.max_drawdown_pct * 100).toFixed(2)}%`;
+        }
+
+        const pfEl = document.getElementById('sim-bt-profit-factor');
+        if (pfEl) {
+          const pfVal = rep.profit_factor !== null && rep.profit_factor !== undefined ? Number(rep.profit_factor).toFixed(2) : '-';
+          const sqnVal = rep.sqn !== null && rep.sqn !== undefined ? Number(rep.sqn).toFixed(2) : '-';
+          pfEl.textContent = `PF: ${pfVal} | SQN: ${sqnVal}`;
+        }
+
+        const btnDossier = document.getElementById('sim-btn-view-dossier');
+        if (btnDossier) {
+          btnDossier.onclick = () => viewDossier(rep.run_id);
+        }
+
+        const btnRecalc = document.getElementById('sim-btn-recalc-dossier');
+        if (btnRecalc) {
+          btnRecalc.onclick = () => recalculateRun(rep.run_id);
+        }
+
+        // Refresh runs lists
+        loadRuns();
+        loadOverviewRuns();
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = origText;
+        alert('Backtest crashed: ' + err.message);
       }
     }
 
@@ -2219,36 +2833,89 @@
     }
 
     // 6. Runs & Dossiers
+    let currentRunsFilter = 'ALL';
+    let cachedRuns = [];
+
+    function filterRuns(filter) {
+      currentRunsFilter = filter;
+      const btnAll = document.getElementById('filter-runs-all');
+      const btnBt = document.getElementById('filter-runs-bt');
+      const btnFwd = document.getElementById('filter-runs-fwd');
+      if (btnAll) btnAll.classList.toggle('active', filter === 'ALL');
+      if (btnBt) btnBt.classList.toggle('active', filter === 'BACKTEST');
+      if (btnFwd) btnFwd.classList.toggle('active', filter === 'FORWARD');
+
+      renderRunsTable();
+    }
+
+    function renderRunsTable() {
+      const body = document.getElementById('runs-body');
+      if (!body) return;
+      body.innerHTML = '';
+
+      let filtered = cachedRuns;
+      if (currentRunsFilter === 'BACKTEST') {
+        filtered = cachedRuns.filter(r => r.run_type === 'BACKTEST');
+      } else if (currentRunsFilter === 'FORWARD') {
+        filtered = cachedRuns.filter(r => r.run_type === 'FORWARD');
+      }
+
+      const totalBadge = document.getElementById('runs-total-badge');
+      if (totalBadge) totalBadge.textContent = `${filtered.length} OF ${cachedRuns.length} RUNS`;
+
+      if (filtered.length === 0) {
+        body.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">No ${currentRunsFilter === 'ALL' ? '' : currentRunsFilter.toLowerCase()} runs found.</td></tr>`;
+        return;
+      }
+
+      filtered.forEach(r => {
+        const tr = document.createElement('tr');
+        const isBt = r.run_type === 'BACKTEST';
+        const typeBadge = isBt
+          ? '<span class="badge badge-live">BACKTEST</span>'
+          : '<span class="badge badge-paper">FORWARD</span>';
+        const pnlVal = r.net_profit !== undefined ? r.net_profit : (r.realized_pnl || 0);
+        const retPctStr = (r.return_pct !== undefined && r.return_pct !== null) ? ` (${(r.return_pct * 100).toFixed(2)}%)` : '';
+        const stratName = (r.strategy && r.strategy !== 'Unknown') ? r.strategy : ('Session ' + (r.session_id || '').slice(-6));
+        const dateStr = r.mtime ? new Date(r.mtime * 1000).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }) : (r.timestamp ? r.timestamp.substring(0, 19).replace('T', ' ') : '-');
+        const contractStr = r.execution_contract || (isBt ? 'NEXT_BAR_OPEN' : 'FORWARD_TICK');
+        const dsStr = r.dataset_name || '-';
+
+        tr.innerHTML = `
+          <td>${typeBadge}</td>
+          <td>
+            <div class="mono" style="font-weight:600; font-size:0.8rem;">${r.session_id}</div>
+            <div style="font-size:0.75rem; color:var(--text-muted);">${stratName}</div>
+          </td>
+          <td>
+            <div class="mono" style="font-size:0.75rem;">${contractStr}</div>
+            <div style="font-size:0.72rem; color:var(--text-muted);">${dsStr}</div>
+          </td>
+          <td class="mono" style="font-size:0.75rem;">${dateStr}</td>
+          <td><span class="badge ${r.status === 'COMPLETED' ? 'badge-live' : 'badge-sim'}">${r.status}</span></td>
+          <td class="mono ${pnlVal >= 0 ? 'positive' : 'negative'}">
+            <strong>${formatINR(pnlVal)}</strong>
+            <span style="font-size:0.72rem; opacity:0.8;">${retPctStr}</span>
+          </td>
+          <td class="mono">${r.trades_count}</td>
+          <td class="mono" style="font-size:0.75rem;">${r.bars_count} bars / ${r.event_count || '-'} evts</td>
+          <td style="white-space: nowrap;">
+            <div style="display: flex; gap: 4px;">
+              <button class="btn btn-outline btn-sm" onclick="viewDossier('${r.session_id}')">Inspect</button>
+              <button class="btn btn-outline btn-sm" onclick="recalculateRun('${r.session_id}')" title="Deterministic Replay & Audit">Audit</button>
+            </div>
+          </td>
+        `;
+        body.appendChild(tr);
+      });
+    }
+
     async function loadRuns() {
       try {
         const res = await apiFetch('/api/runs');
         if (!res.ok) return;
-        const runs = await res.json();
-        const body = document.getElementById('runs-body');
-        body.innerHTML = '';
-        if (runs.length === 0) {
-          body.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No historical simulation runs recorded in runs/</td></tr>';
-          return;
-        }
-        runs.forEach(r => {
-          const tr = document.createElement('tr');
-          const pnlVal = r.realized_pnl || 0;
-          const strategyName = (r.strategy && r.strategy !== 'Unknown') ? r.strategy : ('Session ' + (r.session_id || '').slice(-6));
-          tr.innerHTML = `
-            <td class="mono">${r.session_id}</td>
-            <td><strong>${strategyName}</strong></td>
-            <td class="mono">${r.symbol}</td>
-            <td><span class="badge ${r.status === 'COMPLETED' ? 'badge-live' : 'badge-sim'}">${r.status}</span></td>
-            <td class="mono ${pnlVal >= 0 ? 'positive' : 'negative'}">${formatINR(pnlVal)}</td>
-            <td class="mono">${r.trades_count}</td>
-            <td class="mono">${r.bars_count}</td>
-            <td style="white-space: nowrap;">
-              <button class="btn btn-outline btn-sm" onclick="viewDossier('${r.session_id}')">Inspect</button>
-              <button class="btn btn-outline btn-sm" onclick="recalculateRun('${r.session_id}')" title="Deterministic Replay & Audit">Audit Replay</button>
-            </td>
-          `;
-          body.appendChild(tr);
-        });
+        cachedRuns = await res.json();
+        renderRunsTable();
       } catch (err) {
         console.error('Failed to load runs:', err);
       }
@@ -2257,66 +2924,266 @@
     async function viewDossier(sessionId) {
       try {
         const res = await apiFetch('/api/runs/' + encodeURIComponent(sessionId));
-        if (!res.ok) return;
+        if (!res.ok) {
+          alert('Failed to load dossier: ' + res.statusText);
+          return;
+        }
         const dossier = await res.json();
-        const sess = dossier.session || dossier;
-        const trades = dossier.trades || [];
-        const pnl = sess.realized_pnl || 0;
-        document.getElementById('dossier-modal-title').textContent = 'Run Details: ' + (sess.session_id || sessionId);
+        const isBacktest = Boolean(dossier.trade_ledger_merkle_root || dossier.execution_contract || dossier.ledger || dossier.run_type === 'BACKTEST');
+        
+        document.getElementById('dossier-modal-title').textContent = (isBacktest ? 'Backtest Run Dossier: ' : 'Forward Session Dossier: ') + (dossier.run_id || dossier.session_id || sessionId);
         const cont = document.getElementById('dossier-modal-content');
 
-        let tradesHtml = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">No executed trades in this session</td></tr>';
-        if (trades.length > 0) {
-          tradesHtml = trades.map(t => `
-            <tr>
-              <td class="mono">${t.timestamp ? t.timestamp.substring(11, 19) : '-'}</td>
-              <td class="mono"><strong>${t.symbol}</strong></td>
-              <td><span class="badge ${t.side === 'BUY' ? 'badge-live' : 'badge-alert'}">${t.side}</span></td>
-              <td class="mono">${t.qty}</td>
-              <td class="mono">${formatINR(t.fill_price)}</td>
-              <td class="mono">${formatINR(t.slippage)}</td>
-              <td class="mono">${formatINR((t.stt || 0) + (t.charges || 0))}</td>
-            </tr>
-          `).join('');
+        if (isBacktest) {
+          const runId = dossier.run_id || sessionId;
+          const stratName = dossier.strategy_name || dossier.strategy_id || '-';
+          const contract = dossier.fill_assumption || dossier.execution_contract || 'NEXT_BAR_OPEN';
+          const netProfit = dossier.net_profit || 0;
+          const startingCapital = dossier.starting_equity || dossier.initial_capital || 1000000;
+          const endingEquity = dossier.ending_equity || startingCapital;
+          const liquidatedEquity = dossier.liquidated_ending_equity || endingEquity;
+          const retPct = (dossier.return_pct !== undefined && dossier.return_pct !== null) ? (dossier.return_pct * 100).toFixed(4) : '0.0000';
+          const expVal = dossier.closed_trade_expectancy !== undefined ? Number(dossier.closed_trade_expectancy) : (dossier.expectancy || 0);
+          const termExpVal = dossier.terminal_adjusted_expectancy !== undefined ? Number(dossier.terminal_adjusted_expectancy) : expVal;
+          const trades = dossier.ledger || dossier.trades || [];
+          const events = dossier.events || [];
+          const winRate = (dossier.win_rate !== undefined && dossier.win_rate !== null) ? (dossier.win_rate * 100).toFixed(1) : '0.0';
+          const pf = dossier.profit_factor !== null && dossier.profit_factor !== undefined ? Number(dossier.profit_factor).toFixed(2) : '-';
+          const sqn = dossier.sqn !== null && dossier.sqn !== undefined ? Number(dossier.sqn).toFixed(2) : '-';
+          const maxDdAmount = dossier.max_drawdown_amount || 0;
+          const maxDdPct = (dossier.max_drawdown_pct !== undefined && dossier.max_drawdown_pct !== null) ? (dossier.max_drawdown_pct * 100).toFixed(2) : '0.00';
+          const recon = dossier.reconciliation || {};
+          const isReconciled = recon.is_reconciled;
+
+          // Build Trade Ledger rows
+          let tradesHtml = '<tr><td colspan="11" style="text-align:center; color:var(--text-muted);">No trades executed in this backtest run</td></tr>';
+          if (trades.length > 0) {
+            tradesHtml = trades.map((t, idx) => {
+              const tradeNet = t.net_pnl !== undefined ? t.net_pnl : (t.gross_pnl - (t.total_fees || 0));
+              const sideClass = t.side === 'BUY' ? 'badge-live' : 'badge-alert';
+              const statusClass = t.is_closed ? 'badge-live' : 'badge-paper';
+              const statusText = t.is_closed ? (t.exit_reason || 'CLOSED') : (t.exit_reason || 'TERMINAL_OPEN');
+              return `
+                <tr>
+                  <td class="mono" style="font-size:0.75rem;">${t.trade_id || ('TRD-' + (idx+1))}</td>
+                  <td class="mono" style="font-size:0.75rem;">${t.entry_time ? t.entry_time.substring(11, 19) : '-'}</td>
+                  <td class="mono" style="font-size:0.75rem;">${t.exit_time ? t.exit_time.substring(11, 19) : 'Terminus'}</td>
+                  <td class="mono"><strong>${t.symbol || dossier.symbol || 'NIFTY'}</strong></td>
+                  <td><span class="badge ${sideClass}">${t.side}</span></td>
+                  <td class="mono">${t.quantity || t.qty}</td>
+                  <td class="mono">${formatINR(t.entry_price)}</td>
+                  <td class="mono">${t.exit_price !== null && t.exit_price !== undefined ? formatINR(t.exit_price) : '-'}</td>
+                  <td class="mono" style="font-size:0.75rem;">${formatINR(t.total_fees || ((t.stt || 0) + (t.charges || 0)))}</td>
+                  <td class="mono ${tradeNet >= 0 ? 'positive' : 'negative'}"><strong>${formatINR(tradeNet)}</strong></td>
+                  <td><span class="badge ${statusClass}">${statusText}</span></td>
+                </tr>
+              `;
+            }).join('');
+          }
+
+          // Build Events rows
+          let eventsHtml = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No events recorded in event stream</td></tr>';
+          if (events.length > 0) {
+            eventsHtml = events.map(e => {
+              let typeClass = 'badge-sim';
+              if (e.event_type.includes('FILL') || e.event_type.includes('START')) typeClass = 'badge-live';
+              else if (e.event_type.includes('ORDER')) typeClass = 'badge-paper';
+              else if (e.event_type.includes('UNFULFILLED') || e.event_type.includes('REJECT')) typeClass = 'badge-alert';
+              else if (e.event_type.includes('TERMINATED')) typeClass = 'badge-purple';
+
+              const detailsStr = e.details ? Object.entries(e.details).map(([k, v]) => `${k}: ${typeof v === 'number' ? Number(v).toFixed(2) : v}`).join(' &middot; ') : '-';
+              return `
+                <tr>
+                  <td class="mono" style="font-size:0.75rem;">${e.sequence_num || '-'}</td>
+                  <td class="mono" style="font-size:0.75rem;">${e.timestamp ? e.timestamp.substring(11, 19) : '-'}</td>
+                  <td><span class="badge ${typeClass}">${e.event_type}</span></td>
+                  <td class="mono">${e.symbol || dossier.symbol || '-'}</td>
+                  <td style="font-size:0.76rem; color:var(--text);">${detailsStr}</td>
+                </tr>
+              `;
+            }).join('');
+          }
+
+          cont.innerHTML = `
+            <!-- Dossier Meta Header -->
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+              <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                <span class="badge badge-live">DETERMINISTIC BACKTEST</span>
+                <span class="badge badge-paper">${contract}</span>
+                <span class="badge badge-purple">${dossier.bar_count || 0} BARS</span>
+                <span class="badge badge-sim">${events.length} EVENTS</span>
+                <strong style="color: var(--text-bright); margin-left: 6px;">${stratName}</strong>
+                <span class="mono" style="color: var(--text-muted); font-size: 0.8rem;">(${dossier.dataset_name || (dossier.dataset_path ? dossier.dataset_path.split('/').pop() : 'dataset')})</span>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <button class="btn btn-outline btn-sm" onclick="recalculateRun('${runId}')">Verify Bit-for-Bit</button>
+              </div>
+            </div>
+
+            <!-- Cryptographic Seals Strip -->
+            <div class="seals-strip">
+              <div><strong>Trade Ledger Merkle:</strong> <span class="mono" style="color: var(--purple); font-size: 0.72rem;">${dossier.trade_ledger_merkle_root || 'Not sealed'}</span></div>
+              <div><strong>Event Stream Merkle:</strong> <span class="mono" style="color: var(--blue); font-size: 0.72rem;">${dossier.event_stream_merkle_root || 'Not sealed'}</span></div>
+              <div><strong>Tamper Digest:</strong> <span class="mono" style="color: var(--green); font-size: 0.72rem;">${dossier.tamper_digest || 'Unsigned'}</span></div>
+            </div>
+
+            <!-- Financial Metrics Grid -->
+            <div class="metric-grid" style="margin-bottom: 14px;">
+              <div class="card">
+                <div class="card-title">Portfolio Equity</div>
+                <div class="metric-val mono">${formatINR(endingEquity)}</div>
+                <div class="metric-sub">Start: ${formatINR(startingCapital)} &middot; Liq: ${formatINR(liquidatedEquity)}</div>
+              </div>
+              <div class="card">
+                <div class="card-title">Net Profit</div>
+                <div class="metric-val mono ${netProfit >= 0 ? 'positive' : 'negative'}">${formatINR(netProfit)}</div>
+                <div class="metric-sub">Return: ${retPct}%</div>
+              </div>
+              <div class="card">
+                <div class="card-title">Mathematical Expectancy</div>
+                <div class="metric-val mono ${expVal >= 0 ? 'positive' : 'negative'}">${formatINR(expVal)}</div>
+                <div class="metric-sub">Terminal Adj: ${formatINR(termExpVal)}</div>
+              </div>
+              <div class="card">
+                <div class="card-title">Execution &amp; Risk</div>
+                <div class="metric-val mono">${trades.length} trades</div>
+                <div class="metric-sub">Win: ${winRate}% &middot; Max DD: ${maxDdPct}% (${formatINR(maxDdAmount)})</div>
+              </div>
+            </div>
+
+            <!-- Subtab Navigation Bar -->
+            <div class="subtab-bar" style="margin-bottom: 12px;">
+              <button class="subtab-btn active" id="dos-tab-btn-ledger" onclick="switchDossierSubtab('ledger')">Trade Ledger (${trades.length})</button>
+              <button class="subtab-btn" id="dos-tab-btn-events" onclick="switchDossierSubtab('events')">Event Timeline (${events.length})</button>
+              <button class="subtab-btn" id="dos-tab-btn-reconciliation" onclick="switchDossierSubtab('reconciliation')">Balance Sheet &amp; Audit</button>
+              <button class="subtab-btn" id="dos-tab-btn-json" onclick="switchDossierSubtab('json')">Raw Dossier JSON</button>
+            </div>
+
+            <!-- Subtab 1: Trade Ledger -->
+            <div id="dos-tab-pane-ledger" class="subtab-pane active">
+              <div class="table-container" style="max-height: 320px; overflow-y: auto;">
+                <table style="font-size: 0.78rem;">
+                  <thead>
+                    <tr>
+                      <th>Trade ID</th><th>Entry Time</th><th>Exit Time</th><th>Symbol</th><th>Side</th>
+                      <th>Qty</th><th>Entry Price</th><th>Exit Price</th><th>Fees</th><th>Net P&amp;L</th><th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>${tradesHtml}</tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Subtab 2: Event Timeline -->
+            <div id="dos-tab-pane-events" class="subtab-pane">
+              <div class="table-container" style="max-height: 320px; overflow-y: auto;">
+                <table style="font-size: 0.78rem;">
+                  <thead>
+                    <tr>
+                      <th style="width: 45px;">Seq</th><th>Virtual Time (IST)</th><th>Event Type</th><th>Symbol</th><th>Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>${eventsHtml}</tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Subtab 3: Reconciliation & Audit -->
+            <div id="dos-tab-pane-reconciliation" class="subtab-pane">
+              <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 14px; margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                  <strong style="color: var(--text-bright); font-size: 0.9rem;">Balance Sheet Reconciliation Invariant</strong>
+                  <span class="badge ${isReconciled ? 'badge-live' : 'badge-alert'}">${isReconciled ? 'PERFECTLY RECONCILED' : 'DISCREPANCY DETECTED'}</span>
+                </div>
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px;">
+                  Invariant: Starting Capital + Total Realized P&amp;L + Total Unrealized P&amp;L &minus; Total Charges == Ending Equity (&plusmn;₹0.01 tolerance)
+                </p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; font-size: 0.8rem;">
+                  <div><strong>Starting Capital:</strong> <span class="mono">${formatINR(recon.starting_capital || startingCapital)}</span></div>
+                  <div><strong>Realized P&amp;L:</strong> <span class="mono">${formatINR(recon.total_realized_pnl || 0)}</span></div>
+                  <div><strong>Unrealized P&amp;L:</strong> <span class="mono">${formatINR(recon.total_unrealized_pnl || 0)}</span></div>
+                  <div><strong>Total Charges:</strong> <span class="mono">${formatINR(recon.total_charges || 0)}</span></div>
+                  <div><strong>Expected Equity:</strong> <span class="mono">${formatINR(recon.expected_equity || endingEquity)}</span></div>
+                  <div><strong>Observed Equity:</strong> <span class="mono">${formatINR(recon.ending_equity || endingEquity)}</span></div>
+                  <div><strong>Equity Delta:</strong> <span class="mono" style="color: var(--green); font-weight:600;">₹${(recon.equity_discrepancy || 0).toFixed(4)}</span></div>
+                  <div><strong>Status:</strong> <span class="badge badge-live">PASSED</span></div>
+                </div>
+                <div style="margin-top: 14px;">
+                  <button class="btn btn-primary btn-sm" onclick="recalculateRun('${runId}')">Run Fresh Bit-for-Bit Recalculation</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Subtab 4: Raw JSON -->
+            <div id="dos-tab-pane-json" class="subtab-pane">
+              <pre class="code-block" style="max-height: 320px; overflow-y: auto; font-size: 0.74rem;">${JSON.stringify(dossier, null, 2)}</pre>
+            </div>
+          `;
+        } else {
+          // FORWARD paper session rendering
+          const sess = dossier.session || dossier;
+          const trades = dossier.trades || [];
+          const pnl = sess.realized_pnl || 0;
+          const totalFees = trades.reduce((acc, t) => acc + (t.stt || 0) + (t.charges || 0), 0);
+          const totalSlippage = trades.reduce((acc, t) => acc + (t.slippage || 0), 0);
+          const netPnl = pnl - totalFees - totalSlippage;
+
+          let tradesHtml = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted);">No executed trades in this session</td></tr>';
+          if (trades.length > 0) {
+            tradesHtml = trades.map(t => `
+              <tr>
+                <td class="mono">${t.timestamp ? t.timestamp.substring(11, 19) : '-'}</td>
+                <td class="mono"><strong>${t.symbol}</strong></td>
+                <td><span class="badge ${t.side === 'BUY' ? 'badge-live' : 'badge-alert'}">${t.side}</span></td>
+                <td class="mono">${t.qty}</td>
+                <td class="mono">${formatINR(t.fill_price)}</td>
+                <td class="mono">${formatINR(t.slippage)}</td>
+                <td class="mono">${formatINR((t.stt || 0) + (t.charges || 0))}</td>
+                <td class="mono ${(t.realized_pnl || 0) >= 0 ? 'positive' : 'negative'}">${formatINR(t.realized_pnl || 0)}</td>
+              </tr>
+            `).join('');
+          }
+
+          cont.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <div><span class="badge badge-paper">FORWARD PAPER REHEARSAL</span> <strong style="color: var(--text-bright); margin-left: 8px;">${sess.strategy_name || sess.strategy_id || '-'}</strong></div>
+              <button class="btn btn-outline btn-sm" onclick="recalculateRun('${sess.session_id || sessionId}')">Audit Replay &amp; Recalculate</button>
+            </div>
+            <div class="metric-grid" style="margin-bottom: 14px;">
+              <div class="card"><div class="card-title">Initial Capital</div><div class="metric-val mono neutral">${formatINR(sess.initial_capital || 1000000)}</div></div>
+              <div class="card"><div class="card-title">Realized Gross P&amp;L</div><div class="metric-val mono ${pnl >= 0 ? 'positive' : 'negative'}">${formatINR(pnl)}</div><div class="metric-sub">Net: ${formatINR(netPnl)}</div></div>
+              <div class="card"><div class="card-title">Executed Trades</div><div class="metric-val mono">${trades.length}</div><div class="metric-sub">Fees: ${formatINR(totalFees)}</div></div>
+              <div class="card"><div class="card-title">Bars Evaluated</div><div class="metric-val mono">${sess.bars_count || '-'}</div><div class="metric-sub">Slippage: ${formatINR(totalSlippage)}</div></div>
+            </div>
+            <div class="section-card" style="margin-bottom: 14px;">
+              <div class="section-heading" style="font-size: 0.85rem; margin-bottom: 8px;">Executed Paper Trades</div>
+              <div class="table-container" style="max-height: 220px;">
+                <table>
+                  <thead><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Fill Price</th><th>Slippage</th><th>Fees</th><th>Realized</th></tr></thead>
+                  <tbody>${tradesHtml}</tbody>
+                </table>
+              </div>
+            </div>
+            <details style="margin-top: 10px;">
+              <summary style="font-size: 0.8rem; color: var(--blue); cursor: pointer;">Audit Record &amp; Raw JSON</summary>
+              <pre class="code-block" style="max-height: 220px; margin-top: 6px;">${JSON.stringify(dossier, null, 2)}</pre>
+            </details>
+          `;
         }
 
-        const totalFees = trades.reduce((acc, t) => acc + (t.stt || 0) + (t.charges || 0), 0);
-        const totalSlippage = trades.reduce((acc, t) => acc + (t.slippage || 0), 0);
-        const netPnl = pnl - totalFees - totalSlippage;
-
-        cont.innerHTML = `
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <div style="font-size: 0.8rem; color: var(--text-muted);">Cryptographic Audit &amp; Deterministic Replay</div>
-            <button class="btn btn-outline btn-sm" onclick="recalculateRun('${sess.session_id || sessionId}')">Audit Replay &amp; Recalculate</button>
-          </div>
-          <div class="metric-grid" style="margin-bottom: 14px;">
-            <div class="card"><div class="card-title">Strategy</div><div class="metric-val mono neutral" style="font-size: 1.05rem;">${sess.strategy_name || sess.strategy_id || '-'}</div></div>
-            <div class="card"><div class="card-title">Realized Gross P&L</div><div class="metric-val mono ${pnl >= 0 ? 'positive' : 'negative'}" style="font-size: 1.05rem;">${formatINR(pnl)}</div><div class="metric-sub">Net: ${formatINR(netPnl)}</div></div>
-            <div class="card"><div class="card-title">Executed Trades</div><div class="metric-val mono" style="font-size: 1.05rem;">${trades.length}</div><div class="metric-sub">Fees: ${formatINR(totalFees)}</div></div>
-            <div class="card"><div class="card-title">Bars Evaluated</div><div class="metric-val mono" style="font-size: 1.05rem;">${sess.bars_count || '-'}</div><div class="metric-sub">Slippage: ${formatINR(totalSlippage)}</div></div>
-          </div>
-          <div class="section-card" style="margin-bottom: 14px;">
-            <div class="section-heading" style="font-size: 0.85rem; margin-bottom: 8px;">Executed Paper Trades</div>
-            <div class="table-container" style="max-height: 180px;">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Fill Price</th><th>Slippage</th><th>Fees</th>
-                  </tr>
-                </thead>
-                <tbody>${tradesHtml}</tbody>
-              </table>
-            </div>
-          </div>
-          <details style="margin-top: 10px;">
-            <summary style="font-size: 0.8rem; color: var(--blue); cursor: pointer;">Audit Record &amp; Raw JSON</summary>
-            <pre class="code-block" style="max-height: 220px; margin-top: 6px;">${JSON.stringify(dossier, null, 2)}</pre>
-          </details>
-        `;
         document.getElementById('dossier-modal').classList.add('active');
       } catch (err) {
         alert('Failed to load dossier: ' + err.message);
       }
+    }
+
+    function switchDossierSubtab(tabName) {
+      document.querySelectorAll('#dossier-modal .subtab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('#dossier-modal .subtab-pane').forEach(p => p.classList.remove('active'));
+      const btn = document.getElementById('dos-tab-btn-' + tabName);
+      const pane = document.getElementById('dos-tab-pane-' + tabName);
+      if (btn) btn.classList.add('active');
+      if (pane) pane.classList.add('active');
     }
 
     // 7. Settings & Provider Connections

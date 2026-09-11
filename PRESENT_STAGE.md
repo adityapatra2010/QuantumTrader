@@ -1,8 +1,8 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-09 22:25 IST  
-**Current Phase**: Deterministic Historical Backtesting & Sealed Run Dossier Layer — COMPLETE & VERIFIED ✅  
-**Last Verified By**: AGY CLI Quality Verification Suite (Ruff Clean, Mypy Strict Clean across 193 files, Pytest 519 passed, 6 skipped)  
+**Last Updated**: 2026-09-11 10:25 IST  
+**Current Phase**: Deterministic Historical Backtesting & Sealed Run Dossier Layer + GUI Truth & Clarity Pass — COMPLETE & VERIFIED ✅  
+**Last Verified By**: AGY CLI Quality Verification Suite (Ruff Clean, Mypy Strict Clean across 193 files, Pytest 519 passed, 6 skipped, Playwright E2E 0 console errors)  
 
 ---
 
@@ -61,6 +61,34 @@
 ---
 
 ## Completed
+
+### Workstation GUI Truth & Clarity Pass
+**Status**: COMPLETE & VERIFIED ✅
+- **Alignment with Deterministic Execution Truth**: The web workstation (`src/aditrader/web/static/index.html` and `src/aditrader/web/server.py`) has been upgraded to reflect verified backend reality without mock metrics, false "APPROVED" badges, or misleading theoretical capabilities.
+- **Workstation Status & Guardrails Overview**: Calm institutional top bar with session status, capability indicators, and clear ADR guardrail notices (`ADR 002` air-gapped paper broker, `ADR 007` zero dynamic code execution, `ADR 011` options replay air-gap). Overview features separate tables for Recent Deterministic Historical Backtests and Recent Forward Paper Rehearsal sessions.
+- **5-Column Strategy Catalog & ADR 011 Replay Guards**: Redesigned strategy catalog with plain-English summary, structure & instrument, execution/replay eligibility (`THEORETICAL ONLY (REPLAY BLOCKED)` under ADR 011 vs `DETERMINISTIC REPLAYABLE`), required market data (`OPTIONS CHAIN` vs `NSE INTRADAY CSV`), and action buttons with blocked states for multi-leg options strategies.
+- **Pre-Replay Data Quality Inspector**: Diagnostic card displays detected format (`NSE_INTRADAY` / `EQUITY_CASH`), continuous session check (09:15–15:30 IST), price envelope sanity ($low \le open, close \le high$), and linear spot vs option chain structure before collapsible technical JSON.
+- **Simulation Workspace & Preflight Compatibility**: Mode switcher between Deterministic Historical Backtest (`NEXT_BAR_OPEN`) and Forward Paper Rehearsal. Real-time preflight compatibility validator blocks execution and displays explicit amber warnings when multi-leg options strategies are paired with linear datasets. One-click `POST /api/backtest/run` triggers execution and displays net profit, return %, expectancy, win rate, max drawdown, and SHA-256 Merkle tree root seals.
+- **Filterable Runs & Sealed Dossier Inspection**: History table with `ALL`, `BACKTEST`, and `FORWARD` filters. Deep dossier inspection modal with 4 subtabs:
+  1. **Trade Ledger**: Itemized trades with exact statutory fee attribution (STT, exchange turnover, SEBI, GST, stamp duty), entry/exit timestamps, fill prices, and gross/net P&L.
+  2. **Event Timeline**: Chronological event stream with sequence numbers, virtual timestamps (Asia/Kolkata), and payload details.
+  3. **Balance Sheet & Audit**: Invariant verification (`Starting Capital + Realized P&L + Unrealized P&L - Total Charges == Ending Equity ±₹0.01`) and one-click bit-for-bit recalculation audit (`POST /api/verify/recalculate`) verifying metric reproduction with zero delta.
+  4. **Raw JSON**: Complete sealed dossier export.
+- **Automated Verification & Browser E2E**:
+  - `ruff check src tests` and `ruff format --check src tests` passing cleanly.
+  - `mypy src tests` passing in strict mode across 193 source files with 0 errors.
+  - `pytest` suite passing 519/519 unit and integration tests (100% pass rate) + 6 skipped opt-in tests.
+  - Playwright visual QA passing on desktop (1440x900) and mobile (390x844) with 0 browser console errors.
+
+### Deterministic Historical Backtesting & Sealed Run Dossier Layer
+**Status**: COMPLETE & VERIFIED ✅
+- **Deterministic NEXT_BAR_OPEN Execution Contract**: Backtesting engine strictly executes orders at $T+1$ Open upon signal generation at $T$ Close, eliminating look-ahead bias. Signal generated on final dataset candle cleanly emits `UNFULFILLED_SIGNAL` with `reason="DATASET_TERMINUS"`.
+- **Physical Price Clamping & Volume Constraints**: Fills clamped strictly within the bar envelope $[low, high]$. Linear slippage model applied. Volume participation limits prevent unrealistic market impact.
+- **Statutory Taxes & Penny Fee Attribution**: Exact cost calculations accounting for Securities Transaction Tax (STT), NSE exchange turnover charges, SEBI turnover fees, stamp duty, and 18% GST on exchange/SEBI charges.
+- **Terminal Position Mark-to-Market Accounting**: Unclosed positions at dataset conclusion are evaluated at mark-to-market with simulated liquidation friction without fabricating artificial exit trades in the trade ledger.
+- **Cryptographic Merkle Root Sealing**: Trade ledgers and event streams are hashed into binary SHA-256 Merkle trees. Dossiers are sealed with cryptographic Merkle roots and tamper digests.
+- **7-Pillar Institutional Verification Matrix**: Granular state machine (`NOT_RUN`, `INCOMPLETE`, `PASS`, `FAIL`, `BLOCKED`, `STALE`) with fail-closed statistical gating. Options strategies evaluate Black-Scholes Greeks and theoretical payoff curves (`THEORETICAL_PASS`) while strictly air-gapping linear backtesting under ADR 011.
+- **Bit-for-Bit Reproducibility Engine (`ReproducibilityEngine`)**: Re-runs replay from raw inputs and compares freshly computed metrics against stored values with calibrated tolerances (₹0.01 monetary precision).
 
 ### NIFTY CE Premium-Ladder Declarative Vertical Slice
 **Status**: COMPLETE & VERIFIED ✅

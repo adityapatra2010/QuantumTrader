@@ -19,6 +19,7 @@ Implements:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -165,7 +166,12 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         path = parsed.path
 
         if path in ("/", "/index.html"):
-            self._send_html(DASHBOARD_HTML)
+            html = DASHBOARD_HTML
+            static_file = Path(__file__).parent / "static" / "index.html"
+            if static_file.is_file():
+                with contextlib.suppress(Exception):
+                    html = static_file.read_text(encoding="utf-8")
+            self._send_html(html)
             return
 
         if path == "/favicon.ico":
@@ -922,6 +928,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     with open(json_file, encoding="utf-8") as f:
                         data = json.load(f)
                     run_id = data.get("run_id", json_file.stem.replace("dossier_", ""))
+                    ds_name = data.get("dataset_name") or (
+                        Path(data.get("dataset_path", "")).name if data.get("dataset_path") else "-"
+                    )
                     all_runs.append(
                         {
                             "session_id": run_id,
@@ -931,13 +940,21 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                             "symbol": data.get("symbol", "NIFTY"),
                             "status": "COMPLETED",
                             "run_type": "BACKTEST",
+                            "execution_contract": data.get("execution_contract", "NEXT_BAR_OPEN"),
+                            "dataset_name": ds_name,
                             "realized_pnl": data.get("net_profit", 0.0),
                             "net_profit": data.get("net_profit", 0.0),
+                            "return_pct": data.get("return_pct", 0.0),
+                            "expectancy": data.get(
+                                "closed_trade_expectancy", data.get("expectancy", 0.0)
+                            ),
                             "trades_count": data.get("trade_count", len(data.get("ledger", []))),
                             "bars_count": data.get("bar_count", 0),
                             "event_count": data.get("event_count", len(data.get("events", []))),
                             "dossier_path": str(json_file),
                             "tamper_digest": data.get("tamper_digest"),
+                            "trade_ledger_merkle_root": data.get("trade_ledger_merkle_root"),
+                            "event_stream_merkle_root": data.get("event_stream_merkle_root"),
                             "mtime": json_file.stat().st_mtime,
                         }
                     )
@@ -961,6 +978,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     if bars_cnt is None:
                         bars_cnt = len(bars_list)
                     run_id = sess.get("session_id", json_file.stem)
+                    fwd_ds = sess.get("dataset_name") or (
+                        Path(sess.get("dataset_path", "")).name
+                        if sess.get("dataset_path")
+                        else "Forward Paper Stream"
+                    )
 
                     all_runs.append(
                         {
@@ -973,8 +995,12 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                             "symbol": sess.get("symbol", "NIFTY"),
                             "status": sess.get("status", "UNKNOWN"),
                             "run_type": "FORWARD",
+                            "execution_contract": "FORWARD_TICK",
+                            "dataset_name": fwd_ds,
                             "realized_pnl": sess.get("realized_pnl", 0.0),
                             "net_profit": sess.get("realized_pnl", 0.0),
+                            "return_pct": sess.get("return_pct", 0.0),
+                            "expectancy": sess.get("expectancy", 0.0),
                             "trades_count": trades_cnt,
                             "bars_count": bars_cnt,
                             "dossier_path": str(json_file),
