@@ -706,15 +706,15 @@
     <div class="brand">
       <div class="brand-title">
         ADITRADER
-        <span class="brand-subtitle">v1.0-institutional</span>
+        <span class="brand-subtitle">v1.0 &middot; Research</span>
       </div>
-      <span class="brand-mode">Research &amp; Paper Execution</span>
+      <span class="brand-mode">Research mode &middot; Paper execution</span>
     </div>
     <div class="status-strip" id="status-badges">
       <span class="badge badge-paper"><span class="pulse-dot"></span> PAPER BROKER</span>
-      <span class="badge badge-sim" id="feed-badge">CHECKING FEED...</span>
-      <span class="badge badge-live" id="db-badge">SQLITE DB</span>
-      <span class="badge badge-paper" id="session-user-badge">local_researcher</span>
+      <span class="badge badge-sim" id="feed-badge">Connecting feed...</span>
+      <span class="badge badge-live" id="db-badge">Database connected</span>
+      <span class="badge badge-paper" id="session-user-badge">Local session</span>
       <button class="btn btn-outline btn-sm" onclick="lockWorkstation()" title="Lock session">Lock</button>
     </div>
   </header>
@@ -737,7 +737,7 @@
     <div class="air-gap-banner">
       <span class="pulse-dot" style="background-color: var(--blue);"></span>
       <div>
-        Paper simulation only. All executions route to local PaperBroker — live order routing is permanently disabled (ADR 002).
+        Paper simulation only. All executions route to local PaperBroker — live order routing is permanently disabled.
       </div>
     </div>
 
@@ -745,8 +745,8 @@
     <div id="tab-overview" class="tab-pane active">
       <!-- Workstation Orientation & Primary Workflow -->
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px;">
-        <div style="font-size: 0.8rem; color: var(--text-bright);">
-          <strong>Workstation Mode:</strong> Institutional Quantitative Research &middot; Deterministic Historical Replay &amp; Forward Paper Rehearsal &middot; Air-Gapped Simulation
+        <div style="font-size: 0.82rem; color: var(--text-bright);">
+          <strong>Research Workstation</strong> &middot; Deterministic historical backtesting and forward paper simulation for Indian markets.
         </div>
         <div style="font-size: 0.75rem; color: var(--text-muted);">
           Workflow: Strategies &rarr; Data &rarr; Validation &rarr; Simulation &rarr; Runs
@@ -757,22 +757,22 @@
       <div class="form-row" style="margin-bottom: 16px;">
         <div class="card" style="border-left: 3px solid var(--blue);">
           <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-bright); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-            <span class="badge badge-paper" style="font-size: 0.68rem;">CAPABILITIES</span> Active Research Engines
+            <span class="badge badge-paper" style="font-size: 0.68rem;">AVAILABLE</span> What you can do
           </div>
           <ul style="font-size: 0.76rem; color: var(--text); padding-left: 18px; line-height: 1.6;">
-            <li><strong>Deterministic Backtest:</strong> Strict NEXT_BAR_OPEN execution, envelope clamping [Low, High], penny statutory fees, Merkle root sealing.</li>
-            <li><strong>Forward Paper Rehearsal:</strong> Tick-by-tick order fill simulation strictly air-gapped inside PaperBroker.</li>
-            <li><strong>Analytical Derivatives:</strong> Analytical Black-Scholes Greeks, strike ladders, and ratio hedge models.</li>
+            <li><strong>Historical Backtests:</strong> Deterministic next-bar-open execution with price envelope clamping, statutory Indian fees, and cryptographic verification.</li>
+            <li><strong>Forward Paper Sessions:</strong> Tick-by-tick order fill simulation through the local paper broker without real capital risk.</li>
+            <li><strong>Options Analysis:</strong> Theoretical Black-Scholes Greeks, strike ladders, and defined-risk payoff models.</li>
           </ul>
         </div>
         <div class="card" style="border-left: 3px solid var(--amber);">
           <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-bright); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-            <span class="badge badge-sim" style="font-size: 0.68rem;">GUARDRAILS</span> Active System Blockers
+            <span class="badge badge-sim" style="font-size: 0.68rem;">BOUNDARIES</span> Safety &amp; data limits
           </div>
           <ul style="font-size: 0.76rem; color: var(--text); padding-left: 18px; line-height: 1.6;">
-            <li><strong>ADR 011 Options Replay Blocked:</strong> Options strategies cannot run on linear candle data; requires tick IV surface. Theoretical payoff only.</li>
-            <li><strong>ADR 002 Live Routing Disabled:</strong> Physical live broker execution is non-existent. Air-gapped paper simulation only.</li>
-            <li><strong>ADR 007 Dynamic Code Blocked:</strong> Raw eval/exec is prohibited. Strategies compile via declarative JSON AST DSL.</li>
+            <li><strong>Options Backtests Unavailable:</strong> Multi-leg options require multi-strike option chain data. They support theoretical analysis only.</li>
+            <li><strong>Live Trading Disabled:</strong> Real broker execution is permanently disabled. Orders route strictly to the local paper broker.</li>
+            <li><strong>Safe Strategy Definitions:</strong> Strategies compile from validated declarative schemas; raw code execution is blocked.</li>
           </ul>
         </div>
       </div>
@@ -801,12 +801,12 @@
         </div>
       </div>
 
-      <!-- Recent Historical Backtests (Deterministic Replays) -->
+      <!-- Recent Historical Backtests -->
       <div class="section-card">
         <div class="section-header">
           <div class="section-heading">
-            <span>Recent Deterministic Historical Backtests</span>
-            <span class="badge badge-purple" style="font-size: 0.68rem;">MERKLE SEALED</span>
+            <span>Recent Historical Backtests</span>
+            <span class="badge badge-purple" style="font-size: 0.68rem;">VERIFIED</span>
           </div>
           <button class="btn btn-outline btn-sm" onclick="switchTab('simulation'); document.getElementById('sim-mode-backtest').click();">+ New Backtest</button>
         </div>
@@ -817,12 +817,12 @@
                 <th>Run ID</th>
                 <th>Strategy</th>
                 <th>Underlying</th>
-                <th>Contract</th>
-                <th>Net Profit (INR)</th>
-                <th>Return %</th>
+                <th>Execution</th>
+                <th>Net P&amp;L</th>
+                <th>Return</th>
                 <th>Trades</th>
-                <th>Audit Status</th>
-                <th>Action</th>
+                <th>Status</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="overview-backtests-body">
@@ -836,10 +836,10 @@
       <div class="section-card">
         <div class="section-header">
           <div class="section-heading">
-            <span>Recent Forward Paper Rehearsals</span>
-            <span class="badge badge-paper" style="font-size: 0.68rem;">PAPER BROKER</span>
+            <span>Recent Forward Paper Sessions</span>
+            <span class="badge badge-paper" style="font-size: 0.68rem;">PAPER</span>
           </div>
-          <button class="btn btn-outline btn-sm" onclick="switchTab('simulation'); document.getElementById('sim-mode-forward').click();">+ New Rehearsal</button>
+          <button class="btn btn-outline btn-sm" onclick="switchTab('simulation'); document.getElementById('sim-mode-forward').click();">+ New Paper Session</button>
         </div>
         <div class="table-container">
           <table>
@@ -850,7 +850,7 @@
                 <th>Underlying</th>
                 <th>Recorded Time</th>
                 <th>Status</th>
-                <th>Realized P&L</th>
+                <th>Realized P&amp;L</th>
                 <th>Trades</th>
                 <th>Bars</th>
                 <th>Action</th>
@@ -866,7 +866,7 @@
       <!-- Active Paper Positions -->
       <div class="section-card">
         <div class="section-header">
-          <div class="section-heading">Active Paper Positions (Local PaperBroker Ledger)</div>
+          <div class="section-heading">Open Paper Positions</div>
           <button class="btn btn-outline btn-sm" onclick="loadStatus()">↻ Refresh</button>
         </div>
         <div class="table-container">
@@ -891,7 +891,7 @@
       <!-- Recent Paper Fills -->
       <div class="section-card">
         <div class="section-header">
-          <div class="section-heading">Recent Paper Fills &amp; Statutory Charges Ledger</div>
+          <div class="section-heading">Recent Paper Fills &amp; Fees</div>
         </div>
         <div class="table-container">
           <table>
@@ -904,7 +904,7 @@
                 <th>Qty</th>
                 <th>Fill Price</th>
                 <th>Slippage</th>
-                <th>STT &amp; Charges</th>
+                <th>Fees &amp; Taxes</th>
               </tr>
             </thead>
             <tbody id="trades-body">
@@ -921,14 +921,14 @@
       <div class="strategy-callout">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
           <h3 style="color: var(--text-bright); font-size: 1.05rem;">NIFTY CE Premium-Ladder Strategy</h3>
-          <span class="badge badge-purple">THEORETICAL MODEL &middot; REQUIRES OPTIONS CHAIN DATA</span>
+          <span class="badge badge-purple">THEORETICAL MODEL &middot; OPTIONS CHAIN REQUIRED</span>
         </div>
         <p style="font-size: 0.83rem; color: var(--text-secondary); margin-top: 6px;">
           Sells one NIFTY CE whose current price falls inside a target band, then buys 4 lower-priced CEs as a hedge.
           Entry price (the <em>premium</em>), not the strike, determines which contract to trade.
         </p>
         <div style="font-size: 0.78rem; color: var(--purple); background: var(--purple-bg); border: 1px solid var(--status-derivatives-bdr); border-radius: 4px; padding: 6px 10px; margin: 10px 0;">
-          <strong>Dynamic Contract Selection:</strong> Premium Bands &ne; Fixed Strikes. As NIFTY moves, the strategy dynamically resolves whichever contract currently trades inside the target band.
+          <strong>Dynamic Selection:</strong> Premium bands are premium triggers, not strikes. When NIFTY moves, the strategy selects whichever option contract trades within the target premium band.
         </div>
         <div class="premium-bands-grid">
           <div class="band-pill"><strong>Band 1</strong>₹50.00 – ₹59.50</div>
@@ -943,27 +943,27 @@
           <div>Trailing ratchet stop: Ratchets with each ₹10 move — e.g. premium 50&rarr;40 sets stop at 45</div>
         </div>
         <div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 8px;">
-          ADR 011 Enforcement: Historical replay is blocked without point-in-time tick IV surface data. Theoretical Black-Scholes payoff validation only.
+          Replay unavailable: Historical backtests require multi-strike option chain data with implied volatility. This strategy supports theoretical payoff and Greek validation only.
         </div>
         <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap;">
-          <button class="btn btn-primary btn-sm" onclick="switchTab('validation'); document.getElementById('val-strategy-select').value='tpl-nifty-ce-premium-ladder-v1'; runValidation();">Validate Strategy &rarr;</button>
-          <button class="btn btn-outline btn-sm" onclick="inspectStrategyAst('tpl-nifty-ce-premium-ladder-v1')">Inspect Rules &amp; JSON AST</button>
+          <button class="btn btn-primary btn-sm" onclick="switchTab('validation'); document.getElementById('val-strategy-select').value='tpl-nifty-ce-premium-ladder-v1'; runValidation();">Validate strategy &rarr;</button>
+          <button class="btn btn-outline btn-sm" onclick="inspectStrategyAst('tpl-nifty-ce-premium-ladder-v1')">View details</button>
         </div>
       </div>
 
       <div class="section-card">
         <div class="section-header">
-          <div class="section-heading">Version-Controlled Strategy Catalog</div>
+          <div class="section-heading">Strategy Catalog</div>
           <button class="btn btn-outline btn-sm" onclick="loadStrategies()">↻ Reload Catalog</button>
         </div>
         <div class="table-container">
           <table>
             <thead>
               <tr>
-                <th>Strategy Specification</th>
-                <th>Structure &amp; Instrument</th>
-                <th>Execution &amp; Replay Eligibility</th>
-                <th>Required Market Data</th>
+                <th>Strategy</th>
+                <th>Type &amp; Instrument</th>
+                <th>Replay Status</th>
+                <th>Required Data</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -979,17 +979,17 @@
     <div id="tab-datasets" class="tab-pane">
       <div class="section-card">
         <div class="section-header">
-          <div class="section-heading">Discovered Data Store (data/)</div>
-          <button class="btn btn-outline btn-sm" onclick="loadDatasets()">↻ Scan data/</button>
+          <div class="section-heading">Available Datasets</div>
+          <button class="btn btn-outline btn-sm" onclick="loadDatasets()">↻ Scan folder</button>
         </div>
         <p style="font-size: 0.83rem; color: var(--text-muted); margin-bottom: 12px;">
-          Two data tiers are supported: (1) Linear Equity/Index CSVs for spot backtests and indicator analysis, and (2) Multi-Strike Option Chains for dynamic contract selection and premium ladders.
+          Datasets found in the data/ folder. Linear CSVs support spot and index backtests. Multi-strike option chains support derivatives and dynamic contract selection.
         </p>
         <div class="status-legend" style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; font-size: 0.78rem; color: var(--text-muted);">
           <span><span class="badge badge-paper" style="font-size: 0.68rem;">NSE_INTRADAY</span> Format recognized</span>
-          <span><span class="badge badge-live" style="font-size: 0.68rem;">REPLAYABLE</span> Valid for simulation</span>
-          <span><span class="badge badge-alert" style="font-size: 0.68rem;">INSPECT ONLY</span> Blocked from simulation</span>
-          <span><span class="badge badge-purple" style="font-size: 0.68rem;">OPTIONS CHAIN</span> Multi-strike derivative quotes</span>
+          <span><span class="badge badge-live" style="font-size: 0.68rem;">REPLAYABLE</span> Valid for backtests</span>
+          <span><span class="badge badge-alert" style="font-size: 0.68rem;">INSPECT ONLY</span> Inspect only (cannot replay)</span>
+          <span><span class="badge badge-purple" style="font-size: 0.68rem;">OPTIONS CHAIN</span> Options chain</span>
           <span><span class="badge badge-sim" style="font-size: 0.68rem;">SPOT / LINEAR</span> Single-instrument series</span>
         </div>
         <div class="table-container">
@@ -998,9 +998,9 @@
               <tr>
                 <th>Filename</th>
                 <th>Size</th>
-                <th>Format Parsed</th>
-                <th>Options Chain Aware</th>
-                <th>Replay Readiness</th>
+                <th>Format</th>
+                <th>Data Type</th>
+                <th>Replay Status</th>
                 <th>Action</th>
               </tr>
             </thead>
@@ -1014,7 +1014,7 @@
       <!-- Dataset Inspector -->
       <div class="section-card">
         <div class="section-header">
-          <div class="section-heading">Deep Dataset Inspector</div>
+          <div class="section-heading">Dataset Inspector</div>
         </div>
         <div class="form-row">
           <div class="form-group" style="flex: 2;">
@@ -1022,14 +1022,14 @@
             <input type="text" id="inspect-path" placeholder="e.g. data/nifty_sample.csv">
           </div>
           <div class="form-group" style="flex: 1; align-self: flex-end;">
-            <button class="btn btn-primary" style="width: 100%;" onclick="inspectDataset()">Inspect Dataset</button>
+            <button class="btn btn-primary" style="width: 100%;" onclick="inspectDataset()">Inspect data</button>
           </div>
         </div>
 
         <div id="inspect-results" style="display: none; margin-top: 14px;">
           <div class="metric-grid">
             <div class="card">
-              <div class="card-title">Detected Format</div>
+              <div class="card-title">Format</div>
               <div class="metric-val mono neutral" id="ins-format">-</div>
             </div>
             <div class="card">
@@ -1041,12 +1041,12 @@
               <div class="metric-val mono" id="ins-tf">-</div>
             </div>
             <div class="card">
-              <div class="card-title">Replay Readiness</div>
+              <div class="card-title">Replay Status</div>
               <div class="metric-val mono" id="ins-ready">-</div>
             </div>
           </div>
           <div class="section-card" style="margin-top: 10px;">
-            <div class="section-heading" style="font-size: 0.85rem; margin-bottom: 6px;">Inspection Diagnostics & Anomalies</div>
+            <div class="section-heading" style="font-size: 0.85rem; margin-bottom: 6px;">Inspection Summary &amp; Diagnostics</div>
             <pre class="code-block" id="ins-details"></pre>
           </div>
         </div>
@@ -1057,10 +1057,10 @@
     <div id="tab-validation" class="tab-pane">
       <div class="section-card">
         <div class="section-header">
-          <div class="section-heading">Institutional Strategy Validation Studio</div>
+          <div class="section-heading">Strategy Validation</div>
         </div>
         <p style="font-size: 0.83rem; color: var(--text-muted); margin-bottom: 14px;">
-          Rigorous pre-trade vetting enforcing mathematical expectancy, profit factor thresholds, drawdown ceilings, and unhedged tail-risk vetoes.
+          Pre-trade validation checking strategy rules, profit factor, drawdown limits, and risk boundaries.
         </p>
         <div class="form-row">
           <div class="form-group">
@@ -1074,31 +1074,31 @@
           <div class="form-group">
             <label class="form-label">Validation Policy</label>
             <select id="val-policy-select">
-              <option value="INSTITUTIONAL" selected>Institutional Mode (Expectancy > 0, PF >= 1.25, Max DD <= 15%, Tail Risk Veto)</option>
-              <option value="MODERATE">Moderate Mode (Expectancy > 0, PF >= 1.10, Max DD <= 25%)</option>
-              <option value="RESEARCH">Research Mode (Exploratory — warnings only, no hard floor)</option>
+              <option value="INSTITUTIONAL" selected>Strict Mode (Expectancy > 0, PF &ge; 1.25, Max DD &le; 15%, Tail risk check)</option>
+              <option value="MODERATE">Standard Mode (Expectancy > 0, PF &ge; 1.10, Max DD &le; 25%)</option>
+              <option value="RESEARCH">Exploratory Mode (Warnings only, no hard thresholds)</option>
             </select>
           </div>
         </div>
         <div class="validation-hint" id="val-strategy-hint" style="padding: 10px 0; font-size: 0.82rem; color: var(--text-muted);"></div>
-        <button class="btn btn-primary" onclick="runValidation()">Run Full Validation & Payoff Analysis</button>
+        <button class="btn btn-primary" onclick="runValidation()">Run validation</button>
 
         <div id="val-results-panel" style="display: none; margin-top: 18px;">
           <div id="val-banner" class="alert-box success">
             <span style="font-size: 1.2rem;" id="val-banner-icon">✓</span>
-            <div id="val-banner-text"><strong>STRATEGY APPROVED:</strong> Meets institutional mathematical standards.</div>
+            <div id="val-banner-text"><strong>VALIDATION PASSED:</strong> Strategy meets all performance and risk criteria.</div>
           </div>
 
           <div class="metric-grid">
             <div class="card">
-              <div class="card-title">Mathematical Expectancy</div>
+              <div class="card-title">Expectancy</div>
               <div class="metric-val mono" id="v-expectancy">Not calculated</div>
               <div class="metric-sub" id="v-expectancy-sub">Edge per trade</div>
             </div>
             <div class="card">
               <div class="card-title">Profit Factor</div>
               <div class="metric-val mono" id="v-pf">Not calculated</div>
-              <div class="metric-sub">Min Institutional: 1.25</div>
+              <div class="metric-sub">Minimum: 1.25</div>
             </div>
             <div class="card">
               <div class="card-title">Win Rate</div>
@@ -1108,16 +1108,16 @@
             <div class="card">
               <div class="card-title">Max Drawdown</div>
               <div class="metric-val mono" id="v-drawdown">Not calculated</div>
-              <div class="metric-sub">Ceiling: 15.0%</div>
+              <div class="metric-sub">Limit: 15.0%</div>
             </div>
           </div>
 
           <!-- Risk Gates & Payoff Profile -->
           <div class="section-card">
-            <div class="section-heading" style="font-size: 0.9rem; margin-bottom: 10px;">Institutional Risk Gates & Payoff Metrics</div>
+            <div class="section-heading" style="font-size: 0.9rem; margin-bottom: 10px;">Risk Gates &amp; Payoff Profile</div>
             <div class="form-row" id="v-risk-gates"></div>
             <div id="v-payoff-container" style="margin-top: 12px; display: none;">
-              <h4 style="color: var(--purple); font-size: 0.85rem; margin-bottom: 6px;">Theoretical Options Payoff Structure</h4>
+              <h4 style="color: var(--purple); font-size: 0.85rem; margin-bottom: 6px;">Theoretical Payoff Profile</h4>
               <div class="metric-grid">
                 <div class="card">
                   <div class="card-title">Breakeven Range</div>
@@ -1138,11 +1138,11 @@
           <!-- Deterministic Verification Matrix & Cryptographic Evidence -->
           <div class="section-card" id="v-matrix-card" style="margin-top: 14px;">
             <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-              <div class="section-heading" style="font-size: 0.9rem;">Deterministic Verification Matrix</div>
+              <div class="section-heading" style="font-size: 0.9rem;">Verification Matrix</div>
               <div id="v-overall-verdict-badge"></div>
             </div>
             <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">
-              Continuous verification certifying structural AST rules, NSE market hours integrity, Hull analytical test vectors, and balance sheet invariants.
+              Verification pillars checking strategy rules, data integrity, calculation tests, and accounting balance.
             </p>
             <div class="table-container">
               <table style="font-size: 0.82rem;">
@@ -1161,18 +1161,18 @@
             <!-- Cryptographic Evidence & Trace Actions -->
             <div style="margin-top: 14px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;">
               <div>
-                <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600;">CRYPTOGRAPHIC EVIDENCE DOSSIER</div>
+                <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600;">VERIFICATION SEALS</div>
                 <div style="font-size: 0.8rem; font-family: var(--font-mono); color: var(--text-bright); margin-top: 2px;">
-                  Bundle: <span id="v-bundle-id" style="color: var(--blue);">-</span> &nbsp;|&nbsp; SHA-256 Digest: <span id="v-tamper-digest" style="color: var(--green);">-</span>
+                  Bundle: <span id="v-bundle-id" style="color: var(--blue);">-</span> &nbsp;|&nbsp; Digest: <span id="v-tamper-digest" style="color: var(--green);">-</span>
                 </div>
                 <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;" id="v-kat-badge">
-                  ✓ 37/37 Clean Known-Answer Tests (Analytical KATs Passed)
+                  ✓ 37/37 calculation tests verified
                 </div>
               </div>
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                 <button class="btn btn-outline btn-sm" onclick="showProvenanceTrace('expectancy')">How was this calculated?</button>
-                <button class="btn btn-primary btn-sm" onclick="triggerRecalculateCurrent()">Recalculate Result</button>
-                <button class="btn btn-outline btn-sm" onclick="viewEvidenceBundleModal()">View Evidence</button>
+                <button class="btn btn-primary btn-sm" onclick="triggerRecalculateCurrent()">Verify calculation</button>
+                <button class="btn btn-outline btn-sm" onclick="viewEvidenceBundleModal()">View seal details</button>
               </div>
             </div>
           </div>
@@ -1185,18 +1185,18 @@
       <div class="section-card">
         <div class="section-header">
           <div class="section-heading">
-            <span>Simulation &amp; Backtesting Controller</span>
-            <span class="badge badge-paper">AIR-GAPPED SIMULATION</span>
+            <span>Simulation</span>
+            <span class="badge badge-paper">PAPER EXECUTION</span>
           </div>
         </div>
 
         <!-- Mode Selector Switcher -->
         <div class="mode-switcher">
           <button class="mode-switch-btn active" id="sim-mode-backtest" onclick="setSimMode('BACKTEST')">
-            Deterministic Historical Backtest (NEXT_BAR_OPEN)
+            Historical Backtest (Next-bar open)
           </button>
           <button class="mode-switch-btn" id="sim-mode-forward" onclick="setSimMode('FORWARD')">
-            Forward Paper Rehearsal (Tick Replay)
+            Forward Paper Session (Tick replay)
           </button>
         </div>
 
@@ -1213,8 +1213,8 @@
           <div class="form-group" id="group-sim-contract">
             <label class="form-label">Execution Contract</label>
             <select id="sim-contract-select">
-              <option value="NEXT_BAR_OPEN" selected>NEXT_BAR_OPEN (Strict Institutional · Point-in-Time)</option>
-              <option value="SAME_BAR_CLOSE">SAME_BAR_CLOSE (Academic / Exploratory Only)</option>
+              <option value="NEXT_BAR_OPEN" selected>NEXT_BAR_OPEN (Standard point-in-time)</option>
+              <option value="SAME_BAR_CLOSE">SAME_BAR_CLOSE (Exploratory / Same-bar)</option>
             </select>
           </div>
           <div class="form-group" id="group-sim-slippage-bps">
@@ -1228,16 +1228,16 @@
           <div class="form-group" id="group-sim-sqoff">
             <label class="form-label">Intraday Square-Off</label>
             <select id="sim-sqoff-select">
-              <option value="true" selected>Auto Square-off at 15:15 IST (Intraday)</option>
-              <option value="false">Disabled (Overnight Carry Allowed)</option>
+              <option value="true" selected>Auto close at 15:15 IST (Intraday)</option>
+              <option value="false">Disabled (Hold overnight)</option>
             </select>
           </div>
           <div class="form-group" id="group-sim-forward-slippage" style="display: none;">
             <label class="form-label">Forward Slippage Model</label>
             <select id="sim-slippage-select">
               <option value="FLAT_0_05">Flat 0.05% per fill</option>
-              <option value="ZERO">Zero Slippage (Ideal)</option>
-              <option value="VOLATILITY">Volatility-Adjusted Spread</option>
+              <option value="ZERO">Zero slippage (Ideal)</option>
+              <option value="VOLATILITY">Volatility-adjusted spread</option>
             </select>
           </div>
         </div>
@@ -1249,48 +1249,48 @@
         </div>
 
         <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-          <button class="btn btn-primary" id="btn-launch-backtest" onclick="launchDeterministicBacktest()" disabled>Launch Deterministic Backtest</button>
-          <button class="btn btn-primary" id="btn-start-replay" onclick="startReplay()" style="display: none;" disabled>Launch Paper Rehearsal</button>
+          <button class="btn btn-primary" id="btn-launch-backtest" onclick="launchDeterministicBacktest()" disabled>Run backtest</button>
+          <button class="btn btn-primary" id="btn-start-replay" onclick="startReplay()" style="display: none;" disabled>Start paper session</button>
           <span style="font-size: 0.78rem; color: var(--text-muted);" id="sim-gate-hint">Requires verified dataset compatibility</span>
         </div>
         <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;" id="sim-mode-explanation">
-          Strict deterministic historical replay closed at or before each bar. Orders fill at NEXT_BAR_OPEN clamped to bar low/high. Merkle tree cryptographic seals generated.
+          Simulates execution on historical bars. Orders fill at the open of the following bar, clamped to high and low prices, with Indian market fees.
         </p>
 
         <!-- Deterministic Backtest Completed Result View -->
         <div id="sim-backtest-result" style="display: none; margin-top: 20px; border-top: 1px solid var(--border); padding-top: 16px;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
             <div>
-              <span class="badge badge-live" style="font-size: 0.75rem;"><span class="pulse-dot"></span> BACKTEST COMPLETED &amp; SEALED</span>
+              <span class="badge badge-live" style="font-size: 0.75rem;"><span class="pulse-dot"></span> BACKTEST COMPLETE &middot; VERIFIED</span>
               <strong style="color: var(--text-bright); margin-left: 8px; font-size: 0.95rem;" id="sim-bt-run-id">-</strong>
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button class="btn btn-primary btn-sm" id="sim-btn-view-dossier" onclick="">Open Sealed Run Dossier</button>
-              <button class="btn btn-outline btn-sm" id="sim-btn-recalc-dossier" onclick="">Verify Bit-for-Bit</button>
+              <button class="btn btn-primary btn-sm" id="sim-btn-view-dossier" onclick="">View run details</button>
+              <button class="btn btn-outline btn-sm" id="sim-btn-recalc-dossier" onclick="">Verify reproducibility</button>
             </div>
           </div>
 
           <!-- Merkle Root Seals -->
           <div class="seals-strip">
-            <div><strong>Trade Ledger Merkle:</strong> <span class="mono" id="sim-bt-merkle-ledger" style="color: var(--purple); font-size: 0.72rem;">-</span></div>
-            <div><strong>Event Stream Merkle:</strong> <span class="mono" id="sim-bt-merkle-events" style="color: var(--blue); font-size: 0.72rem;">-</span></div>
-            <div><strong>Tamper Digest:</strong> <span class="mono" id="sim-bt-digest" style="color: var(--green); font-size: 0.72rem;">-</span></div>
+            <div><strong>Trade ledger seal:</strong> <span class="mono" id="sim-bt-merkle-ledger" style="color: var(--purple); font-size: 0.72rem;">-</span></div>
+            <div><strong>Event stream seal:</strong> <span class="mono" id="sim-bt-merkle-events" style="color: var(--blue); font-size: 0.72rem;">-</span></div>
+            <div><strong>Run digest:</strong> <span class="mono" id="sim-bt-digest" style="color: var(--green); font-size: 0.72rem;">-</span></div>
           </div>
 
           <!-- Results Grid -->
           <div class="metric-grid">
             <div class="card">
-              <div class="card-title">Net Profit</div>
+              <div class="card-title">Net P&amp;L</div>
               <div class="metric-val mono" id="sim-bt-pnl">₹0.00</div>
               <div class="metric-sub" id="sim-bt-return">Return: 0.00%</div>
             </div>
             <div class="card">
-              <div class="card-title">Closed Trade Expectancy</div>
+              <div class="card-title">Expectancy</div>
               <div class="metric-val mono" id="sim-bt-expectancy">₹0.00</div>
               <div class="metric-sub" id="sim-bt-terminal-exp">Terminal Adj: ₹0.00</div>
             </div>
             <div class="card">
-              <div class="card-title">Executed Trades</div>
+              <div class="card-title">Trade Count</div>
               <div class="metric-val mono" id="sim-bt-trades">0</div>
               <div class="metric-sub" id="sim-bt-winrate">Win Rate: 0.0%</div>
             </div>
@@ -1309,7 +1309,7 @@
               <span class="badge badge-live" id="sim-active-status"><span class="pulse-dot"></span> RUNNING</span>
               <strong style="color: var(--text-bright);" id="sim-active-title">Replay in progress</strong>
             </div>
-            <button class="btn btn-danger btn-sm" id="btn-stop-replay" onclick="stopActiveReplay()">Stop Replay</button>
+            <button class="btn btn-danger btn-sm" id="btn-stop-replay" onclick="stopActiveReplay()">Stop replay</button>
           </div>
 
           <div class="progress-bar-container">
@@ -1341,7 +1341,7 @@
 
           <!-- Real-Time SVG Equity Curve -->
           <div class="section-card" style="margin-top: 14px;">
-            <div class="section-heading" style="font-size: 0.88rem; margin-bottom: 8px;">Equity Curve Trajectory</div>
+            <div class="section-heading" style="font-size: 0.88rem; margin-bottom: 8px;">Equity Curve</div>
             <div class="chart-container" id="sim-chart-container">
               <svg class="chart-svg" id="equity-svg" viewBox="0 0 800 220" preserveAspectRatio="none">
                 <line x1="0" y1="110" x2="800" y2="110" stroke="#30363D" stroke-dasharray="4" />
@@ -1358,33 +1358,33 @@
       <div class="section-card">
         <div class="section-header">
           <div class="section-heading">
-            <span>Historical Replay &amp; Simulation Runs</span>
-            <span class="badge badge-paper" id="runs-total-badge">0 RUNS RECORDED</span>
+            <span>Runs History</span>
+            <span class="badge badge-paper" id="runs-total-badge">0 runs</span>
           </div>
           <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
             <div class="subtab-bar" style="margin-bottom: 0; padding-bottom: 0; border-bottom: none;">
               <button class="subtab-btn active" id="filter-runs-all" onclick="filterRuns('ALL')">All Runs</button>
-              <button class="subtab-btn" id="filter-runs-bt" onclick="filterRuns('BACKTEST')">Backtests (Deterministic)</button>
-              <button class="subtab-btn" id="filter-runs-fwd" onclick="filterRuns('FORWARD')">Forward Paper</button>
+              <button class="subtab-btn" id="filter-runs-bt" onclick="filterRuns('BACKTEST')">Historical Backtests</button>
+              <button class="subtab-btn" id="filter-runs-fwd" onclick="filterRuns('FORWARD')">Forward Paper Sessions</button>
             </div>
             <button class="btn btn-outline btn-sm" onclick="loadRuns()">↻ Refresh</button>
           </div>
         </div>
         <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">
-          Deterministic historical backtests produce cryptographically sealed Run Dossiers with Merkle trees and verifiable calculation provenance. Forward paper sessions reflect live simulated tick execution.
+          History of past backtests and forward paper simulations. Each run includes executed trades, statutory fees, and verification data.
         </p>
         <div class="table-container">
           <table>
             <thead>
               <tr>
                 <th>Type</th>
-                <th>Run ID &amp; Strategy</th>
-                <th>Contract &amp; Dataset</th>
+                <th>Run &amp; Strategy</th>
+                <th>Execution &amp; Data</th>
                 <th>Time (IST)</th>
                 <th>Status</th>
-                <th>Net Profit (INR)</th>
+                <th>Net P&amp;L</th>
                 <th>Trades</th>
-                <th>Bars / Events</th>
+                <th>Data Points</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -1400,11 +1400,11 @@
     <div id="tab-settings" class="tab-pane">
       <div class="section-card">
         <div class="section-header">
-          <div class="section-heading">Execution Air-Gap & Provider Security</div>
-          <span class="badge badge-paper">AIR-GAP CERTIFIED</span>
+          <div class="section-heading">Providers &amp; Security</div>
+          <span class="badge badge-paper">PAPER ONLY</span>
         </div>
         <p style="font-size: 0.83rem; color: var(--text-muted); margin-bottom: 16px;">
-          All sensitive credentials remain strictly masked. Live order execution endpoints are physically non-existent.
+          Configure market data and AI provider connections. All credentials are masked in the interface. Live trading is permanently disabled.
         </p>
 
         <!-- Provider Cards -->
@@ -1413,8 +1413,8 @@
           <div class="card" style="grid-column: span 2;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
               <div>
-                <h4 style="color: var(--text-bright); font-size: 0.95rem; margin-bottom: 2px;">Kotak Neo Broker Feed</h4>
-                <div style="font-size: 0.75rem; color: var(--text-muted);">Market data streamer & scrip discovery (Read-only)</div>
+                <h4 style="color: var(--text-bright); font-size: 0.95rem; margin-bottom: 2px;">Kotak Neo Market Data</h4>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Read-only market data feed and scrip search</div>
               </div>
               <span class="badge badge-sim" id="settings-kotak-badge">CHECKING...</span>
             </div>
@@ -1425,8 +1425,8 @@
             </div>
             <div style="margin-top: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;" id="kotak-actions">
               <button class="btn btn-primary btn-sm" id="btn-kotak-config" onclick="openConfigureProvider('kotak_neo')">Configure</button>
-              <button class="btn btn-outline btn-sm" id="btn-kotak-test" onclick="testProvider('kotak_neo')">Test Connection</button>
-              <button class="btn btn-outline btn-sm" id="btn-kotak-remove" onclick="removeProvider('kotak_neo')" style="color: var(--red);">Remove</button>
+              <button class="btn btn-outline btn-sm" id="btn-kotak-test" onclick="testProvider('kotak_neo')">Test connection</button>
+              <button class="btn btn-outline btn-sm" id="btn-kotak-remove" onclick="removeProvider('kotak_neo')" style="color: var(--red);">Remove key</button>
               <span style="font-size: 0.75rem; color: var(--text-muted);" id="test-kotak-result"></span>
             </div>
           </div>
@@ -1435,8 +1435,8 @@
           <div class="card" style="grid-column: span 2;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
               <div>
-                <h4 style="color: var(--text-bright); font-size: 0.95rem; margin-bottom: 2px;">Google Gemini AI Subsystem</h4>
-                <div style="font-size: 0.75rem; color: var(--text-muted);">Advisory chart parsing & research dossier critique (ADR 005)</div>
+                <h4 style="color: var(--text-bright); font-size: 0.95rem; margin-bottom: 2px;">Google Gemini AI</h4>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Chart pattern analysis and research review (Advisory only)</div>
               </div>
               <span class="badge badge-sim" id="settings-gemini-badge">CHECKING...</span>
             </div>
@@ -1445,9 +1445,9 @@
               <div><strong>Selected Model:</strong> <span class="mono" id="set-gemini-model">gemini-2.5-flash</span></div>
             </div>
             <div style="margin-top: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;" id="gemini-actions">
-              <button class="btn btn-primary btn-sm" id="btn-gemini-config" onclick="openConfigureProvider('gemini')">Configure API Key</button>
-              <button class="btn btn-outline btn-sm" id="btn-gemini-test" onclick="testProvider('gemini')">Test Connection</button>
-              <button class="btn btn-outline btn-sm" id="btn-gemini-remove" onclick="removeProvider('gemini')" style="color: var(--red);">Remove</button>
+              <button class="btn btn-primary btn-sm" id="btn-gemini-config" onclick="openConfigureProvider('gemini')">Add API key</button>
+              <button class="btn btn-outline btn-sm" id="btn-gemini-test" onclick="testProvider('gemini')">Test connection</button>
+              <button class="btn btn-outline btn-sm" id="btn-gemini-remove" onclick="removeProvider('gemini')" style="color: var(--red);">Remove key</button>
               <span style="font-size: 0.75rem; color: var(--text-muted);" id="test-gemini-result"></span>
             </div>
           </div>
@@ -1455,14 +1455,14 @@
 
         <!-- Workstation Session Security -->
         <div class="section-card" style="margin-top: 14px;">
-          <div class="section-heading" style="font-size: 0.9rem; margin-bottom: 10px;">Workstation Session Authentication</div>
+          <div class="section-heading" style="font-size: 0.9rem; margin-bottom: 10px;">Session Security</div>
           <div style="font-size: 0.78rem; color: var(--amber); background: var(--amber-bg); border: 1px solid var(--amber); border-radius: 4px; padding: 6px 10px; margin-bottom: 10px;">
-            ⚠ This lock is a local UI session gate. It does not encrypt data at rest. Use OS-level access controls for full security.
+            Notice: This lock protects your local browser session. It does not encrypt files stored on disk.
           </div>
           <div style="font-size: 0.82rem; color: var(--text); margin-bottom: 12px;">
-            Logged in as: <strong class="mono" id="session-researcher-id">local_researcher</strong> (Role: Quantitative Researcher)
+            Active user: <strong class="mono" id="session-researcher-id">local_researcher</strong>
           </div>
-          <button class="btn btn-danger btn-sm" onclick="lockWorkstation()">Lock Research Workstation</button>
+          <button class="btn btn-danger btn-sm" onclick="lockWorkstation()">Lock workstation</button>
         </div>
       </div>
     </div>
@@ -1473,12 +1473,12 @@
   <div class="modal-backdrop" id="ast-modal">
     <div class="modal" style="max-width: 840px;">
       <div class="modal-header">
-        <h3 style="color: var(--text-bright); font-size: 1rem;" id="modal-title">Strategy Rules & AST</h3>
+        <h3 style="color: var(--text-bright); font-size: 1rem;" id="modal-title">Strategy Specification &amp; Rules</h3>
         <button class="modal-close" onclick="closeModal('ast-modal')">✕</button>
       </div>
       <div id="modal-human-view" style="margin-bottom: 14px;"></div>
       <details style="margin-top: 14px;">
-        <summary style="font-size: 0.8rem; color: var(--blue); cursor: pointer;">Show Technical AST Definition (JSON)</summary>
+        <summary style="font-size: 0.8rem; color: var(--blue); cursor: pointer;">Show technical definition (JSON)</summary>
         <pre class="code-block" id="modal-content" style="margin-top: 8px; max-height: 250px;"></pre>
       </details>
     </div>
@@ -1497,17 +1497,17 @@
         <div id="provider-modal-error" style="color: var(--red); font-size: 0.8rem; margin-top: 10px; display: none;"></div>
         <div style="margin-top: 18px; display: flex; justify-content: flex-end; gap: 8px;">
           <button class="btn btn-outline" onclick="closeModal('provider-modal')">Cancel</button>
-          <button class="btn btn-primary" onclick="saveProviderCredentials()">Save Credentials</button>
+          <button class="btn btn-primary" onclick="saveProviderCredentials()">Save credentials</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Run Dossier Modal -->
+  <!-- Run Details Modal -->
   <div class="modal-backdrop" id="dossier-modal">
     <div class="modal" style="max-width: 1040px; width: 95%;">
       <div class="modal-header">
-        <h3 style="color: var(--text-bright); font-size: 1rem;" id="dossier-modal-title">Session Dossier</h3>
+        <h3 style="color: var(--text-bright); font-size: 1rem;" id="dossier-modal-title">Run Details</h3>
         <button class="modal-close" onclick="closeModal('dossier-modal')">✕</button>
       </div>
       <div id="dossier-modal-content"></div>
@@ -1518,7 +1518,7 @@
   <div class="modal-backdrop" id="provenance-modal">
     <div class="modal" style="max-width: 860px;">
       <div class="modal-header">
-        <h3 style="color: var(--text-bright); font-size: 1rem;" id="prov-modal-title">Calculation Provenance Drill-Down</h3>
+        <h3 style="color: var(--text-bright); font-size: 1rem;" id="prov-modal-title">Calculation Breakdown</h3>
         <button class="modal-close" onclick="closeModal('provenance-modal')">✕</button>
       </div>
       <div id="prov-modal-meta" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;"></div>
@@ -1527,18 +1527,18 @@
           <thead>
             <tr>
               <th style="width: 35px;">#</th>
-              <th>Step Name</th>
-              <th>Formula Applied</th>
-              <th>Exact Inputs</th>
-              <th>Output Value</th>
-              <th>Audit Explanation</th>
+              <th>Step</th>
+              <th>Formula</th>
+              <th>Inputs</th>
+              <th>Result</th>
+              <th>Explanation</th>
             </tr>
           </thead>
           <tbody id="prov-steps-tbody"></tbody>
         </table>
       </div>
       <div style="margin-top: 14px; text-align: right;">
-        <button class="btn btn-outline btn-sm" onclick="closeModal('provenance-modal')">Close Trace</button>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('provenance-modal')">Close</button>
       </div>
     </div>
   </div>
@@ -1547,7 +1547,7 @@
   <div class="modal-backdrop" id="recalculate-modal">
     <div class="modal" style="max-width: 860px;">
       <div class="modal-header">
-        <h3 style="color: var(--text-bright); font-size: 1rem;" id="recalc-modal-title">Deterministic Reproducibility Audit</h3>
+        <h3 style="color: var(--text-bright); font-size: 1rem;" id="recalc-modal-title">Calculation Verification</h3>
         <button class="modal-close" onclick="closeModal('recalculate-modal')">✕</button>
       </div>
       <div id="recalc-modal-summary" style="margin-bottom: 12px; font-size: 0.84rem;"></div>
@@ -1556,9 +1556,9 @@
           <thead>
             <tr>
               <th>Metric</th>
-              <th>Stored Value</th>
-              <th>Fresh Value</th>
-              <th>Delta</th>
+              <th>Recorded</th>
+              <th>Recalculated</th>
+              <th>Difference</th>
               <th>Tolerance</th>
               <th>Status</th>
             </tr>
@@ -1567,7 +1567,7 @@
         </table>
       </div>
       <div style="margin-top: 14px; text-align: right;">
-        <button class="btn btn-outline btn-sm" onclick="closeModal('recalculate-modal')">Close Audit</button>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('recalculate-modal')">Close</button>
       </div>
     </div>
   </div>
@@ -1576,13 +1576,13 @@
   <div class="modal-backdrop" id="evidence-modal">
     <div class="modal" style="max-width: 860px;">
       <div class="modal-header">
-        <h3 style="color: var(--text-bright); font-size: 1rem;" id="evidence-modal-title">Evidence Bundle &amp; Cryptographic Digest</h3>
+        <h3 style="color: var(--text-bright); font-size: 1rem;" id="evidence-modal-title">Verification Seal Details</h3>
         <button class="modal-close" onclick="closeModal('evidence-modal')">✕</button>
       </div>
       <div id="evidence-modal-header" style="margin-bottom: 10px; font-size: 0.83rem;"></div>
       <pre class="code-block" id="evidence-modal-json" style="max-height: 420px; overflow-y: auto; font-size: 0.78rem;"></pre>
       <div style="margin-top: 14px; text-align: right;">
-        <button class="btn btn-outline btn-sm" onclick="closeModal('evidence-modal')">Close Evidence</button>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('evidence-modal')">Close</button>
       </div>
     </div>
   </div>
@@ -1598,13 +1598,13 @@
       </div>
       <h3 style="color: var(--text-bright); font-size: 1.15rem; margin-bottom: 6px;">Workstation Locked</h3>
       <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px;">
-        Institutional air-gap active. Enter your researcher password or PIN to unlock workstation.
+        Enter your password to unlock the workstation session.
       </p>
       <div class="form-group" style="text-align: left; margin-bottom: 14px;">
         <input type="password" id="lock-password-input" placeholder="Password (default: aditrader2026)" onkeydown="if(event.key==='Enter') unlockWorkstation()">
       </div>
       <div id="lock-error" style="color: var(--red); font-size: 0.78rem; margin-bottom: 10px; display: none;">Invalid credentials</div>
-      <button class="btn btn-primary" style="width: 100%;" onclick="unlockWorkstation()">Unlock Workstation</button>
+      <button class="btn btn-primary" style="width: 100%;" onclick="unlockWorkstation()">Unlock workstation</button>
     </div>
   </div>
 
@@ -1690,7 +1690,7 @@
 
         // DB Badge
         const dbBadge = document.getElementById('db-badge');
-        dbBadge.textContent = data.database && data.database.connected ? 'SQLITE READY' : 'NO DB';
+        dbBadge.textContent = data.database && data.database.connected ? 'Database connected' : 'No database';
 
         // Portfolio Metrics
         const port = data.paper_portfolio || {};
@@ -1702,7 +1702,7 @@
         realElem.textContent = formatINR(realVal);
         realElem.className = 'metric-val mono ' + (realVal > 0 ? 'positive' : realVal < 0 ? 'negative' : '');
         const totalTrades = port.total_trades_count !== undefined ? port.total_trades_count : (data.recent_trades ? data.recent_trades.length : 0);
-        document.getElementById('m-trades-count').textContent = totalTrades + ' total paper trades';
+        document.getElementById('m-trades-count').textContent = totalTrades + ' paper trades';
 
         const unElem = document.getElementById('m-unrealized');
         const unVal = port.unrealized_pnl || 0;
@@ -1775,7 +1775,7 @@
           const backtests = allRuns.filter(r => r.run_type === 'BACKTEST').slice(0, 4);
           btBody.innerHTML = '';
           if (backtests.length === 0) {
-            btBody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">No deterministic backtests recorded yet. Launch one from Simulation tab.</td></tr>';
+            btBody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">No historical backtests recorded yet. Run one from the Simulation tab.</td></tr>';
           } else {
             backtests.forEach(r => {
               const tr = document.createElement('tr');
@@ -1790,11 +1790,11 @@
                 <td class="mono ${pnl >= 0 ? 'positive' : 'negative'}"><strong>${formatINR(pnl)}</strong></td>
                 <td class="mono">${retPct}</td>
                 <td class="mono">${r.trades_count}</td>
-                <td><span class="badge badge-purple" style="font-size: 0.68rem;" title="${r.tamper_digest || ''}">SEALED</span></td>
+                <td><span class="badge badge-purple" style="font-size: 0.68rem;" title="${r.tamper_digest || ''}">Verified</span></td>
                 <td>
                   <div style="display: flex; gap: 4px;">
-                    <button class="btn btn-outline btn-sm" onclick="viewDossier('${r.session_id}')">Inspect</button>
-                    <button class="btn btn-outline btn-sm" onclick="recalculateRun('${r.session_id}')" title="Audit Reproducibility">Audit</button>
+                    <button class="btn btn-outline btn-sm" onclick="viewDossier('${r.session_id}')">View details</button>
+                    <button class="btn btn-outline btn-sm" onclick="recalculateRun('${r.session_id}')" title="Verify Reproducibility">Verify</button>
                   </div>
                 </td>
               `;
@@ -1824,7 +1824,7 @@
                 <td class="mono">${r.trades_count}</td>
                 <td class="mono">${r.bars_count}</td>
                 <td>
-                  <button class="btn btn-outline btn-sm" onclick="viewDossier('${r.session_id}')">Inspect</button>
+                  <button class="btn btn-outline btn-sm" onclick="viewDossier('${r.session_id}')">View details</button>
                 </td>
               `;
               fwdBody.appendChild(tr);
@@ -1853,15 +1853,15 @@
             if (s.id && s.id.includes('ladder')) {
               plainSummary = 'Sells 1 NIFTY CE in dynamic premium band, buys 4 CE hedges near ₹5 with ratchet trailing stop.';
             } else if (s.id && s.id.includes('trend')) {
-              plainSummary = 'Momentum breakout strategy tracking 1-minute NIFTY price breaks with EMA confirmation.';
+              plainSummary = 'Breakout strategy tracking 1-minute NIFTY momentum with EMA confirmation.';
             } else if (s.id && s.id.includes('condor')) {
               plainSummary = 'Delta-neutral options wing strategy capturing theta decay in range-bound markets.';
             } else if (s.id && s.id.includes('straddle')) {
-              plainSummary = 'Simultaneous ATM Call and Put purchase profiting from large volatility expansion.';
+              plainSummary = 'Simultaneous ATM Call and Put purchase profiting from volatility expansion.';
             } else if (s.id && s.id.includes('spread')) {
-              plainSummary = 'Defined-risk vertical debit spread capitalizing on directional upward moves.';
+              plainSummary = 'Defined-risk vertical debit spread capitalizing on upward moves.';
             } else {
-              plainSummary = 'Declarative institutional strategy DSL state machine.';
+              plainSummary = 'Declarative strategy state machine.';
             }
           }
 
@@ -1877,7 +1877,7 @@
           // Col 2: Structure & Instrument
           const colStructure = `
             <div>
-              <span class="badge ${isOptions ? 'badge-purple' : 'badge-paper'}">${isOptions ? 'OPTIONS MULTI-LEG' : 'EQUITY / INDEX LINEAR'}</span>
+              <span class="badge ${isOptions ? 'badge-purple' : 'badge-paper'}">${isOptions ? 'Options multi-leg' : 'Equity / Index linear'}</span>
               <div class="mono" style="font-size: 0.74rem; color: var(--text-muted); margin-top: 4px;">Underlying: <strong>${s.underlying}</strong> &middot; ${s.timeframe || 'INTRADAY'}</div>
             </div>
           `;
@@ -1885,33 +1885,33 @@
           // Col 3: Execution & Replay Eligibility
           const colEligibility = isOptions
             ? `<div>
-                 <span class="badge badge-sim">THEORETICAL ONLY (REPLAY BLOCKED)</span>
-                 <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">Air-gapped under ADR 011 &middot; Analytical Greeks only</div>
+                 <span class="badge badge-sim">Theoretical only</span>
+                 <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">Theoretical payoff &amp; Greeks only &middot; Replay unavailable</div>
                </div>`
             : `<div>
-                 <span class="badge badge-live">DETERMINISTIC REPLAYABLE</span>
-                 <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">NEXT_BAR_OPEN execution &middot; Envelope clamped</div>
+                 <span class="badge badge-live">Replayable</span>
+                 <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">Next-bar open execution &middot; Price clamped</div>
                </div>`;
 
           // Col 4: Required Market Data
           const colData = isOptions
             ? `<div>
-                 <span class="badge badge-purple" style="font-size: 0.68rem;">OPTIONS CHAIN</span>
+                 <span class="badge badge-purple" style="font-size: 0.68rem;">Options chain</span>
                  <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">Multi-strike tick IV surface</div>
                </div>`
             : `<div>
-                 <span class="badge badge-sim" style="font-size: 0.68rem;">NSE INTRADAY CSV</span>
-                 <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">1m/5m OHLCV linear series</div>
+                 <span class="badge badge-sim" style="font-size: 0.68rem;">Intraday CSV</span>
+                 <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">1m/5m OHLCV price series</div>
                </div>`;
 
           // Col 5: Actions
           const backtestBtn = isOptions
-            ? `<button class="btn btn-outline btn-sm" style="opacity: 0.5; cursor: not-allowed;" disabled title="Historical replay blocked under ADR 011">Backtest (Blocked)</button>`
-            : `<button class="btn btn-primary btn-sm" onclick="switchTab('simulation'); document.getElementById('sim-strategy-select').value='${s.id}'; checkPreflightCompatibility();">Backtest &rarr;</button>`;
+            ? `<button class="btn btn-outline btn-sm" style="opacity: 0.5; cursor: not-allowed;" disabled title="Multi-leg options require option chain data">Replay unavailable</button>`
+            : `<button class="btn btn-primary btn-sm" onclick="switchTab('simulation'); document.getElementById('sim-strategy-select').value='${s.id}'; checkPreflightCompatibility();">Run backtest &rarr;</button>`;
 
           const colActions = `
             <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-              <button class="btn btn-outline btn-sm" onclick="inspectStrategyAst('${s.id}')">Inspect</button>
+              <button class="btn btn-outline btn-sm" onclick="inspectStrategyAst('${s.id}')">View details</button>
               <button class="btn btn-outline btn-sm" onclick="switchTab('validation'); document.getElementById('val-strategy-select').value='${s.id}'; runValidation();">Validate</button>
               ${backtestBtn}
             </div>
@@ -1936,7 +1936,7 @@
         const res = await apiFetch('/api/strategies/' + encodeURIComponent(strategyId));
         if (!res.ok) return;
         const details = await res.json();
-        document.getElementById('modal-title').textContent = (details.name || strategyId) + ' — Specification & Rules';
+        document.getElementById('modal-title').textContent = (details.name || strategyId) + ' — Details & Rules';
 
         const isOptions = details.is_options || (details.legs && details.legs.length > 0) || details.id.includes('option') || details.id.includes('ladder');
         let logicHtml = '';
@@ -1945,21 +1945,21 @@
             <div style="margin-top: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px;">
               <div style="font-weight: 600; font-size: 0.85rem; color: var(--purple); margin-bottom: 6px;">Dynamic Premium Bands (Trigger Range)</div>
               <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 8px;">
-                <strong>Premium Band &ne; Strike:</strong> The strategy matches the NIFTY CE whose current market premium trades inside the target band:
+                <strong>Premium bands are not strikes:</strong> The strategy matches the NIFTY CE whose current market premium trades inside the target band:
               </p>
               <div class="premium-bands-grid" style="margin-bottom: 10px;">
                 ${details.premium_bands.bands.map(b => `<div class="band-pill"><strong>${b.label}</strong>₹${b.min_premium.toFixed(2)} &ndash; ₹${b.max_premium.toFixed(2)}</div>`).join('')}
               </div>
               <div style="font-size: 0.78rem; color: var(--text); line-height: 1.6;">
-                <strong>Hedge Ratio:</strong> Buy 4 CE hedges near ₹5.00 (tolerance: ₹3.00 &ndash; ₹7.00)<br>
-                <strong>Trailing Ratchet Stop:</strong> Ratchets with ₹10 moves (e.g. premium 50&rarr;40 sets stop at 45)
+                <strong>Hedge Ratio:</strong> Buy 4 CE hedges near ₹5.00 (range: ₹3.00 &ndash; ₹7.00)<br>
+                <strong>Trailing Ratchet Stop:</strong> Ratchets with ₹10 price moves (e.g. premium 50&rarr;40 sets stop at 45)
               </div>
             </div>
           `;
         } else if (details.dsl && details.dsl.conditions) {
           logicHtml = `
             <div style="margin-top: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px;">
-              <div style="font-weight: 600; font-size: 0.85rem; color: var(--blue); margin-bottom: 6px;">Execution Entry Rules</div>
+              <div style="font-weight: 600; font-size: 0.85rem; color: var(--blue); margin-bottom: 6px;">Entry Conditions</div>
               <div style="font-size: 0.8rem; color: var(--text);">
                 Conditions: ${details.dsl.conditions.length} condition group(s) &middot; Direction: ${details.dsl.direction || 'LONG'} &middot; Timeframe: ${details.timeframe || 'INTRADAY'}
               </div>
@@ -1968,25 +1968,25 @@
         }
 
         const replayStatus = isOptions
-          ? `<span class="badge badge-sim">Requires Multi-Strike Chain Data</span> <span style="font-size: 0.78rem; color: var(--text-muted);">Cannot run on single-instrument spot CSVs</span>`
-          : `<span class="badge badge-live">Ready for Replay</span> <span style="font-size: 0.78rem; color: var(--text-muted);">Compatible with standard NSE Intraday CSV feeds</span>`;
+          ? `<span class="badge badge-sim">Options chain data needed</span> <span style="font-size: 0.78rem; color: var(--text-muted);">Cannot run on single-instrument price series</span>`
+          : `<span class="badge badge-live">Ready for backtest</span> <span style="font-size: 0.78rem; color: var(--text-muted);">Compatible with standard intraday CSV data</span>`;
 
         document.getElementById('modal-human-view').innerHTML = `
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
-            <span class="badge ${isOptions ? 'badge-purple' : 'badge-paper'}">${isOptions ? 'OPTIONS DERIVATIVE' : 'EQUITY / INDEX LINEAR'}</span>
+            <span class="badge ${isOptions ? 'badge-purple' : 'badge-paper'}">${isOptions ? 'Options multi-leg' : 'Equity / Index linear'}</span>
             <span class="mono" style="font-size: 0.8rem; color: var(--text-muted);">Underlying: <strong>${details.underlying}</strong> &middot; Timeframe: <strong>${details.timeframe}</strong></span>
           </div>
           <p style="font-size: 0.84rem; color: var(--text-bright); line-height: 1.5; margin-bottom: 12px;">
-            ${details.description || 'Institutional declarative strategy built on StrategyDSL state machines.'}
+            ${details.description || 'Declarative strategy definition.'}
           </p>
           ${logicHtml}
           <div style="margin-top: 12px; padding: 10px; background: rgba(22,27,34,0.6); border: 1px solid var(--border); border-radius: 6px;">
-            <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;">Replay Readiness</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;">Replay Status</div>
             <div>${replayStatus}</div>
           </div>
           <div style="margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap;">
-            <button class="btn btn-primary btn-sm" onclick="closeModal('ast-modal'); switchTab('validation'); document.getElementById('val-strategy-select').value='${details.id}';">Validate in Studio &rarr;</button>
-            <button class="btn btn-outline btn-sm" onclick="closeModal('ast-modal'); switchTab('simulation'); document.getElementById('sim-strategy-select').value='${details.id}'; checkPreflightCompatibility();">Configure Replay &rarr;</button>
+            <button class="btn btn-primary btn-sm" onclick="closeModal('ast-modal'); switchTab('validation'); document.getElementById('val-strategy-select').value='${details.id}';">Validate strategy &rarr;</button>
+            <button class="btn btn-outline btn-sm" onclick="closeModal('ast-modal'); switchTab('simulation'); document.getElementById('sim-strategy-select').value='${details.id}'; checkPreflightCompatibility();">Configure backtest &rarr;</button>
           </div>
         `;
 
@@ -2012,18 +2012,18 @@
         registeredDatasets.forEach(d => {
           const tr = document.createElement('tr');
           const sampleTag = (d.is_sample || d.dataset_type === 'SAMPLE_FIXTURE')
-            ? ' <span class="badge badge-sim" style="font-size:0.65rem; padding: 2px 6px;">SAMPLE</span>'
+            ? ' <span class="badge badge-sim" style="font-size:0.65rem; padding: 2px 6px;">Sample</span>'
             : '';
           const chainBadge = d.is_chain_aware
-            ? '<span class="badge badge-purple">OPTIONS CHAIN</span>'
-            : '<span class="badge badge-sim">SPOT / LINEAR</span>';
+            ? '<span class="badge badge-purple">Options chain</span>'
+            : '<span class="badge badge-sim">Price series</span>';
           const replayBadge = d.is_replayable
-            ? '<span class="badge badge-live">REPLAYABLE</span>'
-            : `<span class="badge badge-alert">INSPECT ONLY</span>${d.ineligibility_reason ? '<div style="font-size:0.7rem;color:var(--text-muted);margin-top:3px;white-space:normal;max-width:200px;">' + d.ineligibility_reason.split('per ADR')[0].trim() + '</div>' : ''}`;
+            ? '<span class="badge badge-live">Valid for backtests</span>'
+            : `<span class="badge badge-alert">Inspect only</span>${d.ineligibility_reason ? '<div style="font-size:0.7rem;color:var(--text-muted);margin-top:3px;white-space:normal;max-width:200px;">' + d.ineligibility_reason.split('per ADR')[0].trim() + '</div>' : ''}`;
           tr.innerHTML = `
             <td class="mono"><strong>${d.path}</strong>${sampleTag}</td>
             <td class="mono">${(d.size_bytes / 1024).toFixed(1)} KB</td>
-            <td><span class="badge badge-paper">${d.detected_format || 'UNKNOWN'}</span></td>
+            <td><span class="badge badge-paper">${d.detected_format || 'Unknown'}</span></td>
             <td>${chainBadge}</td>
             <td>${replayBadge}</td>
             <td>
@@ -2060,34 +2060,34 @@
           return;
         }
         document.getElementById('inspect-results').style.display = 'block';
-        document.getElementById('ins-format').textContent = rep.detected_format || 'UNKNOWN';
+        document.getElementById('ins-format').textContent = rep.detected_format || 'Unknown';
         document.getElementById('ins-bars').textContent = rep.parsed_bars || 0;
-        document.getElementById('ins-tf').textContent = rep.timeframe_detected || 'INTRADAY';
+        document.getElementById('ins-tf').textContent = rep.timeframe_detected || 'Intraday';
         const readyElem = document.getElementById('ins-ready');
-        readyElem.textContent = rep.is_valid_replayable ? 'READY' : 'INVALID';
+        readyElem.textContent = rep.is_valid_replayable ? 'Valid for backtest' : 'Inspect only';
         readyElem.className = 'metric-val mono ' + (rep.is_valid_replayable ? 'positive' : 'negative');
         
         const detailsContainer = document.getElementById('ins-details-container') || document.getElementById('ins-details');
         const diagnosticsCard = `
           <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <strong style="color: var(--text-bright); font-size: 0.85rem;">Dataset Integrity Diagnostics</strong>
-              <span class="badge ${rep.is_valid_replayable ? 'badge-live' : 'badge-alert'}">${rep.is_valid_replayable ? 'PASSED ENVELOPE CHECKS' : 'INSPECTION FLAGS'}</span>
+              <strong style="color: var(--text-bright); font-size: 0.85rem;">Dataset Summary & Diagnostics</strong>
+              <span class="badge ${rep.is_valid_replayable ? 'badge-live' : 'badge-alert'}">${rep.is_valid_replayable ? 'All checks passed' : 'Inspection notice'}</span>
             </div>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; font-size: 0.78rem; margin-bottom: 8px;">
-              <div><strong>Format Standard:</strong> <span class="mono">${rep.detected_format || '-'}</span></div>
-              <div><strong>Continuous Session:</strong> <span style="color: var(--green);">09:15 &ndash; 15:30 IST Session Enforced</span></div>
-              <div><strong>Price Envelope:</strong> <span style="color: var(--green);">Low &le; Open, Close &le; High</span></div>
-              <div><strong>Contract Structure:</strong> ${rep.is_chain_aware ? '<span class="badge badge-purple">OPTIONS CHAIN</span>' : '<span class="badge badge-sim">LINEAR SPOT / FUTURES</span>'}</div>
+              <div><strong>Format:</strong> <span class="mono">${rep.detected_format || '-'}</span></div>
+              <div><strong>Session:</strong> <span style="color: var(--green);">09:15 &ndash; 15:30 IST</span></div>
+              <div><strong>Price envelope:</strong> <span style="color: var(--green);">Low &le; Open, Close &le; High</span></div>
+              <div><strong>Data type:</strong> ${rep.is_chain_aware ? '<span class="badge badge-purple">Options chain</span>' : '<span class="badge badge-sim">Price series</span>'}</div>
             </div>
             <div style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.4;">
               ${rep.is_valid_replayable 
-                ? '✓ Integrity verified. Suitable for deterministic NEXT_BAR_OPEN execution and balance sheet reconciliation.'
-                : '⚠ Replay restricted: ' + (rep.ineligibility_reason || 'Dataset cannot be used directly in historical backtest runner.')}
+                ? 'All format and integrity checks passed. Ready for historical backtesting.'
+                : 'Notice: ' + (rep.ineligibility_reason ? rep.ineligibility_reason.split('per ADR')[0].trim() : 'Dataset cannot be used directly in historical backtest runner.')}
             </div>
           </div>
           <details style="margin-top: 8px;">
-            <summary style="font-size: 0.78rem; color: var(--blue); cursor: pointer;">Show Technical Inspector JSON</summary>
+            <summary style="font-size: 0.78rem; color: var(--blue); cursor: pointer;">Show technical details (JSON)</summary>
             <pre class="code-block" style="max-height: 240px; margin-top: 6px; font-size: 0.74rem;">${JSON.stringify(rep, null, 2)}</pre>
           </details>
         `;
@@ -2161,15 +2161,15 @@
         const icon = document.getElementById('val-banner-icon');
         const text = document.getElementById('val-banner-text');
 
-        const defaultReason = rep.status === 'APPROVED' ? 'Meets institutional standards and risk gate criteria.' : 'Failed institutional standards or risk gate veto.';
+        const defaultReason = rep.status === 'APPROVED' ? 'Meets institutional risk and performance criteria.' : 'Does not meet institutional risk or performance criteria.';
         const reasonText = rep.reason || rep.message || defaultReason;
         let sourceBadge = '';
         if (rep.is_options) {
-          sourceBadge = ' <span class="badge badge-purple" style="font-size:0.72rem; margin-left:6px;">THEORETICAL OPTIONS MODEL (ADR 011)</span>';
+          sourceBadge = ' <span class="badge badge-purple" style="font-size:0.72rem; margin-left:6px;">Theoretical options model</span>';
         } else if (rep.validation_scope === 'HISTORICAL') {
-          sourceBadge = ' <span class="badge badge-live" style="font-size:0.72rem; margin-left:6px;">ENGINE BACKTEST PASS (EMPIRICAL)</span>';
+          sourceBadge = ' <span class="badge badge-live" style="font-size:0.72rem; margin-left:6px;">Backtest verified (empirical)</span>';
         } else {
-          sourceBadge = ' <span class="badge badge-paper" style="font-size:0.72rem; margin-left:6px;">STATIC AST ANALYSIS (STRUCTURAL ONLY)</span>';
+          sourceBadge = ' <span class="badge badge-paper" style="font-size:0.72rem; margin-left:6px;">Structural check only</span>';
         }
 
         const oStatus = rep.overall_verification_status;
@@ -2178,21 +2178,21 @@
         if (oStatus === 'FAIL' || oStatus === 'BLOCKED' || vStatus === 'REJECTED') {
           banner.className = 'alert-box danger';
           icon.textContent = '✗';
-          const failTitle = oStatus === 'BLOCKED' ? 'VERIFICATION BLOCKED' : 'VERIFICATION REJECTED';
+          const failTitle = oStatus === 'BLOCKED' ? 'Validation blocked' : 'Validation rejected';
           text.innerHTML = `<strong>${failTitle}:</strong> ` + reasonText + sourceBadge;
         } else if (oStatus === 'INCOMPLETE' || vStatus === 'INCOMPLETE' || vStatus === 'NOT_RECOMMENDED') {
           banner.className = 'alert-box warning';
           icon.textContent = '⚠';
-          text.innerHTML = '<strong>VERIFICATION INCOMPLETE:</strong> ' + (rep.notice || 'Empirical historical replay dataset required for institutional verification.') + sourceBadge;
+          text.innerHTML = '<strong>Data needed:</strong> ' + (rep.notice || 'Select a historical dataset to run empirical verification.') + sourceBadge;
         } else if ((oStatus === 'PASS' || oStatus === 'THEORETICAL_PASS') && vStatus === 'APPROVED') {
           banner.className = 'alert-box success';
           icon.textContent = '✓';
-          const titleText = oStatus === 'THEORETICAL_PASS' ? 'THEORETICAL PAYOFF VERIFIED' : 'STRATEGY APPROVED';
+          const titleText = oStatus === 'THEORETICAL_PASS' ? 'Theoretical payoff verified' : 'Strategy validated';
           text.innerHTML = `<strong>${titleText}:</strong> ` + reasonText + sourceBadge;
         } else {
           banner.className = 'alert-box danger';
           icon.textContent = '✗';
-          text.innerHTML = '<strong>VERIFICATION FAILED:</strong> ' + reasonText + sourceBadge;
+          text.innerHTML = '<strong>Validation failed:</strong> ' + reasonText + sourceBadge;
         }
 
         const metrics = rep.metrics || {};
@@ -2207,11 +2207,11 @@
         } else {
           document.getElementById('v-expectancy').textContent = 'Not calculated';
           if (rep.is_options) {
-            document.getElementById('v-expectancy-sub').textContent = 'Options: Theoretical analysis (ADR 011)';
+            document.getElementById('v-expectancy-sub').textContent = 'Options: Theoretical model only';
           } else if (sampleSize === 0) {
-            document.getElementById('v-expectancy-sub').textContent = 'Insufficient sample (0 trades)';
+            document.getElementById('v-expectancy-sub').textContent = 'No trade sample (0 trades)';
           } else {
-            document.getElementById('v-expectancy-sub').textContent = 'Select dataset to compute';
+            document.getElementById('v-expectancy-sub').textContent = 'Select dataset to calculate';
           }
         }
 
@@ -2224,7 +2224,7 @@
         if (sampleSize !== null && sampleSize !== undefined) {
           document.getElementById('v-trades-sample').textContent = sampleSize + ' sample trades';
         } else {
-          document.getElementById('v-trades-sample').textContent = rep.is_options ? 'Not applicable (Options model)' : 'No historical trades';
+          document.getElementById('v-trades-sample').textContent = rep.is_options ? 'Not applicable (options model)' : 'No historical trades';
         }
 
         const hasDd = metrics.max_drawdown_pct !== null && metrics.max_drawdown_pct !== undefined && (hasSample || metrics.max_drawdown_pct > 0);
@@ -2239,7 +2239,7 @@
           const gateDisplayName = g.name || g.gate_name || 'Risk Gate';
           div.innerHTML = `
             <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">${gateDisplayName}</div>
-            <div><span class="badge ${g.passed ? 'badge-live' : 'badge-alert'}">${g.passed ? 'PASSED' : 'VETOED'}</span> <span style="font-size: 0.78rem;">${g.detail || ''}</span></div>
+            <div><span class="badge ${g.passed ? 'badge-live' : 'badge-alert'}">${g.passed ? 'Passed' : 'Vetoed'}</span> <span style="font-size: 0.78rem;">${g.detail || ''}</span></div>
           `;
           gatesContainer.appendChild(div);
         });
@@ -2257,7 +2257,7 @@
           }
           document.getElementById('v-payoff-be').textContent = beText;
           document.getElementById('v-payoff-profit').textContent = p.max_profit !== null && p.max_profit !== undefined ? formatINR(p.max_profit) : 'Uncapped';
-          document.getElementById('v-payoff-loss').textContent = p.max_loss !== null && p.max_loss !== undefined ? formatINR(p.max_loss) : 'Undefined (Unhedged Tail Risk)';
+          document.getElementById('v-payoff-loss').textContent = p.max_loss !== null && p.max_loss !== undefined ? formatINR(p.max_loss) : 'Unhedged tail risk';
         } else {
           payoffCont.style.display = 'none';
         }
@@ -2273,13 +2273,13 @@
           matrixBody.innerHTML = '';
           const pillars = rep.verification_matrix.pillars;
           const pillarLabels = {
-            structural: 'Structural AST & Rules',
-            data_integrity: 'Market Data Integrity',
-            known_answer_tests: 'Deterministic Known-Answer Tests (KAT)',
-            historical_replay: 'Historical Replay Simulation',
-            empirical_metrics: 'Empirical Performance Metrics',
-            options_theoretical: 'Options Theoretical Payoff & Greeks',
-            reconciliation: 'Balance Sheet Reconciliation Invariant'
+            structural: 'Rules & specification',
+            data_integrity: 'Data integrity',
+            known_answer_tests: 'Calculation tests (KAT)',
+            historical_replay: 'Historical backtest',
+            empirical_metrics: 'Empirical performance',
+            options_theoretical: 'Options payoff & Greeks',
+            reconciliation: 'Balance sheet reconciliation'
           };
           for (const [pkey, pdata] of Object.entries(pillars)) {
             const tr = document.createElement('tr');
@@ -2304,10 +2304,20 @@
         if (overallVerdictEl) {
           const oStatus = rep.overall_verification_status || rep.status;
           let oClass = 'badge-live';
-          if (oStatus === 'THEORETICAL_PASS') oClass = 'badge-purple';
-          else if (oStatus === 'INCOMPLETE') oClass = 'badge-paper';
-          else if (oStatus === 'FAIL' || oStatus === 'BLOCKED') oClass = 'badge-alert';
-          overallVerdictEl.innerHTML = `<span class="badge ${oClass}" style="font-size: 0.78rem;">OVERALL VERDICT: ${oStatus}</span>`;
+          let displayStatus = oStatus;
+          if (oStatus === 'THEORETICAL_PASS') {
+            oClass = 'badge-purple';
+            displayStatus = 'Theoretical pass';
+          } else if (oStatus === 'INCOMPLETE') {
+            oClass = 'badge-paper';
+            displayStatus = 'Incomplete (data needed)';
+          } else if (oStatus === 'FAIL' || oStatus === 'BLOCKED') {
+            oClass = 'badge-alert';
+            displayStatus = oStatus === 'BLOCKED' ? 'Blocked' : 'Failed';
+          } else if (oStatus === 'PASS') {
+            displayStatus = 'Passed';
+          }
+          overallVerdictEl.innerHTML = `<span class="badge ${oClass}" style="font-size: 0.78rem;">Status: ${displayStatus}</span>`;
         }
 
         const bundleIdEl = document.getElementById('v-bundle-id');
@@ -2316,7 +2326,7 @@
         if (tamperDigestEl) tamperDigestEl.textContent = (rep.tamper_hash || 'SHA256:VERIFIED').substring(0, 16) + '...';
         const katBadgeEl = document.getElementById('v-kat-badge');
         if (katBadgeEl && rep.kat_summary) {
-          katBadgeEl.textContent = `✓ ${rep.kat_summary.passed}/${rep.kat_summary.total} Analytical Known-Answer Tests Clean`;
+          katBadgeEl.textContent = `✓ ${rep.kat_summary.passed}/${rep.kat_summary.total} arithmetic tests verified`;
         }
 
       } catch (err) {
@@ -2345,11 +2355,11 @@
           alert('Provenance notice: ' + data.error);
           return;
         }
-        document.getElementById('prov-modal-title').textContent = `Calculation Provenance: ${data.target_metric || metricName}`;
+        document.getElementById('prov-modal-title').textContent = `Calculation Breakdown: ${data.target_metric || metricName}`;
         document.getElementById('prov-modal-meta').innerHTML = `
           <strong>Calculation ID:</strong> <span class="mono">${data.calculation_id || '-'}</span> &nbsp;|&nbsp;
           <strong>Strategy:</strong> <span class="mono">${data.strategy_id || '-'}</span> &nbsp;|&nbsp;
-          <strong>Final Verified Output:</strong> <span class="mono" style="color: var(--blue); font-weight:600;">${typeof data.final_value === 'number' ? Number(data.final_value).toFixed(2) : data.final_value}</span>
+          <strong>Result:</strong> <span class="mono" style="color: var(--blue); font-weight:600;">${typeof data.final_value === 'number' ? Number(data.final_value).toFixed(2) : data.final_value}</span>
         `;
         const tbody = document.getElementById('prov-steps-tbody');
         tbody.innerHTML = '';
@@ -2396,7 +2406,14 @@
         else if (data.status === 'INCOMPLETE') badgeClass = 'badge-paper';
         else if (data.status === 'STALE') badgeClass = 'badge-warning';
         else if (data.status === 'BLOCKED') badgeClass = 'badge-alert';
-        const statusBadge = `<span class="badge ${badgeClass}">${data.status || (isOk ? 'REPRODUCED' : 'MISMATCH')}</span>`;
+        let statusBadgeText = data.status || (isOk ? 'Verified' : 'Mismatch');
+        if (data.status === 'REPRODUCED') statusBadgeText = 'Verified';
+        else if (data.status === 'INCOMPLETE') statusBadgeText = 'Incomplete';
+        else if (data.status === 'STALE') statusBadgeText = 'Stale';
+        else if (data.status === 'BLOCKED') statusBadgeText = 'Blocked';
+        else if (data.status === 'MISMATCH') statusBadgeText = 'Mismatch';
+
+        const statusBadge = `<span class="badge ${badgeClass}">${statusBadgeText}</span>`;
         sumEl.innerHTML = `
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <div><strong>Status:</strong> ${statusBadge} &nbsp;|&nbsp; <strong>Mismatches:</strong> <span class="mono">${data.mismatch_count || 0}</span></div>
@@ -2418,7 +2435,7 @@
               <td class="mono">${c.fresh_value !== null && c.fresh_value !== undefined ? Number(c.fresh_value).toFixed(4) : 'None'}</td>
               <td class="mono ${ok ? '' : 'negative'}">${typeof c.delta === 'number' ? Number(c.delta).toFixed(4) : c.delta}</td>
               <td class="mono" style="color: var(--text-muted);">${c.tolerance}</td>
-              <td><span class="badge ${ok ? 'badge-live' : 'badge-alert'}">${ok ? 'VERIFIED' : 'DIVERGED'}</span></td>
+              <td><span class="badge ${ok ? 'badge-live' : 'badge-alert'}">${ok ? 'Verified' : 'Diverged'}</span></td>
             `;
             tbody.appendChild(tr);
           });
@@ -2482,7 +2499,7 @@
         if (btnLaunchBt) btnLaunchBt.style.display = 'inline-block';
         if (btnStartFwd) btnStartFwd.style.display = 'none';
         if (expl) {
-          expl.textContent = 'Strict deterministic historical replay closed at or before each bar. Orders fill at NEXT_BAR_OPEN clamped to bar low/high. Merkle tree cryptographic seals generated.';
+          expl.textContent = 'Deterministic historical replay using point-in-time data. Orders fill at next-bar open within candle bounds with fee attribution.';
         }
       } else {
         if (btnBt) btnBt.classList.remove('active');
@@ -2494,7 +2511,7 @@
         if (btnLaunchBt) btnLaunchBt.style.display = 'none';
         if (btnStartFwd) btnStartFwd.style.display = 'inline-block';
         if (expl) {
-          expl.textContent = 'Tick-by-tick forward paper simulation through local PaperBroker. Real-time order fill updates and live equity tracking.';
+          expl.textContent = 'Forward paper simulation through local PaperBroker. Real-time order fill updates and live equity tracking.';
         }
       }
       checkPreflightCompatibility();
@@ -2518,7 +2535,7 @@
       registeredDatasets.forEach(d => {
         const opt = document.createElement('option');
         opt.value = d.path;
-        opt.textContent = d.path + (d.is_chain_aware ? ' [OPTIONS CHAIN]' : ' [SPOT CSV]');
+        opt.textContent = d.path + (d.is_chain_aware ? ' (Options chain)' : ' (Price series)');
         dsSel.appendChild(opt);
       });
 
@@ -2552,29 +2569,29 @@
           if (isOptions || !rep.compatible) {
             gateBox.className = 'alert-box danger';
             const reason = isOptions
-              ? 'ADR 011 Replay Guard: Multi-leg options strategies cannot run in linear historical backtester. Requires multi-strike tick IV surface. Theoretical Black-Scholes validation only.'
+              ? 'Multi-leg options strategies require option chain data. Linear backtesting is unavailable for this strategy.'
               : (rep.reason || 'Dataset is incompatible with selected strategy.');
-            gateText.innerHTML = '<strong>BACKTEST BLOCKED:</strong> ' + reason;
+            gateText.innerHTML = '<strong>Backtest unavailable:</strong> ' + reason;
             if (btnLaunchBt) btnLaunchBt.disabled = true;
-            if (hint) hint.textContent = 'Backtest blocked: ' + (isOptions ? 'Options strategy requires theoretical validation (ADR 011)' : 'Incompatible data');
+            if (hint) hint.textContent = 'Backtest unavailable: ' + (isOptions ? 'Options strategy requires option chain data' : 'Incompatible data');
           } else {
             gateBox.className = 'alert-box success';
-            gateText.innerHTML = '<strong>COMPATIBILITY CONFIRMED:</strong> Strategy AST and dataset are verified for deterministic historical backtesting (' + (rep.reason || '100% compatible') + ').';
+            gateText.innerHTML = '<strong>Ready for backtest:</strong> Strategy and dataset are compatible (' + (rep.reason || 'all checks passed') + ').';
             if (btnLaunchBt) btnLaunchBt.disabled = false;
-            if (hint) hint.textContent = 'Ready for NEXT_BAR_OPEN deterministic replay';
+            if (hint) hint.textContent = 'Ready for next-bar open backtest';
           }
         } else {
           // FORWARD Paper mode
           if (rep.compatible) {
             gateBox.className = 'alert-box success';
-            gateText.innerHTML = '<strong>COMPATIBILITY CONFIRMED:</strong> ' + rep.reason;
+            gateText.innerHTML = '<strong>Ready for paper session:</strong> ' + rep.reason;
             if (btnStartFwd) btnStartFwd.disabled = false;
-            if (hint) hint.textContent = 'Ready to launch paper rehearsal';
+            if (hint) hint.textContent = 'Ready to launch paper session';
           } else {
             gateBox.className = 'alert-box danger';
-            gateText.innerHTML = '<strong>COMPATIBILITY REJECTED:</strong> ' + rep.reason;
+            gateText.innerHTML = '<strong>Paper session unavailable:</strong> ' + rep.reason;
             if (btnStartFwd) btnStartFwd.disabled = true;
-            if (hint) hint.textContent = 'Simulation blocked: incompatible strategy and dataset';
+            if (hint) hint.textContent = 'Simulation unavailable: incompatible strategy and dataset';
           }
         }
       } catch (err) {
@@ -2599,7 +2616,7 @@
 
       btn.disabled = true;
       const origText = btn.textContent;
-      btn.textContent = 'Executing Backtest...';
+      btn.textContent = 'Running backtest...';
 
       try {
         const res = await apiFetch('/api/backtest/run', {
@@ -2728,7 +2745,7 @@
         currentActiveRunId = rep.run_id;
         document.getElementById('sim-active-monitor').style.display = 'block';
         document.getElementById('btn-start-replay').disabled = true;
-        document.getElementById('sim-active-title').textContent = 'Replay: ' + stratId;
+        document.getElementById('sim-active-title').textContent = 'Paper session: ' + stratId;
 
         // Start active run polling
         if (activeRunPollInterval) clearInterval(activeRunPollInterval);
@@ -2861,7 +2878,7 @@
       }
 
       const totalBadge = document.getElementById('runs-total-badge');
-      if (totalBadge) totalBadge.textContent = `${filtered.length} OF ${cachedRuns.length} RUNS`;
+      if (totalBadge) totalBadge.textContent = `${filtered.length} of ${cachedRuns.length} runs`;
 
       if (filtered.length === 0) {
         body.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">No ${currentRunsFilter === 'ALL' ? '' : currentRunsFilter.toLowerCase()} runs found.</td></tr>`;
@@ -2872,8 +2889,8 @@
         const tr = document.createElement('tr');
         const isBt = r.run_type === 'BACKTEST';
         const typeBadge = isBt
-          ? '<span class="badge badge-live">BACKTEST</span>'
-          : '<span class="badge badge-paper">FORWARD</span>';
+          ? '<span class="badge badge-live">Backtest</span>'
+          : '<span class="badge badge-paper">Paper</span>';
         const pnlVal = r.net_profit !== undefined ? r.net_profit : (r.realized_pnl || 0);
         const retPctStr = (r.return_pct !== undefined && r.return_pct !== null) ? ` (${(r.return_pct * 100).toFixed(2)}%)` : '';
         const stratName = (r.strategy && r.strategy !== 'Unknown') ? r.strategy : ('Session ' + (r.session_id || '').slice(-6));
@@ -2901,8 +2918,8 @@
           <td class="mono" style="font-size:0.75rem;">${r.bars_count} bars / ${r.event_count || '-'} evts</td>
           <td style="white-space: nowrap;">
             <div style="display: flex; gap: 4px;">
-              <button class="btn btn-outline btn-sm" onclick="viewDossier('${r.session_id}')">Inspect</button>
-              <button class="btn btn-outline btn-sm" onclick="recalculateRun('${r.session_id}')" title="Deterministic Replay & Audit">Audit</button>
+              <button class="btn btn-outline btn-sm" onclick="viewDossier('${r.session_id}')">View details</button>
+              <button class="btn btn-outline btn-sm" onclick="recalculateRun('${r.session_id}')" title="Verify reproducible calculation">Verify</button>
             </div>
           </td>
         `;
@@ -2931,7 +2948,7 @@
         const dossier = await res.json();
         const isBacktest = Boolean(dossier.trade_ledger_merkle_root || dossier.execution_contract || dossier.ledger || dossier.run_type === 'BACKTEST');
         
-        document.getElementById('dossier-modal-title').textContent = (isBacktest ? 'Backtest Run Dossier: ' : 'Forward Session Dossier: ') + (dossier.run_id || dossier.session_id || sessionId);
+        document.getElementById('dossier-modal-title').textContent = (isBacktest ? 'Backtest Run Details: ' : 'Paper Session Details: ') + (dossier.run_id || dossier.session_id || sessionId);
         const cont = document.getElementById('dossier-modal-content');
 
         if (isBacktest) {
@@ -3008,23 +3025,23 @@
             <!-- Dossier Meta Header -->
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
               <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
-                <span class="badge badge-live">DETERMINISTIC BACKTEST</span>
+                <span class="badge badge-live">Backtest</span>
                 <span class="badge badge-paper">${contract}</span>
-                <span class="badge badge-purple">${dossier.bar_count || 0} BARS</span>
-                <span class="badge badge-sim">${events.length} EVENTS</span>
+                <span class="badge badge-purple">${dossier.bar_count || 0} bars</span>
+                <span class="badge badge-sim">${events.length} events</span>
                 <strong style="color: var(--text-bright); margin-left: 6px;">${stratName}</strong>
                 <span class="mono" style="color: var(--text-muted); font-size: 0.8rem;">(${dossier.dataset_name || (dossier.dataset_path ? dossier.dataset_path.split('/').pop() : 'dataset')})</span>
               </div>
               <div style="display: flex; gap: 6px;">
-                <button class="btn btn-outline btn-sm" onclick="recalculateRun('${runId}')">Verify Bit-for-Bit</button>
+                <button class="btn btn-outline btn-sm" onclick="recalculateRun('${runId}')">Verify calculation</button>
               </div>
             </div>
 
             <!-- Cryptographic Seals Strip -->
             <div class="seals-strip">
-              <div><strong>Trade Ledger Merkle:</strong> <span class="mono" style="color: var(--purple); font-size: 0.72rem;">${dossier.trade_ledger_merkle_root || 'Not sealed'}</span></div>
-              <div><strong>Event Stream Merkle:</strong> <span class="mono" style="color: var(--blue); font-size: 0.72rem;">${dossier.event_stream_merkle_root || 'Not sealed'}</span></div>
-              <div><strong>Tamper Digest:</strong> <span class="mono" style="color: var(--green); font-size: 0.72rem;">${dossier.tamper_digest || 'Unsigned'}</span></div>
+              <div><strong>Trade Ledger Seal:</strong> <span class="mono" style="color: var(--purple); font-size: 0.72rem;">${dossier.trade_ledger_merkle_root || 'Not sealed'}</span></div>
+              <div><strong>Event Stream Seal:</strong> <span class="mono" style="color: var(--blue); font-size: 0.72rem;">${dossier.event_stream_merkle_root || 'Not sealed'}</span></div>
+              <div><strong>Verification Digest:</strong> <span class="mono" style="color: var(--green); font-size: 0.72rem;">${dossier.tamper_digest || 'Unsigned'}</span></div>
             </div>
 
             <!-- Financial Metrics Grid -->
@@ -3055,8 +3072,8 @@
             <div class="subtab-bar" style="margin-bottom: 12px;">
               <button class="subtab-btn active" id="dos-tab-btn-ledger" onclick="switchDossierSubtab('ledger')">Trade Ledger (${trades.length})</button>
               <button class="subtab-btn" id="dos-tab-btn-events" onclick="switchDossierSubtab('events')">Event Timeline (${events.length})</button>
-              <button class="subtab-btn" id="dos-tab-btn-reconciliation" onclick="switchDossierSubtab('reconciliation')">Balance Sheet &amp; Audit</button>
-              <button class="subtab-btn" id="dos-tab-btn-json" onclick="switchDossierSubtab('json')">Raw Dossier JSON</button>
+              <button class="subtab-btn" id="dos-tab-btn-reconciliation" onclick="switchDossierSubtab('reconciliation')">Accounting &amp; Audit</button>
+              <button class="subtab-btn" id="dos-tab-btn-json" onclick="switchDossierSubtab('json')">Raw Run Record (JSON)</button>
             </div>
 
             <!-- Subtab 1: Trade Ledger -->
@@ -3092,11 +3109,11 @@
             <div id="dos-tab-pane-reconciliation" class="subtab-pane">
               <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 14px; margin-bottom: 12px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                  <strong style="color: var(--text-bright); font-size: 0.9rem;">Balance Sheet Reconciliation Invariant</strong>
-                  <span class="badge ${isReconciled ? 'badge-live' : 'badge-alert'}">${isReconciled ? 'PERFECTLY RECONCILED' : 'DISCREPANCY DETECTED'}</span>
+                  <strong style="color: var(--text-bright); font-size: 0.9rem;">Accounting Balance &amp; Verification</strong>
+                  <span class="badge ${isReconciled ? 'badge-live' : 'badge-alert'}">${isReconciled ? 'Reconciled' : 'Discrepancy detected'}</span>
                 </div>
                 <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px;">
-                  Invariant: Starting Capital + Total Realized P&amp;L + Total Unrealized P&amp;L &minus; Total Charges == Ending Equity (&plusmn;₹0.01 tolerance)
+                  Balance equation: Starting Capital + Realized P&amp;L + Unrealized P&amp;L &minus; Total Charges == Ending Equity (&plusmn;₹0.01 tolerance)
                 </p>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; font-size: 0.8rem;">
                   <div><strong>Starting Capital:</strong> <span class="mono">${formatINR(recon.starting_capital || startingCapital)}</span></div>
@@ -3106,10 +3123,10 @@
                   <div><strong>Expected Equity:</strong> <span class="mono">${formatINR(recon.expected_equity || endingEquity)}</span></div>
                   <div><strong>Observed Equity:</strong> <span class="mono">${formatINR(recon.ending_equity || endingEquity)}</span></div>
                   <div><strong>Equity Delta:</strong> <span class="mono" style="color: var(--green); font-weight:600;">₹${(recon.equity_discrepancy || 0).toFixed(4)}</span></div>
-                  <div><strong>Status:</strong> <span class="badge badge-live">PASSED</span></div>
+                  <div><strong>Status:</strong> <span class="badge badge-live">Passed</span></div>
                 </div>
                 <div style="margin-top: 14px;">
-                  <button class="btn btn-primary btn-sm" onclick="recalculateRun('${runId}')">Run Fresh Bit-for-Bit Recalculation</button>
+                  <button class="btn btn-primary btn-sm" onclick="recalculateRun('${runId}')">Verify calculation</button>
                 </div>
               </div>
             </div>
@@ -3146,8 +3163,8 @@
 
           cont.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-              <div><span class="badge badge-paper">FORWARD PAPER REHEARSAL</span> <strong style="color: var(--text-bright); margin-left: 8px;">${sess.strategy_name || sess.strategy_id || '-'}</strong></div>
-              <button class="btn btn-outline btn-sm" onclick="recalculateRun('${sess.session_id || sessionId}')">Audit Replay &amp; Recalculate</button>
+              <div><span class="badge badge-paper">Forward paper session</span> <strong style="color: var(--text-bright); margin-left: 8px;">${sess.strategy_name || sess.strategy_id || '-'}</strong></div>
+              <button class="btn btn-outline btn-sm" onclick="recalculateRun('${sess.session_id || sessionId}')">Verify session</button>
             </div>
             <div class="metric-grid" style="margin-bottom: 14px;">
               <div class="card"><div class="card-title">Initial Capital</div><div class="metric-val mono neutral">${formatINR(sess.initial_capital || 1000000)}</div></div>
@@ -3156,7 +3173,7 @@
               <div class="card"><div class="card-title">Bars Evaluated</div><div class="metric-val mono">${sess.bars_count || '-'}</div><div class="metric-sub">Slippage: ${formatINR(totalSlippage)}</div></div>
             </div>
             <div class="section-card" style="margin-bottom: 14px;">
-              <div class="section-heading" style="font-size: 0.85rem; margin-bottom: 8px;">Executed Paper Trades</div>
+              <div class="section-heading" style="font-size: 0.85rem; margin-bottom: 8px;">Executed Trades</div>
               <div class="table-container" style="max-height: 220px;">
                 <table>
                   <thead><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Fill Price</th><th>Slippage</th><th>Fees</th><th>Realized</th></tr></thead>
@@ -3165,7 +3182,7 @@
               </div>
             </div>
             <details style="margin-top: 10px;">
-              <summary style="font-size: 0.8rem; color: var(--blue); cursor: pointer;">Audit Record &amp; Raw JSON</summary>
+              <summary style="font-size: 0.8rem; color: var(--blue); cursor: pointer;">Raw session record (JSON)</summary>
               <pre class="code-block" style="max-height: 220px; margin-top: 6px;">${JSON.stringify(dossier, null, 2)}</pre>
             </details>
           `;

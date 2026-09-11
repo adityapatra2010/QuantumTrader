@@ -1,7 +1,7 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-11 10:25 IST  
-**Current Phase**: Deterministic Historical Backtesting & Sealed Run Dossier Layer + GUI Truth & Clarity Pass — COMPLETE & VERIFIED ✅  
+**Last Updated**: 2026-09-11 11:00 IST  
+**Current Phase**: Deterministic Historical Backtesting & Sealed Run Dossier Layer + Final Copy & Wording Cleanup Pass — COMPLETE & VERIFIED ✅  
 **Last Verified By**: AGY CLI Quality Verification Suite (Ruff Clean, Mypy Strict Clean across 193 files, Pytest 519 passed, 6 skipped, Playwright E2E 0 console errors)  
 
 ---
@@ -61,6 +61,24 @@
 ---
 
 ## Completed
+
+### Final Copy & Wording Cleanup Pass
+**Status**: COMPLETE & VERIFIED ✅
+- **Natural, Calm, Product-Quality Microcopy**: Removed shouting ALL-CAPS banners, aggressive acronym dumps (ADR citations), and internal compliance jargon from primary user workflows across all 7 screens without altering any backend logic, calculations, or execution invariants.
+- **Clear Product Language & State Vocabulary**:
+  - Top header simplified to `v1.0 · Research` and `Research mode · Paper execution`. Air-gap safety notice rendered calmly: `"Paper simulation only. All executions route to local PaperBroker — live order routing is permanently disabled."`
+  - Overview screen simplified to plain-English capabilities: `Available (What you can do)` vs `Boundaries (Safety & data limits)`. Recent backtests and paper sessions cleanly distinguished.
+  - Strategy Catalog: Options replay boundaries explained concisely (`"Replay unavailable: Historical backtests require multi-strike option chain data with implied volatility. This strategy supports theoretical payoff and Greek validation only."`). Action buttons standardized to `View details`, `Validate`, `Run backtest`.
+  - Data Workspace: Clean legend (`Intraday format recognized`, `Valid for backtests`, `Inspect only (cannot replay)`, `Options chain`, `Price series`). Dataset diagnostics updated to calm summaries (`Dataset Summary & Diagnostics`, `All checks passed`, `Session: 09:15 – 15:30 IST`, `Price envelope: Low ≤ Open, Close ≤ High`).
+  - Validation Studio: Policies cleanly named (`Strict Mode`, `Standard Mode`, `Exploratory Mode`). Clear verdicts (`Theoretical payoff verified`, `Strategy validated`, `Validation blocked`, `Data needed`). Verification matrix pillars labeled in plain English (`Rules & specification`, `Data integrity`, `Calculation tests (KAT)`, `Historical backtest`, `Empirical performance`, `Options payoff & Greeks`, `Balance sheet reconciliation`).
+  - Simulation Workspace: Clear switcher between `Historical Backtest (Next-bar open)` and `Forward Paper Session (Tick replay)`. Preflight gate displays clear compatibility verdicts (`Ready for backtest` vs `Backtest unavailable`). Result card cleanly summarizes backtest output and seals.
+  - Runs History & Sealed Dossier Inspection: History table with clean filters (`All Runs`, `Historical Backtests`, `Forward Paper Sessions`) and type badges (`Backtest` vs `Paper`). Dossier modal updated to `Run Details: [id]` with subtabs (`Trade Ledger`, `Event Timeline`, `Accounting & Audit`, `Raw Run Record (JSON)`) and clean accounting balance equation.
+  - Settings & Security: Lifecycle action verbs standardized (`Configure`, `Replace key`, `Test connection`, `Remove key`). Security notice accurately describes session lock boundaries (`Notice: This lock protects your local browser session. It does not encrypt files stored on disk.`).
+- **Full Verification Across 193 Files & Playwright E2E**:
+  - `ruff check src tests` & `ruff format --check src tests`: Clean.
+  - `mypy src tests`: 0 issues in strict mode across 193 source files.
+  - `pytest`: 519 unit & integration tests passing (100% pass rate) + 6 skipped.
+  - Playwright visual QA: Verified across desktop (1440x900) and mobile (390x844) with 0 browser console errors.
 
 ### Workstation GUI Truth & Clarity Pass
 **Status**: COMPLETE & VERIFIED ✅
