@@ -8,10 +8,15 @@ from aditrader.cli.commands import (
     cmd_backtest,
     cmd_dashboard,
     cmd_doctor,
+    cmd_forward_options,
     cmd_forward_test,
     cmd_init_db,
     cmd_inspect_data,
     cmd_inspect_strategy,
+    cmd_kotak_auth,
+    cmd_kotak_discover,
+    cmd_kotak_history,
+    cmd_kotak_option_chain,
     cmd_search,
     cmd_smoke_feed,
     cmd_status,
@@ -317,6 +322,208 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to strategy file to inspect (flag alternative)",
     )
     p_insp_strat.set_defaults(handler=cmd_inspect_strategy)
+
+    # 13. kotak-auth
+    p_kotak_auth = subparsers.add_parser(
+        "kotak-auth",
+        help="Run Kotak Neo API authentication smoke test and data session capability check",
+    )
+    p_kotak_auth.add_argument(
+        "--mock",
+        action="store_true",
+        default=False,
+        help="Force offline simulated mock authentication check",
+    )
+    p_kotak_auth.set_defaults(handler=cmd_kotak_auth)
+
+    # 14. kotak-discover
+    p_kotak_disc = subparsers.add_parser(
+        "kotak-discover",
+        help="Execute 5-stage progressive Kotak Neo retrieval and 10-year options suitability discovery",
+    )
+    p_kotak_disc.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="Directory to persist raw API response captures and capability report",
+    )
+    p_kotak_disc.add_argument(
+        "--mock",
+        action="store_true",
+        default=False,
+        help="Run discovery suite using offline simulated mock adapter",
+    )
+    p_kotak_disc.set_defaults(handler=cmd_kotak_discover)
+
+    # 15. kotak-history
+    p_kotak_hist = subparsers.add_parser(
+        "kotak-history",
+        help="Fetch historical OHLCV candle data via Kotak Neo, capture raw JSON, and audit integrity",
+    )
+    p_kotak_hist.add_argument(
+        "symbol",
+        nargs="?",
+        type=str,
+        default=None,
+        help="Instrument symbol (e.g., 'NIFTY', 'BANKNIFTY', or contract symbol)",
+    )
+    p_kotak_hist.add_argument(
+        "--symbol",
+        type=str,
+        dest="symbol_arg",
+        default=None,
+        help="Instrument symbol (flag option)",
+    )
+    p_kotak_hist.add_argument(
+        "--from-date",
+        type=str,
+        default=None,
+        help="Start date in YYYY-MM-DD format (default: 30 days prior)",
+    )
+    p_kotak_hist.add_argument(
+        "--to-date",
+        type=str,
+        default=None,
+        help="End date in YYYY-MM-DD format (default: today)",
+    )
+    p_kotak_hist.add_argument(
+        "--timeframe",
+        type=str,
+        default="5m",
+        choices=["1m", "3m", "5m", "10m", "15m", "30m", "60m", "1d", "1w"],
+        help="Historical candle interval (default: 5m)",
+    )
+    p_kotak_hist.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="File path to write normalized JSON dataset",
+    )
+    p_kotak_hist.add_argument(
+        "--mock",
+        action="store_true",
+        default=False,
+        help="Force offline simulated mock data retrieval",
+    )
+    p_kotak_hist.set_defaults(handler=cmd_kotak_history)
+
+    # 16. kotak-option-chain
+    p_kotak_chain = subparsers.add_parser(
+        "kotak-option-chain",
+        help="Fetch and verify live Kotak Neo option chain, quotes, WebSocket, and Premium-Ladder selection",
+    )
+    p_kotak_chain.add_argument(
+        "--underlying",
+        type=str,
+        default="NIFTY",
+        help="Root underlying symbol (default: NIFTY)",
+    )
+    p_kotak_chain.add_argument(
+        "--expiry",
+        type=str,
+        default=None,
+        help="Expiration date in YYYY-MM-DD format (default: nearest active)",
+    )
+    p_kotak_chain.add_argument(
+        "--count",
+        type=int,
+        default=100,
+        help="Number of strikes to fetch around ATM (default: 100)",
+    )
+    p_kotak_chain.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="Directory to save raw snapshot JSON (default: runs/kotak_raw)",
+    )
+    p_kotak_chain.add_argument(
+        "--mock",
+        action="store_true",
+        default=False,
+        help="Force offline simulated mock data retrieval",
+    )
+    p_kotak_chain.set_defaults(handler=cmd_kotak_option_chain)
+
+    # 17. forward-options
+    p_fwd_opt = subparsers.add_parser(
+        "forward-options",
+        help="Run live air-gapped paper-trading forward shadow session for option strategies",
+    )
+    p_fwd_opt.add_argument(
+        "--strategy",
+        "-s",
+        type=str,
+        default="tpl-nifty-ce-premium-ladder-v1",
+        help="Strategy ID or YAML file path (default: tpl-nifty-ce-premium-ladder-v1)",
+    )
+    p_fwd_opt.add_argument(
+        "--underlying",
+        "-u",
+        type=str,
+        default="NIFTY",
+        help="Root underlying index symbol (default: NIFTY)",
+    )
+    p_fwd_opt.add_argument(
+        "--expiry",
+        type=str,
+        default=None,
+        help="Target expiration date in YYYY-MM-DD format (default: nearest active Thursday)",
+    )
+    p_fwd_opt.add_argument(
+        "--band",
+        type=int,
+        default=0,
+        help="Active premium band index (default: 0 = Band 1: 50.0-59.5)",
+    )
+    p_fwd_opt.add_argument(
+        "--capital",
+        type=float,
+        default=1_000_000.0,
+        help="Initial simulated paper capital in INR (default: 1,000,000.0)",
+    )
+    p_fwd_opt.add_argument(
+        "--slippage-bps",
+        type=float,
+        default=5.0,
+        help="Execution slippage in basis points (default: 5.0)",
+    )
+    p_fwd_opt.add_argument(
+        "--duration",
+        type=float,
+        default=None,
+        help="Maximum session run duration in seconds (default: full session until 15:30 IST)",
+    )
+    p_fwd_opt.add_argument(
+        "--output-dir",
+        type=str,
+        default="runs/forward",
+        help="Directory to save forward session Run Dossiers (default: runs/forward)",
+    )
+    p_fwd_opt.add_argument(
+        "--raw-capture-dir",
+        type=str,
+        default="runs/kotak_raw",
+        help="Directory to save raw option-chain snapshots (default: runs/kotak_raw)",
+    )
+    p_fwd_opt.add_argument(
+        "--snapshot-interval",
+        type=float,
+        default=300.0,
+        help="Periodic raw option chain capture interval in seconds (default: 300.0)",
+    )
+    p_fwd_opt.add_argument(
+        "--mock",
+        action="store_true",
+        default=False,
+        help="Force offline simulated mock feed for local rehearsal or unit testing",
+    )
+    p_fwd_opt.add_argument(
+        "--no-wait",
+        action="store_true",
+        default=False,
+        help="Do not wait for 09:15 IST market open if started before session hours",
+    )
+    p_fwd_opt.set_defaults(handler=cmd_forward_options)
 
     return parser
 

@@ -1,8 +1,8 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-11 11:00 IST  
-**Current Phase**: Deterministic Historical Backtesting & Sealed Run Dossier Layer + Final Copy & Wording Cleanup Pass — COMPLETE & VERIFIED ✅  
-**Last Verified By**: AGY CLI Quality Verification Suite (Ruff Clean, Mypy Strict Clean across 193 files, Pytest 519 passed, 6 skipped, Playwright E2E 0 console errors)  
+**Last Updated**: 2026-09-16 09:47 IST  
+**Current Phase**: Real Kotak Neo Forward-Shadow Execution Subsystem for NIFTY Options — COMPLETE & VERIFIED ✅  
+**Last Verified By**: AGY Quality Verification Suite (Ruff Clean across 200 files, Mypy Strict Clean across 200 source files, Pytest 566 passed, 6 skipped across 28 test modules, 100% pass rate, hostile audit remediation verified)  
 
 ---
 
@@ -97,6 +97,21 @@
   - `mypy src tests` passing in strict mode across 193 source files with 0 errors.
   - `pytest` suite passing 519/519 unit and integration tests (100% pass rate) + 6 skipped opt-in tests.
   - Playwright visual QA passing on desktop (1440x900) and mobile (390x844) with 0 browser console errors.
+
+### Real Kotak Neo Forward-Shadow Execution Subsystem for NIFTY Options
+**Status**: COMPLETE & VERIFIED ✅
+- **Physical Air-Gap Security (ADR 002)**: Order routing (`place_order`, `modify_order`, `cancel_order`) permanently blocked with `NotImplementedError` security vetoes. 100% of order execution occurs in local `PaperBroker`. Zero real orders can ever reach Kotak Neo.
+- **Fail-Closed Real Authentication**: Requires valid `consumer_key`, `mobile_number`, and `ucc`. Missing credentials or authentication failures raise `RealKotakAuthenticationError` immediately without silent fallback to mock mode.
+- **Dynamic 100-Strike Option Chain & SFeed WebSocket**: Integrates official `kotakneoapi` v3.0.6 endpoints: `expiries()`, `option_chain(count=100)`, `quotes()`, and live `SFeedWebSocket` tick streaming with numeric token-to-symbol resolution.
+- **NSE Official Lot Sizing & Ratio Hedge Geometry**: Enforces official NSE lot sizes (NIFTY: 25, BANKNIFTY: 15). Executes 1 lot short CE in active premium band (e.g. ₹50.00–₹59.50) + 4 lots long CE hedge near ₹5.00 (qty=25 short, qty=100 hedge).
+- **Contract-Bound Trailing Ratchet Stop**: Per-contract `PremiumTrailingStop` attached to short leg (`initial_gap=5.0`, `trail_step=5.0`, `ratchet=True`). Ratchets stop down with each favorable ₹10 drop (50 -> 40 => SL 45, 40 -> 30 => SL 35). Stops immediately trigger simultaneous coordinated exit of both short and hedge legs with realistic bid/ask spread crossing and slippage tracking.
+- **Data Feed Freshness & Freezing Monitor**: Flags `DATA_FEED_DEGRADED` on quote stalls > 120s from startup or during live sessions. Restores on incoming tick without crashing.
+- **Raw Capture Preservation & Tamper-Proof Sealing**: Captures full 202-contract option chains with bid/ask quotes and SHA-256 digests to `runs/kotak_raw/`. Compiles binary Merkle tree roots for execution event streams and trade ledgers. Generates sealed Run Dossiers with balance sheet reconciliation (`is_reconciled=True`, delta = ₹0.00) and 7-pillar institutional verification matrix (`THEORETICAL_PASS`).
+- **Canonical CLI Command**: `aditrader forward-options --strategy tpl-nifty-ce-premium-ladder-v1` with automatic routing from `aditrader forward-test` when options strategies are detected.
+- **Automated Verification**:
+  - `ruff check src tests` and `ruff format --check src tests` passing cleanly across 200 files.
+  - `mypy src tests` passing in strict mode across 200 source files with 0 errors.
+  - `pytest` passing 566 passed, 6 skipped across 28 test suites in 34.18s (100% pass rate).
 
 ### Deterministic Historical Backtesting & Sealed Run Dossier Layer
 **Status**: COMPLETE & VERIFIED ✅

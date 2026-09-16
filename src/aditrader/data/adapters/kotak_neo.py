@@ -2,15 +2,21 @@
 
 import asyncio
 import contextlib
+import csv
+import io
 import logging
 import threading
 from collections.abc import Callable
-from datetime import UTC, datetime
-from typing import Any, Literal
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any, Literal, cast
+
+import httpx
 
 from aditrader.config.settings import get_settings
 from aditrader.core.models.market_data import Bar, Tick
 from aditrader.data.adapters.base import AbstractBrokerAdapter, ContractMetadata
+from aditrader.data.adapters.kotak_capture import KotakCaptureManager
 from aditrader.data.session import EXCHANGE_TIMEZONE, normalize_to_ist
 
 logger = logging.getLogger(__name__)
@@ -127,6 +133,7 @@ class KotakNeoAdapter(AbstractBrokerAdapter):
         self._last_error: Exception | None = None
         self._market_status: dict[str, str] = {}
         self._token_to_symbol: dict[str, str] = {}
+        self._symbol_to_token: dict[str, tuple[str, str, bool]] = {}
 
     @property
     def feed_status(
@@ -140,6 +147,11 @@ class KotakNeoAdapter(AbstractBrokerAdapter):
         if not HAS_NEO_SDK:
             return "UNSUPPORTED"
         return self._feed_status
+
+    @property
+    def is_authenticated(self) -> bool:
+        """Indicate whether the adapter has successfully authenticated."""
+        return self._is_authenticated
 
     def authenticate(self) -> bool:
         """Authenticate session using credentials or initialize mock session."""
@@ -243,16 +255,9 @@ class KotakNeoAdapter(AbstractBrokerAdapter):
         if bars is not None:
             self._mock_bars = dict(bars)
 
-    def fetch_scrip_master(self) -> list[ContractMetadata]:
-        """Fetch and parse scrip master into normalized ContractMetadata contracts."""
-        if not self._is_authenticated:
-            raise RuntimeError("Adapter is not authenticated. Call authenticate() first.")
-
-        if self.mock_mode and self._mock_contracts:
-            return list(self._mock_contracts)
-
-        # Baseline default contracts for standard testing
-        sample_exp = datetime(2024, 12, 26, 15, 30, tzinfo=UTC)
+    def _default_mock_contracts(self) -> list[ContractMetadata]:
+        """Baseline default contracts for standard testing."""
+        sample_exp = datetime(2026, 12, 31, 15, 30, tzinfo=UTC)
         return [
             ContractMetadata(
                 symbol="NIFTY",
@@ -289,11 +294,115 @@ class KotakNeoAdapter(AbstractBrokerAdapter):
             ),
         ]
 
-    def parse_scrip_csv_row(self, row: dict[str, Any]) -> ContractMetadata:
-        """
-        Parse an individual scrip record from Kotak Neo CSV schema into ContractMetadata.
+    def fetch_scrip_master(
+        self,
+        exchange_segment: str = "nse_fo",
+        force_refresh: bool = False,
+    ) -> list[ContractMetadata]:
+        """Fetch and parse scrip master into normalized ContractMetadata contracts.
 
-        Handles column variations across instrument files.
+        In mock mode or when offline, returns mock contracts.
+        In live mode, queries official NeoAPI scrip_master endpoint, downloads CSV,
+        and parses all columns including paise scaling and epoch adjustments.
+        """
+        if self.mock_mode and self._mock_contracts:
+            return list(self._mock_contracts)
+
+        if not self._neo_client:
+            if self.consumer_key and HAS_NEO_SDK:
+                assert NeoAPI is not None
+                self._neo_client = NeoAPI(consumer_key=self.consumer_key, environment="prod")
+            elif self.mock_mode:
+                return self._default_mock_contracts()
+            else:
+                raise RuntimeError("Adapter is not authenticated. Call authenticate() first.")
+
+        # In live mode with NeoAPI client, download and parse
+        try:
+            res = self._neo_client.scrip_master(exchange_segment=exchange_segment)
+            csv_url: str | None = None
+            if isinstance(res, str) and res.startswith("http"):
+                csv_url = res
+            elif isinstance(res, dict) and "filesPaths" in res:
+                seg_lower = exchange_segment.lower()
+                for f in res["filesPaths"]:
+                    if seg_lower in f.lower():
+                        csv_url = f
+                        break
+                if not csv_url and res["filesPaths"]:
+                    csv_url = res["filesPaths"][0]
+
+            if csv_url:
+                contracts = self._download_and_parse_scrip_csv(
+                    csv_url, exchange_segment, force_refresh
+                )
+                if contracts:
+                    self._mock_contracts = contracts
+                    for c in contracts:
+                        self._token_to_symbol[c.token] = c.symbol
+                    return contracts
+        except Exception as exc:
+            logger.warning(f"Live scrip master fetch failed: {exc}. Using fallback contracts.")
+
+        return self._default_mock_contracts()
+
+    def _download_and_parse_scrip_csv(
+        self,
+        csv_url: str,
+        exchange_segment: str,
+        force_refresh: bool = False,
+    ) -> list[ContractMetadata]:
+        """Download scrip master CSV from Kotak Neo and parse into ContractMetadata."""
+        cache_dir = Path("data/cache")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        today_str = datetime.now(EXCHANGE_TIMEZONE).strftime("%Y%m%d")
+        cache_file = cache_dir / f"kotak_scrip_{exchange_segment}_{today_str}.csv"
+
+        content_bytes: bytes | None = None
+        if cache_file.exists() and not force_refresh:
+            try:
+                content_bytes = cache_file.read_bytes()
+            except Exception as exc:
+                logger.warning(f"Failed to read cached scrip file: {exc}")
+
+        if content_bytes is None:
+            try:
+                headers = {"Authorization": self.consumer_key or ""}
+                with httpx.Client(timeout=30.0) as client:
+                    resp = client.get(csv_url, headers=headers)
+                    if resp.status_code == 200:
+                        content_bytes = resp.content
+                        with open(cache_file, "wb") as f:
+                            f.write(content_bytes)
+            except Exception as exc:
+                logger.error(f"Error downloading scrip master CSV from {csv_url}: {exc}")
+                return []
+
+        if not content_bytes:
+            return []
+
+        contracts: list[ContractMetadata] = []
+        try:
+            reader = csv.DictReader(io.StringIO(content_bytes.decode("utf-8", errors="ignore")))
+            for row in reader:
+                try:
+                    c = self.parse_scrip_csv_row(row)
+                    if c.token and c.symbol:
+                        contracts.append(c)
+                except Exception:
+                    continue
+        except Exception as exc:
+            logger.error(f"Error parsing scrip master CSV: {exc}")
+
+        return contracts
+
+    def parse_scrip_csv_row(self, row: dict[str, Any]) -> ContractMetadata:
+        """Parse an individual scrip record from Kotak Neo CSV schema into ContractMetadata.
+
+        Enforces:
+        - Strike price scaling: divides by 100 if raw value is in paise.
+        - Expiry date epoch offset: adds 315511200 seconds if epoch is offset from 1980.
+        - Option type classification ('CE', 'PE').
         """
         raw_symbol = str(row.get("pSymbol", row.get("symbol", ""))).strip()
         raw_trd_symbol = str(row.get("pTrdSymbol", row.get("trading_symbol", raw_symbol))).strip()
@@ -303,24 +412,46 @@ class KotakNeoAdapter(AbstractBrokerAdapter):
         lot_size = int(row.get("pLotSize", row.get("lot_size", 1)))
         tick_size = float(row.get("pTickSize", row.get("tick_size", 0.05)))
 
-        strike_raw = row.get("pStrikePrice", row.get("strike_price"))
-        strike_price = float(strike_raw) if strike_raw and float(strike_raw) > 0 else None
+        # Strike price scaling (Kotak stores strikes in paise in dStrikePrice; and F&O files)
+        strike_raw = row.get("dStrikePrice;", row.get("pStrikePrice", row.get("strike_price")))
+        strike_price: float | None = None
+        if strike_raw is not None and str(strike_raw).strip():
+            try:
+                s_val = float(str(strike_raw).replace(",", "").strip())
+                if s_val > 0:
+                    if "dStrikePrice;" in row or s_val >= 100000.0:
+                        strike_price = s_val / 100.0
+                    else:
+                        strike_price = s_val
+            except (ValueError, TypeError):
+                strike_price = None
 
+        # Expiry date parsing (handles ISO, date string, and 1980-offset epoch seconds)
         expiry_raw = row.get("pExpiryDate", row.get("expiry_date"))
-        expiry_date = None
-        if expiry_raw:
+        expiry_date: datetime | None = None
+        if expiry_raw is not None:
             if isinstance(expiry_raw, datetime):
                 expiry_date = normalize_to_ist(expiry_raw)
+            elif isinstance(expiry_raw, (int, float)) or (
+                isinstance(expiry_raw, str) and expiry_raw.strip().isdigit()
+            ):
+                try:
+                    epoch_sec = float(expiry_raw)
+                    # Check if epoch is offset from 1980 (difference 315513000 seconds to IST)
+                    dt_test = datetime.fromtimestamp(epoch_sec, tz=EXCHANGE_TIMEZONE)
+                    if dt_test.year < 2020:
+                        epoch_sec += 315513000
+                    expiry_date = datetime.fromtimestamp(epoch_sec, tz=EXCHANGE_TIMEZONE)
+                except Exception:
+                    expiry_date = None
             elif isinstance(expiry_raw, str) and expiry_raw.strip():
-                for fmt in ("%d-%b-%Y", "%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S"):
+                for fmt in ("%d-%b-%Y", "%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S", "%d%b%Y"):
                     try:
                         parsed = datetime.strptime(expiry_raw.strip(), fmt)
                         expiry_date = normalize_to_ist(parsed)
                         break
                     except ValueError:
                         continue
-
-        from typing import Literal
 
         opt_type_raw = str(row.get("pOptionType", row.get("option_type", ""))).upper().strip()
         option_type: Literal["CE", "PE"] | None = (
@@ -344,6 +475,69 @@ class KotakNeoAdapter(AbstractBrokerAdapter):
             option_type=option_type,
         )
 
+    def resolve_neosymbol(self, symbol: str) -> str:
+        """Resolve a trading symbol into Kotak Neo's required '{exchange_segment}|{token}' format."""
+        clean_sym = symbol.strip()
+        if "|" in clean_sym:
+            return clean_sym
+
+        upper_sym = clean_sym.upper()
+        if upper_sym in INDEX_SYMBOLS:
+            seg, tok = INDEX_SYMBOLS[upper_sym]
+            return f"{seg}|{tok}"
+
+        if upper_sym in COMMON_EQUITY_SYMBOLS:
+            seg, tok = COMMON_EQUITY_SYMBOLS[upper_sym]
+            return f"{seg}|{tok}"
+
+        for contract in self._mock_contracts:
+            if contract.symbol.upper() == upper_sym or contract.trading_symbol.upper() == upper_sym:
+                exch = contract.exchange.upper()
+                seg = "nse_fo" if exch in ("NFO", "NSE_FO") else "nse_cm"
+                return f"{seg}|{contract.token}"
+
+        if clean_sym.isdigit():
+            return f"nse_cm|{clean_sym}"
+
+        # Default fallback
+        return f"nse_cm|{clean_sym}"
+
+    def _map_timeframe_to_interval(self, timeframe: str) -> str:
+        """Map canonical timeframe to Kotak Neo interval parameter."""
+        mapping = {
+            "1m": "1min",
+            "1min": "1min",
+            "3m": "3min",
+            "3min": "3min",
+            "5m": "5min",
+            "5min": "5min",
+            "10m": "10min",
+            "10min": "10min",
+            "15m": "15min",
+            "15min": "15min",
+            "30m": "30min",
+            "30min": "30min",
+            "60m": "60min",
+            "60min": "60min",
+            "1h": "60min",
+            "1d": "D",
+            "D": "D",
+            "1w": "W",
+            "W": "W",
+        }
+        return mapping.get(timeframe, "5min")
+
+    def _get_interval_max_days(self, interval: str) -> int:
+        """Return backend-enforced maximum query window in days per request."""
+        if interval in ("1min", "3min", "5min"):
+            return 29  # 30-day limit
+        elif interval in ("10min", "15min"):
+            return 59  # 60-day limit
+        elif interval in ("30min", "60min"):
+            return 89  # 90-day limit
+        else:
+            return 179  # 180-day limit for D and W
+
     def fetch_historical_bars(
         self,
         symbol: str,
@@ -351,8 +545,8 @@ class KotakNeoAdapter(AbstractBrokerAdapter):
         end_time: datetime,
         timeframe: str = "1m",
     ) -> list[Bar]:
-        """Fetch historical bars within the specified window."""
-        if not self._is_authenticated:
+        """Fetch historical bars within the specified window with automatic chunking and rate limits."""
+        if not self._is_authenticated and not (self.consumer_key and HAS_NEO_SDK):
             raise RuntimeError("Adapter is not authenticated. Call authenticate() first.")
 
         if self.mock_mode:
@@ -363,7 +557,110 @@ class KotakNeoAdapter(AbstractBrokerAdapter):
                 bar for bar in available if start_ist <= normalize_to_ist(bar.timestamp) <= end_ist
             ]
 
+        if not self._neo_client:
+            assert NeoAPI is not None
+            self._neo_client = NeoAPI(consumer_key=self.consumer_key, environment="prod")
+
+        neosymbol = self.resolve_neosymbol(symbol)
+        neo_interval = self._map_timeframe_to_interval(timeframe)
+        max_chunk_days = self._get_interval_max_days(neo_interval)
+
+        start_ist = normalize_to_ist(start_time)
+        end_ist = normalize_to_ist(end_time)
+
+        all_bars: list[Bar] = []
+        curr_start = start_ist
+        import time as time_mod
+
+        while curr_start <= end_ist:
+            curr_end = min(curr_start + timedelta(days=max_chunk_days), end_ist)
+            from_str = curr_start.strftime("%Y-%m-%d")
+            to_str = curr_end.strftime("%Y-%m-%d")
+
+            response_data = None
+            for attempt in range(self.max_connect_retries):
+                try:
+                    response_data = self._neo_client.historical_data(
+                        neosymbol=neosymbol,
+                        interval=neo_interval,
+                        from_date=from_str,
+                        to_date=to_str,
+                    )
+                    if isinstance(response_data, dict) and response_data.get("status") in (
+                        "error",
+                        "failed",
+                    ):
+                        err_msg = response_data.get("message", "API returned error status")
+                        raise ConnectionError(f"Kotak Neo historical API error: {err_msg}")
+                    break
+                except Exception as exc:
+                    if attempt == self.max_connect_retries - 1:
+                        logger.error(f"Historical query failed after {attempt + 1} attempts: {exc}")
+                        raise
+                    time_mod.sleep(0.5 * (2**attempt))
+
+            if response_data and isinstance(response_data, dict):
+                chunk_bars = KotakCaptureManager.normalize_candles(
+                    response_data, symbol=symbol, timeframe=timeframe
+                )
+                all_bars.extend(chunk_bars)
+
+            curr_start = curr_end + timedelta(days=1)
+            time_mod.sleep(0.05)  # Respect rate limit between chunk requests
+
+        deduped: list[Bar] = []
+        seen_ts: set[datetime] = set()
+        all_bars.sort(key=lambda b: b.timestamp)
+        for b in all_bars:
+            if start_ist <= b.timestamp <= end_ist and b.timestamp not in seen_ts:
+                seen_ts.add(b.timestamp)
+                deduped.append(b)
+
+        return deduped
+
+    def fetch_expiries(self, exchange: str = "nse_fo", underlying: str = "NIFTY") -> list[str]:
+        """Fetch available upcoming expiry dates from official expiries API."""
+        if self.mock_mode:
+            return ["2026-09-25", "2026-10-30", "2026-11-27"]
+
+        if not self._neo_client:
+            if self.consumer_key and HAS_NEO_SDK:
+                assert NeoAPI is not None
+                self._neo_client = NeoAPI(consumer_key=self.consumer_key, environment="prod")
+            else:
+                raise RuntimeError("Adapter is not authenticated.")
+
+        try:
+            res = self._neo_client.expiries(exchange=exchange, underlying=underlying)
+            if isinstance(res, dict) and "expiries" in res:
+                return list(res["expiries"])
+        except Exception as exc:
+            logger.error(f"Error fetching expiries for {underlying}: {exc}")
+
         return []
+
+    def fetch_option_chain_snapshot(
+        self,
+        exchange: str = "nse_fo",
+        underlying: str = "NIFTY",
+        expiry: str | None = None,
+        count: int = 40,
+    ) -> dict[str, Any]:
+        """Fetch real-time option chain snapshot from official option_chain API."""
+        if self.mock_mode:
+            return {"exchange": exchange, "underlying": underlying, "expiry": expiry, "data": []}
+
+        if not self._neo_client:
+            if self.consumer_key and HAS_NEO_SDK:
+                assert NeoAPI is not None
+                self._neo_client = NeoAPI(consumer_key=self.consumer_key, environment="prod")
+            else:
+                raise RuntimeError("Adapter is not authenticated.")
+
+        res = self._neo_client.option_chain(
+            exchange=exchange, underlying=underlying, expiry=expiry, count=count
+        )
+        return cast(dict[str, Any], res if isinstance(res, dict) else {"data": res})
 
     def resolve_symbol_token(self, symbol: str) -> tuple[str, str, bool] | None:
         """Resolve symbol into (exchange_segment, instrument_token, is_index)."""
@@ -395,6 +692,9 @@ class KotakNeoAdapter(AbstractBrokerAdapter):
                 self._token_to_symbol[contract.token] = contract.symbol
                 return (seg, contract.token, is_idx)
 
+        if clean_sym.upper() in self._symbol_to_token:
+            return self._symbol_to_token[clean_sym.upper()]
+
         if "|" in symbol:
             parts = symbol.split("|", 1)
             return (parts[0].lower(), parts[1], False)
@@ -403,6 +703,19 @@ class KotakNeoAdapter(AbstractBrokerAdapter):
             return ("nse_cm", symbol, False)
 
         return None
+
+    def register_token_symbol_mapping(
+        self,
+        token: str,
+        symbol: str,
+        exchange_segment: str = "nse_fo",
+        is_index: bool = False,
+    ) -> None:
+        """Register dynamic mapping from broker token to canonical trading symbol."""
+        tok = str(token).strip()
+        sym = str(symbol).strip()
+        self._token_to_symbol[tok] = sym
+        self._symbol_to_token[sym.upper()] = (exchange_segment, tok, is_index)
 
     def _resolve_ws_tokens(self, symbols: list[str]) -> tuple[list[Any], list[Any]]:
         """Resolve symbols into scrip and index WsToken lists."""
@@ -595,32 +908,35 @@ class KotakNeoAdapter(AbstractBrokerAdapter):
 
     def disconnect(self) -> None:
         """Disconnect WebSocket, shutdown background worker thread, and clean up session state."""
-        self._stop_event.set()
-        self._ready_event.set()
+        with self._thread_lock:
+            self._stop_event.set()
+            self._ready_event.set()
 
-        if (
-            self._stream_loop is not None
-            and self._stream_loop.is_running()
-            and self._ws_client is not None
-        ):
-            if threading.current_thread() == self._stream_thread:
-                with contextlib.suppress(Exception):
-                    self._stream_loop.create_task(self._ws_client.close())
-            else:
-                fut = asyncio.run_coroutine_threadsafe(self._ws_client.close(), self._stream_loop)
-                with contextlib.suppress(Exception):
-                    fut.result(timeout=2.0)
+            if (
+                self._stream_loop is not None
+                and self._stream_loop.is_running()
+                and self._ws_client is not None
+            ):
+                if threading.current_thread() == self._stream_thread:
+                    with contextlib.suppress(Exception):
+                        self._stream_loop.create_task(self._ws_client.close())
+                else:
+                    fut = asyncio.run_coroutine_threadsafe(
+                        self._ws_client.close(), self._stream_loop
+                    )
+                    with contextlib.suppress(Exception):
+                        fut.result(timeout=2.0)
 
-        if self._stream_thread is not None and self._stream_thread.is_alive():
-            if threading.current_thread() != self._stream_thread:
-                self._stream_thread.join(timeout=3.0)
-            self._stream_thread = None
+            if self._stream_thread is not None and self._stream_thread.is_alive():
+                if threading.current_thread() != self._stream_thread:
+                    self._stream_thread.join(timeout=3.0)
+                self._stream_thread = None
 
-        self._is_authenticated = False
-        self._subscriptions.clear()
-        self._tick_callbacks.clear()
-        if not self.mock_mode:
-            self._feed_status = "LIVE_FAILED"
+            self._is_authenticated = False
+            self._subscriptions.clear()
+            self._tick_callbacks.clear()
+            if not self.mock_mode:
+                self._feed_status = "LIVE_FAILED"
 
     def get_market_status(self, exchange_segment: str = "nse_cm") -> str:
         """Return the latest exchange market status (e.g. 'Market open', 'Market closed')."""

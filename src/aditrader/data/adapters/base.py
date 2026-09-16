@@ -100,3 +100,17 @@ class AbstractBrokerAdapter(ABC):
             "CRITICAL SECURITY VETO: Real order execution is strictly barred on broker adapters (ADR 002). "
             "All trading must execute through core.PaperBroker."
         )
+
+    def modify_order(self, *args: Any, **kwargs: Any) -> Any:
+        """Absolute architectural guardrail: Broker adapters must NEVER route real orders."""
+        raise NotImplementedError(
+            "CRITICAL SECURITY VETO: Real order execution is strictly barred on broker adapters (ADR 002). "
+            "All trading must execute through core.PaperBroker."
+        )
+
+    def cancel_order(self, *args: Any, **kwargs: Any) -> Any:
+        """Absolute architectural guardrail: Broker adapters must NEVER route real orders."""
+        raise NotImplementedError(
+            "CRITICAL SECURITY VETO: Real order execution is strictly barred on broker adapters (ADR 002). "
+            "All trading must execute through core.PaperBroker."
+        )

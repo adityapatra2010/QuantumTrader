@@ -70,6 +70,8 @@ class PointInTimeOptionContract(BaseModel):
     oi: int = Field(default=0, ge=0, description="Open interest contracts")
     timestamp: datetime = Field(..., description="Point-in-time quote observation timestamp")
     vwap: float | None = Field(default=None, ge=0.0, description="Volume-weighted average price")
+    token: str | None = Field(default=None, description="Broker numeric instrument token")
+    lot_size: int = Field(default=1, gt=0, description="Exchange contract lot size multiplier")
 
 
 class PointInTimeOptionChain:
