@@ -52,7 +52,7 @@ aditrader doctor
 
 ## Comprehensive Command Reference
 
-The platform provides 11 verified CLI operations accessible via `aditrader`, `quantumvalidator`, or `python -m aditrader.cli`.
+The platform provides 14 verified CLI operations accessible via `aditrader`, `quantumvalidator`, or `python -m aditrader.cli`.
 
 ```
 aditrader <command> [options]
@@ -108,8 +108,12 @@ Validate linear or multi-leg option strategies through static AST rules and inst
 # Validate built-in option strategy under Institutional policy (strict default)
 aditrader validate --strategy iron_condor
 
-# Validate linear strategy under Moderate policy
+# Validate linear strategy structure (syntax & rules check)
 aditrader validate --strategy test_ma_crossover --policy moderate
+
+# Validate linear strategy with empirical backtest data or synthetic bars
+aditrader validate --strategy test_ma_crossover --csv data/nifty_sample.csv
+aditrader validate --strategy test_ma_crossover --bars 100
 
 # Validate custom JSON, YAML, or Pine Script strategy file
 aditrader validate --file path/to/strategy.json --policy institutional
@@ -124,10 +128,10 @@ Execute point-in-time historical backtests on linear assets with statutory excha
 aditrader backtest --strategy test_ma_crossover --bars 100
 
 # Backtest using historical CSV dataset
-aditrader backtest --strategy test_ma_crossover --csv tests/fixtures/nifty_sample.csv --capital 1000000 --slippage-bps 2.5
+aditrader backtest --strategy test_ma_crossover --csv data/nifty_sample.csv --capital 1000000 --slippage-bps 2.5
 
 # Backtest using custom multi-format strategy file (YAML or translated Pine Script)
-aditrader backtest --file path/to/strategy.yaml --csv tests/fixtures/nifty_sample.csv
+aditrader backtest --file path/to/strategy.yaml --csv data/nifty_sample.csv
 aditrader backtest --file path/to/strategy.pine --bars 100
 ```
 
@@ -138,7 +142,7 @@ Inspect CSV market data files before replay. Automatically detects format varian
 aditrader inspect-data data/nifty_sample.csv
 
 # Inspect and filter for a specific scrip symbol via explicit flag
-aditrader inspect-data --file data/cm_bhavcopy.csv --symbol RELIANCE
+aditrader inspect-data --file data/reliance_derivative_sample.csv --symbol RELIANCE
 
 # Audit real-world NSE derivative quote archive datasets
 aditrader inspect-data --file ~/Downloads/Quote-Derivative-RELIANCE-07-03-2026-07-09-2026.csv
@@ -160,7 +164,32 @@ aditrader forward-test --strategy test_ma_crossover --capital 2000000 --duration
 aditrader forward-test --strategy test_ma_crossover --ticks 100 --strict-quality
 ```
 
-### 10. Market-Data Feed Smoke Test (`smoke-feed`)
+### 10. Forward Options Paper Execution (`forward-options`)
+Execute an air-gapped paper trading session on NIFTY/BANKNIFTY options with dynamic contract selection, Greeks calculation, and synthetic tick stream or live Kotak Neo SFeed:
+```bash
+# 1. Run in mock rehearsal mode with synthetic option chain and tick stream
+aditrader forward-options --strategy nifty_ce_premium_ladder --underlying NIFTY --duration 10 --mock
+
+# 2. Run with live Kotak Neo market data (air-gapped PaperBroker execution)
+aditrader forward-options --strategy nifty_ce_premium_ladder --underlying NIFTY --duration 300
+```
+
+### 11. Run History & Sealed Dossier Inspection (`runs`, `inspect-run`)
+Inspect recorded deterministic historical backtests and forward paper trading sessions:
+```bash
+# List all recorded runs with summary metrics
+aditrader runs
+
+# Filter by execution type
+aditrader runs --type backtest
+aditrader runs --type forward
+
+# Deep inspection of a specific run dossier by ID or filename
+aditrader inspect-run fwd_opt_30bb075d
+aditrader inspect-run runs/backtest/dossier_test_ma_crossover_1.0.0.json
+```
+
+### 12. Market-Data Feed Smoke Test (`smoke-feed`)
 Verify live or mock WebSocket connectivity, TOTP authentication, scrip subscriptions, and tick normalization without placing orders (strictly read-only):
 ```bash
 # Smoke test in mock rehearsal mode
@@ -170,7 +199,7 @@ aditrader smoke-feed --symbol NIFTY --ticks 5 --mock
 aditrader smoke-feed --symbol NIFTY --ticks 10 --timeout 20.0
 ```
 
-### 11. Responsive Web GUI Dashboard (`dashboard`)
+### 13. Responsive Web GUI Dashboard (`dashboard`)
 Launch the browser-first, responsive research workstation adhering to `DESIGN_LANGUAGE.md` (dark theme `#0E1117`, surface `#161B22`, border `#30363D`, Inter/JetBrains Mono fonts):
 ```bash
 # Display dashboard configuration and roadmap status
@@ -181,7 +210,7 @@ aditrader dashboard --serve --port 8050
 ```
 Open `http://127.0.0.1:8050` in your web browser (desktop, tablet, or smartphone).
 
-### 12. Strategy Compatibility & Safety Inspector (`inspect-strategy`)
+### 14. Strategy Compatibility & Safety Inspector (`inspect-strategy`)
 Inspect any strategy script or file without executing it. Automatically classifies format (JSON AST, YAML AST, TradingView Pine Script v4-v6, EasyLanguage, AmiBroker AFL, thinkScript, MetaTrader MQL4/MQL5, NinjaScript, LEAN, Backtrader, vectorbt, Freqtrade), checks lookahead bias (`barmerge.lookahead_on`), identifies multi-leg options air-gaps, and assesses translation fidelity:
 ```bash
 # Inspect native JSON or YAML AST strategy (positional argument)
@@ -191,7 +220,7 @@ aditrader inspect-strategy strategy.yaml
 aditrader inspect-strategy strategy.pine
 
 # Inspect with explicit --file flag
-aditrader inspect-strategy --file ~/Desktop/mcx.pine
+aditrader inspect-strategy --file tests/fixtures/pine/mcx.pine
 
 # Inspect external Python or MetaTrader scripts safely (read-only AST parsing, zero execution)
 aditrader inspect-strategy backtrader_model.py

@@ -311,6 +311,45 @@ def create_nifty_intraday_trend_dsl() -> StrategyDSL:
     )
 
 
+def create_test_ma_crossover_dsl(underlying: str = "NIFTY") -> StrategyDSL:
+    """Construct deterministic linear test MA crossover declarative DSL."""
+    return StrategyDSL(
+        schema_version="1.0",
+        name="test_ma_crossover",
+        underlying=underlying,
+        timeframe="1m",
+        entry_conditions=ConditionGroup(
+            operator=ASTOperator.AND,
+            conditions=[
+                ConditionNode(
+                    category=ConditionCategory.INDICATOR,
+                    field="close",
+                    operator=ASTOperator.GREATER_THAN,
+                    threshold=24000.0,
+                )
+            ],
+        ),
+        exit_conditions=ConditionGroup(
+            operator=ASTOperator.AND,
+            conditions=[
+                ConditionNode(
+                    category=ConditionCategory.INDICATOR,
+                    field="close",
+                    operator=ASTOperator.LESS_THAN,
+                    threshold=23950.0,
+                )
+            ],
+        ),
+        legs=[],
+        target_regime="Trending Momentum",
+        metadata={
+            "author": "AdiTrader Quantitative Engineering",
+            "tier": "Standard",
+            "asset_class": "EQUITY/INDEX",
+        },
+    )
+
+
 def build_template_record(
     dsl: StrategyDSL,
     template_id: str,
@@ -339,6 +378,7 @@ def get_builtin_templates() -> dict[str, StrategyRecord]:
     bull_call_spread_dsl = create_nifty_bull_call_spread_dsl()
     nifty_ce_premium_ladder_dsl = create_nifty_ce_premium_ladder_dsl()
     nifty_intraday_trend_dsl = create_nifty_intraday_trend_dsl()
+    test_ma_crossover_dsl = create_test_ma_crossover_dsl()
 
     return {
         "iron_condor": build_template_record(
@@ -368,6 +408,12 @@ def get_builtin_templates() -> dict[str, StrategyRecord]:
         "nifty_intraday_trend": build_template_record(
             nifty_intraday_trend_dsl,
             template_id="tpl-nifty-intraday-trend-v1",
+            version="1.0.0",
+            validation_score=None,
+        ),
+        "test_ma_crossover": build_template_record(
+            test_ma_crossover_dsl,
+            template_id="tpl-test-ma-crossover-v1",
             version="1.0.0",
             validation_score=None,
         ),

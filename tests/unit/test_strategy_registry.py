@@ -90,3 +90,32 @@ def test_registry_query_filtering() -> None:
 
     trending = registry.query(target_regime=MarketRegime.TREND_FOLLOWING)
     assert len(trending) >= 1  # Bull Call Spread
+
+
+def test_registry_find_and_resolve_dsl() -> None:
+    """Verify unified find and resolve_dsl behavior across ID, name, and fuzzy matches."""
+    registry = StrategyRegistry(load_builtins=True)
+
+    # 1. Exact ID match
+    rec_by_id = registry.find("tpl-test-ma-crossover-v1")
+    assert rec_by_id is not None
+    assert rec_by_id.name == "test_ma_crossover"
+
+    # 2. Exact name match
+    rec_by_name = registry.find("test_ma_crossover")
+    assert rec_by_name is not None
+    assert rec_by_name.id == "tpl-test-ma-crossover-v1"
+
+    # 3. Normalized / fuzzy match
+    rec_fuzzy = registry.find("test ma crossover")
+    assert rec_fuzzy is not None
+    assert rec_fuzzy.id == "tpl-test-ma-crossover-v1"
+
+    # 4. Unknown query returns None without error
+    assert registry.find("completely_unknown_strat_xyz") is None
+
+    # 5. resolve_dsl with symbol override
+    dsl = registry.resolve_dsl("test_ma_crossover", symbol="BANKNIFTY")
+    assert dsl is not None
+    assert dsl.underlying == "BANKNIFTY"
+    assert dsl.name == "test_ma_crossover"

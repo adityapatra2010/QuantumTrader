@@ -939,7 +939,11 @@ class KotakOptionForwardRunner:
                 "Data Integrity Audit",
                 PillarType.DATA_INTEGRITY,
                 PillarStatus.PASS,
-                "Real Kotak Neo live data stream verified.",
+                (
+                    "Simulated mock option chain and synthetic tick stream verified."
+                    if self.config.mock_mode
+                    else "Real Kotak Neo live data stream verified."
+                ),
             ),
             known_answer_tests=_make_pillar(
                 "Known Answer Tests",
@@ -951,7 +955,11 @@ class KotakOptionForwardRunner:
                 "Historical Replay",
                 PillarType.HISTORICAL_REPLAY,
                 PillarStatus.NOT_RUN,
-                "Live forward shadow session.",
+                (
+                    "Mock rehearsal forward shadow session."
+                    if self.config.mock_mode
+                    else "Live forward shadow session."
+                ),
             ),
             empirical_metrics=_make_pillar(
                 "Empirical Metrics",
@@ -997,6 +1005,7 @@ class KotakOptionForwardRunner:
             "created_at": self.created_at.isoformat(),
             "closed_at": now_ist.isoformat(),
             "underlying": self.config.underlying,
+            "mode": "MOCK_REHEARSAL" if self.config.mock_mode else "REAL_MARKET_FEED",
             "venue": "AIR_GAPPED_PAPER_BROKER",
             "initial_capital": self.config.initial_capital,
             "ending_equity": ending_equity,
@@ -1203,16 +1212,8 @@ class KotakOptionForwardRunner:
 
         # 3. Check StrategyRegistry
         reg = StrategyRegistry()
-        try:
-            rec = reg.get(strategy_ref)
+        rec = reg.find(strategy_ref)
+        if rec:
             return rec.dsl_definition
-        except Exception:
-            pass
-
-        try:
-            rec = reg.get_by_name(strategy_ref)
-            return rec.dsl_definition
-        except Exception:
-            pass
 
         raise ValueError(f"Could not resolve strategy '{strategy_ref}' from file or registry.")

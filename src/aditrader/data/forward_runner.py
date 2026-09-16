@@ -47,16 +47,11 @@ from aditrader.data.quality import (
 )
 from aditrader.data.session import EXCHANGE_TIMEZONE, is_market_open
 from aditrader.strategy.builder.schema import (
-    ASTOperator,
-    ConditionCategory,
-    ConditionGroup,
-    ConditionNode,
     StrategyDSL,
 )
 
 if TYPE_CHECKING:
     from aditrader.strategy.compiler.engine import ExecutableStrategy
-    from aditrader.strategy.library.models import StrategyRecord
     from aditrader.strategy.library.registry import StrategyRegistry
 
 logger = logging.getLogger(__name__)
@@ -159,38 +154,6 @@ def _parse_timeframe_seconds(timeframe: str) -> int:
     return 60
 
 
-def _get_sample_ma_crossover(underlying: str = "NIFTY") -> StrategyDSL:
-    """Deterministic linear MA crossover strategy for local testing and demonstration."""
-    return StrategyDSL(
-        schema_version="1.0",
-        name="test_ma_crossover",
-        underlying=underlying,
-        timeframe="1m",
-        entry_conditions=ConditionGroup(
-            operator=ASTOperator.AND,
-            conditions=[
-                ConditionNode(
-                    category=ConditionCategory.INDICATOR,
-                    field="close",
-                    operator=ASTOperator.GREATER_THAN,
-                    threshold=24000.0,
-                )
-            ],
-        ),
-        exit_conditions=ConditionGroup(
-            operator=ASTOperator.AND,
-            conditions=[
-                ConditionNode(
-                    category=ConditionCategory.INDICATOR,
-                    field="close",
-                    operator=ASTOperator.LESS_THAN,
-                    threshold=23950.0,
-                )
-            ],
-        ),
-    )
-
-
 def resolve_strategy(
     strategy: StrategyDSL | ExecutableStrategy | str,
     registry: StrategyRegistry | None = None,
@@ -210,30 +173,8 @@ def resolve_strategy(
         strat_str = strategy.strip()
         reg = registry or StrategyRegistry()
 
-        # 1. Check registry by ID or exact name
-        try:
-            record: StrategyRecord = reg.get(strat_str)
-            return ExecutableStrategy(record.dsl_definition), record.dsl_definition
-        except Exception:
-            pass
-
-        try:
-            record = reg.get_by_name(strat_str)
-            return ExecutableStrategy(record.dsl_definition), record.dsl_definition
-        except Exception:
-            pass
-
-        # 2. Case-insensitive / normalized search
-        q = strat_str.lower().replace("-", " ").replace("_", " ").strip()
-        for rec in reg.list_all():
-            name_clean = rec.name.lower().replace("-", " ").replace("_", " ").strip()
-            id_clean = rec.id.lower().replace("-", " ").replace("_", " ").strip()
-            if q in (name_clean, id_clean) or q in name_clean:
-                return ExecutableStrategy(rec.dsl_definition), rec.dsl_definition
-
-        # 3. Built-in linear sample fallback
-        if q in ("test ma crossover", "ma crossover", "test_ma_crossover"):
-            dsl = _get_sample_ma_crossover(underlying=symbol or "NIFTY")
+        dsl = reg.resolve_dsl(strat_str, symbol=symbol)
+        if dsl:
             return ExecutableStrategy(dsl), dsl
 
         raise ValueError(
@@ -434,9 +375,15 @@ class ForwardTestRunner:
             adapter.authenticate()
             return adapter
 
-        adapter = KotakNeoAdapter(mock_mode=True)
-        adapter.authenticate()
-        return adapter
+        if self.config.force_mock:
+            adapter = KotakNeoAdapter(mock_mode=True)
+            adapter.authenticate()
+            return adapter
+
+        raise RuntimeError(
+            "Cannot start live forward test: Kotak Neo credentials not configured in environment. "
+            "Pass force_mock=True for simulated rehearsal or supply an explicit data feed/adapter."
+        )
 
     def _run_mock_feeder(self) -> None:
         """Background thread feeding simulated ticks when using mock adapter."""

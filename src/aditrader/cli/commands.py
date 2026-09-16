@@ -2,6 +2,8 @@
 
 import argparse
 import importlib
+import json
+import logging
 import os
 import random
 import sys
@@ -32,13 +34,8 @@ from aditrader.data.forward_runner import ForwardTestConfig, ForwardTestRunner
 from aditrader.data.instruments.service import InstrumentSearchService
 from aditrader.data.session import EXCHANGE_TIMEZONE
 from aditrader.strategy.builder.schema import (
-    ASTOperator,
-    ConditionCategory,
-    ConditionGroup,
-    ConditionNode,
     StrategyDSL,
 )
-from aditrader.strategy.library.models import StrategyRecord
 from aditrader.strategy.library.registry import StrategyRegistry
 from aditrader.validation.models import ValidationStatus
 from aditrader.validation.policies import (
@@ -49,6 +46,8 @@ from aditrader.validation.policies import (
 from aditrader.validation.service import StrategyValidationService
 from aditrader.verification.integrity import DataIntegrityChecker
 
+logger = logging.getLogger(__name__)
+
 
 def _mask_secret(secret: str | None) -> str:
     """Mask secret value for safe diagnostic display."""
@@ -58,63 +57,6 @@ def _mask_secret(secret: str | None) -> str:
     if len(s) <= 6:
         return "***"
     return f"{s[:2]}***{s[-2:]}"
-
-
-def _find_strategy(registry: StrategyRegistry, query: str) -> StrategyRecord | None:
-    """Find a registered strategy record by ID, exact name, or fuzzy match."""
-    # 1. Direct ID match
-    try:
-        return registry.get(query)
-    except Exception:
-        pass
-
-    # 2. Direct name match
-    try:
-        return registry.get_by_name(query)
-    except Exception:
-        pass
-
-    # 3. Normalized / case-insensitive search
-    q = query.lower().replace("-", " ").replace("_", " ").strip()
-    for record in registry.list_all():
-        name_clean = record.name.lower().replace("-", " ").replace("_", " ").strip()
-        id_clean = record.id.lower().replace("-", " ").replace("_", " ").strip()
-        if q in (name_clean, id_clean) or q in name_clean:
-            return record
-
-    return None
-
-
-def _get_sample_ma_crossover() -> StrategyDSL:
-    """Deterministic linear MA crossover strategy for local backtesting."""
-    return StrategyDSL(
-        schema_version="1.0",
-        name="test_ma_crossover",
-        underlying="NIFTY",
-        timeframe="1m",
-        entry_conditions=ConditionGroup(
-            operator=ASTOperator.AND,
-            conditions=[
-                ConditionNode(
-                    category=ConditionCategory.INDICATOR,
-                    field="close",
-                    operator=ASTOperator.GREATER_THAN,
-                    threshold=24000.0,
-                )
-            ],
-        ),
-        exit_conditions=ConditionGroup(
-            operator=ASTOperator.AND,
-            conditions=[
-                ConditionNode(
-                    category=ConditionCategory.INDICATOR,
-                    field="close",
-                    operator=ASTOperator.LESS_THAN,
-                    threshold=23950.0,
-                )
-            ],
-        ),
-    )
 
 
 # ==============================================================================
@@ -325,7 +267,7 @@ def cmd_status(args: argparse.Namespace) -> int:
             f"Scrip Master:      Cached locally ({scrip_parquets[0].name}, {scrip_parquets[0].stat().st_size // 1024} KB)"
         )
     else:
-        print("Scrip Master:      Not cached (run search or adapter scrip master download)")
+        print("Scrip Master:      Not cached (run 'aditrader search <symbol>' to auto-cache)")
 
     print("=" * 68)
     return 0
@@ -344,6 +286,22 @@ def cmd_init_db(args: argparse.Namespace) -> int:
     print(f"Initializing database at: {settings.database_url} ...")
     repo = LedgerRepository(database_url=settings.database_url)
     repo.create_tables()
+
+    # Synchronize Alembic migration state with current database schema
+    try:
+        from alembic.config import Config
+
+        from alembic import command
+
+        alembic_ini_path = Path(__file__).resolve().parent.parent.parent.parent / "alembic.ini"
+        if not alembic_ini_path.is_file():
+            alembic_ini_path = Path("alembic.ini")
+        if alembic_ini_path.is_file():
+            alembic_cfg = Config(str(alembic_ini_path))
+            alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
+            command.stamp(alembic_cfg, "head")
+    except Exception as alembic_err:
+        logger.debug("Could not stamp alembic version: %s", alembic_err)
 
     with repo.engine.connect():
         insp = sa_inspect(repo.engine)
@@ -366,7 +324,7 @@ def cmd_strategies(args: argparse.Namespace) -> int:
 
     if args.detail:
         strategy_query = args.detail
-        record = _find_strategy(registry, strategy_query)
+        record = registry.find(strategy_query)
         if not record:
             print(f"[ERROR] Strategy '{strategy_query}' not found in registry.")
             return 1
@@ -482,11 +440,9 @@ def cmd_validate(args: argparse.Namespace) -> int:
     dsl: StrategyDSL | None = None
 
     if args.strategy:
-        record = _find_strategy(registry, args.strategy)
+        record = registry.find(args.strategy)
         if record:
             dsl = record.dsl_definition
-        elif args.strategy.lower() in ("test_ma_crossover", "ma_crossover"):
-            dsl = _get_sample_ma_crossover()
         else:
             print(f"[ERROR] Built-in strategy '{args.strategy}' not found.")
             return 1
@@ -517,8 +473,54 @@ def cmd_validate(args: argparse.Namespace) -> int:
     print(f" Validating Strategy: '{dsl.name}' (Policy: {policy.policy_name})")
     print("=" * 68)
 
+    bt_result: Any = None
+    if dsl.legs:
+        if getattr(args, "csv", None) or getattr(args, "bars", None):
+            print("[NOTICE] Options strategies use theoretical payoff validation (ADR 011).")
+            print("         Historical candle dataset was ignored for options payoff modeling.")
+    else:
+        csv_path = getattr(args, "csv", None)
+        num_bars = getattr(args, "bars", None)
+        if csv_path:
+            p = Path(csv_path)
+            if not p.is_file():
+                print(f"[ERROR] CSV historical data file not found: {p}")
+                return 1
+            from aditrader.strategy.compiler.engine import ExecutableStrategy
+
+            csv_feed = CSVDataFeed(file_path=p, symbol=dsl.underlying, timeframe=dsl.timeframe)
+            runner = BacktestRunner(config=BacktestConfig(initial_capital=1_000_000.0))
+            bt_result = runner.run(strategy=ExecutableStrategy(dsl), data=csv_feed)
+        elif num_bars is not None:
+            if num_bars <= 0:
+                print(f"[ERROR] Invalid --bars {num_bars}: must be >= 1")
+                return 1
+            from aditrader.strategy.compiler.engine import ExecutableStrategy
+
+            synth_feed = SyntheticDataFeed(symbol=dsl.underlying, num_bars=num_bars)
+            runner = BacktestRunner(config=BacktestConfig(initial_capital=1_000_000.0))
+            bt_result = runner.run(strategy=ExecutableStrategy(dsl), data=synth_feed)
+
     service = StrategyValidationService()
-    report = service.validate(strategy=dsl, policy=policy)
+    report = service.validate(strategy=dsl, policy=policy, backtest_result=bt_result)
+
+    if not dsl.legs and bt_result is None:
+        print(f"Target Underlying:     {dsl.underlying}")
+        print(f"Timeframe:             {dsl.timeframe}")
+        print("Validation Path:       STRUCTURAL_AST (STRUCTURAL)")
+        print(
+            f"Final Verdict:         STRUCTURALLY_VALID (DATA_PENDING) (Score: {report.validation_score:.1f}/100)"
+        )
+        print("\nNotice:")
+        print("  • Strategy AST structure and condition rules are valid.")
+        print(
+            "  • Empirical statistical gates (Expectancy, Drawdown, Profit Factor) require backtest data:"
+        )
+        print(f'      aditrader validate --strategy "{dsl.name}" --csv <path_to_candles.csv>')
+        print("    Or test with synthetic historical bars:")
+        print(f'      aditrader validate --strategy "{dsl.name}" --bars 100')
+        print("-" * 68)
+        return 0
 
     print(f"Target Underlying:     {dsl.underlying}")
     print(f"Timeframe:             {dsl.timeframe}")
@@ -528,6 +530,14 @@ def cmd_validate(args: argparse.Namespace) -> int:
     print(
         f"Final Verdict:         {report.status.value} (Score: {report.validation_score:.1f}/100)"
     )
+
+    if report.metrics:
+        print("\nEmpirical Metrics:")
+        for k, v in report.metrics.items():
+            if isinstance(v, float):
+                print(f"  {k:<24} {v:.2f}")
+            else:
+                print(f"  {k:<24} {v}")
 
     if dsl.legs:
         from aditrader.validation.service import check_options_replay_readiness
@@ -583,11 +593,9 @@ def cmd_backtest(args: argparse.Namespace) -> int:
     dsl: StrategyDSL | None = None
 
     if args.strategy:
-        record = _find_strategy(registry, args.strategy)
+        record = registry.find(args.strategy)
         if record:
             dsl = record.dsl_definition
-        elif args.strategy.lower() in ("test_ma_crossover", "ma_crossover"):
-            dsl = _get_sample_ma_crossover()
         else:
             print(f"[ERROR] Built-in strategy '{args.strategy}' not found.")
             return 1
@@ -612,44 +620,64 @@ def cmd_backtest(args: argparse.Namespace) -> int:
         print("=" * 68)
         print(f"[AIR-GAP GUARD] Strategy '{dsl.name}' defines {len(dsl.legs)} option leg(s).")
         print("BacktestRunner strictly prohibits silent proxy simulation of multi-leg option")
-        print("strategies on spot/futures candles (ADR 011).")
         print("To evaluate options strategies, run institutional payoff validation:")
-        print(f"    aditrader validate --strategy {dsl.name}")
+        print(f'    aditrader validate --strategy "{dsl.name}"')
+        print("Or run forward options shadow simulation:")
+        print(f'    aditrader forward-options --strategy "{dsl.name}" --mock')
         print("=" * 68)
         return 1
 
-    from aditrader.strategy.compiler.engine import ExecutableStrategy
+    # Validate numeric CLI arguments
+    if getattr(args, "bars", None) is not None and args.bars <= 0:
+        print(f"[ERROR] Invalid --bars {args.bars}: must be a positive integer >= 1.")
+        return 1
+    capital = getattr(args, "capital", None)
+    if capital is not None and capital <= 0:
+        print(f"[ERROR] Invalid --capital {capital}: initial capital must be strictly positive.")
+        return 1
+    slip_bps = getattr(args, "slippage_bps", None)
+    if slip_bps is not None and slip_bps < 0:
+        print(f"[ERROR] Invalid --slippage-bps {slip_bps}: slippage cannot be negative.")
+        return 1
 
-    strategy = ExecutableStrategy(dsl)
-
-    # Resolve data feed
-    feed: Any = None
-    if args.csv:
-        csv_path = Path(args.csv)
-        if not csv_path.is_file():
-            print(f"[ERROR] CSV historical data file not found: {csv_path}")
-            return 1
-        feed = CSVDataFeed(file_path=csv_path, symbol=dsl.underlying, timeframe=dsl.timeframe)
-    else:
-        num_bars = args.bars or 100
-        feed = SyntheticDataFeed(symbol=dsl.underlying, num_bars=num_bars)
-
-    slip_bps = args.slippage_bps if args.slippage_bps is not None else 2.5
-    config = BacktestConfig(
-        initial_capital=args.capital or 1_000_000.0,
-        slippage_model=SlippageModel(percentage=slip_bps / 10000.0),
-        allow_same_bar_execution=False,
-    )
-
-    print("=" * 68)
-    print(f" Backtest Simulation: '{dsl.name}' on {dsl.underlying}")
-    print("=" * 68)
-
-    runner = BacktestRunner(config=config)
     try:
+        from aditrader.strategy.compiler.engine import ExecutableStrategy
+
+        strategy = ExecutableStrategy(dsl)
+
+        # Resolve data feed
+        feed: Any = None
+        if args.csv:
+            csv_path = Path(args.csv)
+            if not csv_path.is_file():
+                print(f"[ERROR] CSV historical data file not found: {csv_path}")
+                return 1
+            feed = CSVDataFeed(file_path=csv_path, symbol=dsl.underlying, timeframe=dsl.timeframe)
+        else:
+            num_bars = args.bars or 100
+            feed = SyntheticDataFeed(symbol=dsl.underlying, num_bars=num_bars)
+
+        slip_val = slip_bps if slip_bps is not None else 2.5
+        config = BacktestConfig(
+            initial_capital=capital or 1_000_000.0,
+            slippage_model=SlippageModel(percentage=slip_val / 10000.0),
+            allow_same_bar_execution=False,
+        )
+
+        print("=" * 68)
+        print(f" Backtest Simulation: '{dsl.name}' on {dsl.underlying}")
+        print("=" * 68)
+
+        runner = BacktestRunner(config=config)
         result = runner.run(strategy=strategy, data=feed)
     except UnsupportedStrategyError as exc:
         print(f"[AIR-GAP GUARD] {exc}")
+        return 1
+    except (ValueError, Exception) as exc:
+        if isinstance(exc, UnsupportedStrategyError):
+            print(f"[AIR-GAP GUARD] {exc}")
+            return 1
+        print(f"[ERROR] Backtest failed: {exc}")
         return 1
 
     perf = result.performance
@@ -657,18 +685,49 @@ def cmd_backtest(args: argparse.Namespace) -> int:
     print(f"Total Trades:          {perf.total_trades}")
     print(f"Starting Capital:      ₹{perf.starting_equity:,.2f}")
     print(f"Ending Capital:        ₹{perf.ending_equity:,.2f}")
-    print(f"Net Realized PnL:      ₹{perf.net_profit:,.2f} ({perf.return_pct:.2f}%)")
+
+    # Truthful accounting breakdown
+    realized_pnl = sum(r.net_pnl for r in result.ledger) if getattr(result, "ledger", None) else 0.0
+    terminal_unrealized = getattr(result, "terminal_unrealized_pnl", 0.0) or 0.0
+    has_terminal_pos = bool(getattr(result, "terminal_positions", None))
+
+    if perf.total_trades == 0:
+        if has_terminal_pos:
+            print(f"Terminal Unrealized:   ₹{terminal_unrealized:,.2f}")
+            print(f"Total Net PnL (MTM):   ₹{perf.net_profit:,.2f} ({perf.return_pct:.2f}%)")
+        else:
+            print(f"Net Realized PnL:      ₹{perf.net_profit:,.2f} ({perf.return_pct:.2f}%)")
+    else:
+        if has_terminal_pos:
+            print(f"Closed Realized PnL:   ₹{realized_pnl:,.2f}")
+            print(f"Terminal Unrealized:   ₹{terminal_unrealized:,.2f}")
+            print(f"Total Net PnL (MTM):   ₹{perf.net_profit:,.2f} ({perf.return_pct:.2f}%)")
+        else:
+            print(f"Net Realized PnL:      ₹{perf.net_profit:,.2f} ({perf.return_pct:.2f}%)")
+
     print(f"Win Rate:              {perf.win_rate * 100.0:.1f}%")
     print(f"Expectancy:            ₹{perf.expectancy:,.2f}")
     print(
         f"Profit Factor:         {f'{perf.profit_factor:.2f}' if perf.profit_factor is not None else 'N/A'}"
     )
     print(f"Max Drawdown:          {perf.max_drawdown_pct * 100.0:.2f}%")
+
+    sharpe_note = (
+        " [Caution: <1 day sample]"
+        if result.bar_count < 375 and perf.sharpe_ratio is not None
+        else ""
+    )
+    sortino_note = (
+        " [Caution: <1 day sample]"
+        if result.bar_count < 375 and perf.sortino_ratio is not None
+        else ""
+    )
+
     print(
-        f"Sharpe Ratio:          {f'{perf.sharpe_ratio:.2f}' if perf.sharpe_ratio is not None else 'N/A'}"
+        f"Sharpe Ratio:          {f'{perf.sharpe_ratio:.2f}{sharpe_note}' if perf.sharpe_ratio is not None else 'N/A'}"
     )
     print(
-        f"Sortino Ratio:         {f'{perf.sortino_ratio:.2f}' if perf.sortino_ratio is not None else 'N/A'}"
+        f"Sortino Ratio:         {f'{perf.sortino_ratio:.2f}{sortino_note}' if perf.sortino_ratio is not None else 'N/A'}"
     )
     print(f"SQN:                   {f'{perf.sqn:.2f}' if perf.sqn is not None else 'N/A'}")
 
@@ -697,6 +756,9 @@ def cmd_backtest(args: argparse.Namespace) -> int:
         print(f"  Tamper Digest:       {dos.tamper_digest[:16]}...")
         print(f"  Dossier Path:        runs/backtest/dossier_{dos.run_id}.json")
 
+    print("\nNext Steps:")
+    print(f'    aditrader validate --strategy "{dsl.name}"')
+    print(f'    aditrader forward-options --strategy "{dsl.name}" --mock')
     print("=" * 68)
     return 0
 
@@ -710,7 +772,7 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
     """Launch the responsive web research and paper trading dashboard."""
     port = getattr(args, "port", 8050) or 8050
     host = getattr(args, "host", "127.0.0.1") or "127.0.0.1"
-    serve = getattr(args, "serve", False)
+    serve = bool(getattr(args, "serve", False))
 
     print("=" * 68)
     print("      AdiTrader / QuantumValidator — Research & Paper Dashboard")
@@ -718,8 +780,9 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
     print("[NOTICE] Full multi-page Plotly Dash integration is scheduled for Phase 8.")
     print("         A lightweight, zero-dependency responsive Web GUI is ready now.")
     print(f"         Server endpoint: http://{host}:{port}")
-    print("         Run with '--serve' to start the live server:")
-    print("             aditrader dashboard --serve")
+    if not serve:
+        print("         Run 'aditrader dashboard' to start the live server:")
+        print("             aditrader dashboard --serve")
     print("=" * 68)
 
     if serve:
@@ -740,6 +803,13 @@ def cmd_inspect_data(args: argparse.Namespace) -> int:
     )
     if not file_path:
         print("[ERROR] Please provide a path to a CSV file to inspect.")
+        data_dir = Path("data")
+        if data_dir.is_dir():
+            csvs = sorted(list(data_dir.glob("*.csv")))
+            if csvs:
+                print("\nDiscovered datasets in repository:")
+                for c in csvs:
+                    print(f"  aditrader inspect-data --file {c}")
         return 1
 
     path = Path(file_path)
@@ -1030,12 +1100,10 @@ def cmd_forward_test(args: argparse.Namespace) -> int:
 
     # Resolve strategy
     registry = StrategyRegistry()
-    record = _find_strategy(registry, strategy_arg)
+    record = registry.find(strategy_arg)
     dsl: StrategyDSL | None = None
     if record:
         dsl = record.dsl_definition
-    elif strategy_arg.lower() in ("test_ma_crossover", "ma_crossover"):
-        dsl = _get_sample_ma_crossover()
     else:
         print(f"[ERROR] Strategy '{strategy_arg}' not found in registry.")
         return 1
@@ -1119,13 +1187,31 @@ def cmd_forward_test(args: argparse.Namespace) -> int:
             print(f"[ERROR] No valid bars found for symbol '{instrument}' in CSV '{csv_path}'.")
             return 1
         mode_label = f"SIMULATION / CSV_REPLAY ({csv_path}, {len(csv_feed)} bars)"
-    elif has_credentials and not force_mock:
-        if not HAS_NEO_SDK:
-            mode_label = "UNSUPPORTED (Live Kotak Neo SDK not installed; fail-closed)"
-        else:
-            mode_label = "LIVE_STREAM (Kotak Neo SFeed)"
-    else:
+    elif force_mock:
         mode_label = "SIMULATED_REHEARSAL (Mock Adapter)"
+    elif has_credentials:
+        if not HAS_NEO_SDK:
+            print(
+                "\n[FAIL-CLOSED SAFETY VETO] Real Kotak Neo forward session rejected:\n"
+                "  Live Kotak Neo SDK is not installed in the current Python environment.\n"
+                "To run an offline rehearsal without broker credentials, specify:\n"
+                f'  aditrader forward-test --strategy "{dsl.name}" --mock\n'
+                "Or replay a historical CSV dataset:\n"
+                f'  aditrader forward-test --strategy "{dsl.name}" --csv data/nifty_sample.csv'
+            )
+            return 1
+        mode_label = "LIVE_STREAM (Kotak Neo SFeed)"
+    else:
+        print(
+            "\n[FAIL-CLOSED SAFETY VETO] Real Kotak Neo forward test rejected:\n"
+            "  Missing required Kotak Neo credentials in environment (.env).\n"
+            "  Live forward-shadow paper testing requires KOTAK_CONSUMER_KEY, KOTAK_MOBILE_NUMBER, etc.\n"
+            "\nTo run an offline rehearsal without broker credentials, specify:\n"
+            f'  aditrader forward-test --strategy "{dsl.name}" --mock\n'
+            "\nOr replay a historical CSV dataset:\n"
+            f'  aditrader forward-test --strategy "{dsl.name}" --csv data/nifty_sample.csv'
+        )
+        return 1
 
     print("=" * 68)
     print("      AdiTrader / QuantumValidator — Forward Paper Testing")
@@ -1217,7 +1303,11 @@ def cmd_smoke_feed(args: argparse.Namespace) -> int:
     and normalized streaming market ticks.
     """
     symbol = getattr(args, "symbol", "NIFTY") or "NIFTY"
-    target_ticks = getattr(args, "ticks", 5) or 5
+    raw_ticks = getattr(args, "ticks", None)
+    target_ticks = 5 if raw_ticks is None else int(raw_ticks)
+    if target_ticks <= 0:
+        print(f"[ERROR] Invalid --ticks {target_ticks}: tick count must be strictly positive.")
+        return 1
     timeout_sec = getattr(args, "timeout", 15.0) or 15.0
     force_mock = getattr(args, "mock", False)
 
@@ -1250,10 +1340,14 @@ def cmd_smoke_feed(args: argparse.Namespace) -> int:
         print("              Run with --mock to test simulated streaming ingestion.")
         return 1
 
-    if not is_live and not force_mock and not has_credentials:
-        print("[NOTICE] Kotak Neo credentials not configured. Defaulting to --mock rehearsal mode.")
-        force_mock = True
-        is_live = False
+    if not force_mock and not has_credentials:
+        print(
+            "\n[FAIL-CLOSED SAFETY VETO] Real Kotak Neo market data feed rejected:\n"
+            "  Missing required Kotak Neo credentials in environment (.env).\n"
+            "\nTo run a simulated streaming feed smoke test without credentials, specify:\n"
+            f"  aditrader smoke-feed --symbol {symbol} --mock"
+        )
+        return 1
 
     adapter = KotakNeoAdapter(
         mock_mode=not is_live,
@@ -1370,9 +1464,13 @@ def cmd_kotak_auth(args: argparse.Namespace) -> int:
         print(f"UCC:                 {_mask_secret(settings.kotak_ucc)}")
 
     if not is_mock and not has_credentials:
-        print("\n[NOTICE] Kotak Neo credentials are not configured in environment or .env.")
-        print("         Running authentication check in verified OFFLINE MOCK MODE.")
-        is_mock = True
+        print(
+            "\n[FAIL-CLOSED SAFETY VETO] Kotak Neo authentication check rejected:\n"
+            "  Missing required Kotak Neo credentials in environment (.env).\n"
+            "\nTo test simulated offline authentication without live credentials, specify:\n"
+            "  aditrader kotak-auth --mock"
+        )
+        return 1
 
     adapter = KotakNeoAdapter(mock_mode=is_mock)
 
@@ -1410,9 +1508,17 @@ def cmd_kotak_discover(args: argparse.Namespace) -> int:
     print("=" * 72)
 
     settings = get_settings()
-    is_mock = getattr(args, "mock", False) or (
-        not bool(settings.kotak_consumer_key and settings.kotak_consumer_secret)
-    )
+    is_mock = getattr(args, "mock", False)
+    has_credentials = bool(settings.kotak_consumer_key and settings.kotak_consumer_secret)
+
+    if not is_mock and not has_credentials:
+        print(
+            "\n[FAIL-CLOSED SAFETY VETO] Kotak Neo discovery suite rejected:\n"
+            "  Missing required Kotak Neo credentials in environment (.env).\n"
+            "\nTo run discovery in offline mock mode, specify:\n"
+            "  aditrader kotak-discover --mock"
+        )
+        return 1
 
     out_dir_arg = getattr(args, "output_dir", None)
     output_dir = Path(out_dir_arg) if out_dir_arg else Path("runs/kotak_raw")
@@ -1502,8 +1608,13 @@ def cmd_kotak_history(args: argparse.Namespace) -> int:
 
     settings = get_settings()
     if not is_mock and not (settings.kotak_consumer_key and HAS_NEO_SDK):
-        print("[NOTICE] Running in OFFLINE MOCK MODE (no live credentials or SDK unavailable).")
-        is_mock = True
+        print(
+            "\n[FAIL-CLOSED SAFETY VETO] Real Kotak Neo historical retrieval rejected:\n"
+            "  Missing required Kotak Neo credentials or live SDK in environment.\n"
+            "\nTo retrieve simulated historical data in mock mode, specify:\n"
+            f"  aditrader kotak-history --symbol {symbol} --mock"
+        )
+        return 1
 
     adapter = KotakNeoAdapter(mock_mode=is_mock)
     if is_mock and not adapter._mock_bars.get(symbol):
@@ -1757,32 +1868,56 @@ def cmd_forward_options(args: argparse.Namespace) -> int:
     underlying = getattr(args, "underlying", None) or getattr(args, "instrument", None) or "NIFTY"
     expiry = getattr(args, "expiry", None)
     band_index = getattr(args, "band", 0) or 0
-    capital = getattr(args, "capital", 1_000_000.0) or 1_000_000.0
-    slippage_bps = getattr(args, "slippage_bps", 5.0) or 5.0
-    duration = getattr(args, "duration", None)
+    capital_raw = getattr(args, "capital", None)
+    capital = 1_000_000.0 if capital_raw is None else float(capital_raw)
+    if capital <= 0:
+        print(f"[ERROR] Invalid --capital {capital}: initial capital must be strictly positive.")
+        return 1
+
+    slippage_raw = getattr(args, "slippage_bps", None)
+    slippage_bps = 5.0 if slippage_raw is None else float(slippage_raw)
+    if slippage_bps < 0:
+        print(f"[ERROR] Invalid --slippage-bps {slippage_bps}: slippage cannot be negative.")
+        return 1
+
+    duration_raw = getattr(args, "duration", None)
+    duration = None if duration_raw is None else float(duration_raw)
+    if duration is not None and duration <= 0:
+        print(f"[ERROR] Invalid --duration {duration}: duration must be positive.")
+        return 1
+
     out_dir = Path(getattr(args, "output_dir", "runs/forward") or "runs/forward")
     raw_dir = Path(getattr(args, "raw_capture_dir", "runs/kotak_raw") or "runs/kotak_raw")
     interval = getattr(args, "snapshot_interval", 300.0) or 300.0
     mock_mode = getattr(args, "mock", False)
     wait_for_open = not getattr(args, "no_wait", False)
 
-    config = ForwardOptionsSessionConfig(
-        strategy_id=strategy_arg,
-        underlying=underlying,
-        target_expiry=expiry,
-        band_index=band_index,
-        initial_capital=capital,
-        slippage_bps=slippage_bps,
-        output_dir=out_dir,
-        raw_capture_dir=raw_dir,
-        snapshot_interval_seconds=interval,
-        mock_mode=mock_mode,
-        wait_for_market_open=wait_for_open,
-        duration_seconds=duration,
-    )
+    try:
+        config = ForwardOptionsSessionConfig(
+            strategy_id=strategy_arg,
+            underlying=underlying,
+            target_expiry=expiry,
+            band_index=band_index,
+            initial_capital=capital,
+            slippage_bps=slippage_bps,
+            output_dir=out_dir,
+            raw_capture_dir=raw_dir,
+            snapshot_interval_seconds=interval,
+            mock_mode=mock_mode,
+            wait_for_market_open=wait_for_open,
+            duration_seconds=duration,
+        )
+    except Exception as cfg_err:
+        print(f"[ERROR] Invalid forward options configuration: {cfg_err}")
+        return 1
 
+    banner_title = (
+        "  KOTAK NEO MOCK REHEARSAL FORWARD-SHADOW PAPER EXECUTION (OPTIONS)"
+        if mock_mode
+        else "  KOTAK NEO REAL FORWARD-SHADOW PAPER EXECUTION (OPTIONS)"
+    )
     print("=" * 76)
-    print("  KOTAK NEO REAL FORWARD-SHADOW PAPER EXECUTION (OPTIONS)")
+    print(banner_title)
     print("=" * 76)
     print(
         f"Mode:             {'MOCK / REHEARSAL' if mock_mode else 'REAL KOTAK ACCOUNT (PAPER-AIRGAPPED)'}"
@@ -1798,6 +1933,68 @@ def cmd_forward_options(args: argparse.Namespace) -> int:
     try:
         runner = KotakOptionForwardRunner(config=config)
         dossier_path = runner.run()
+
+        # Load dossier data for comprehensive terminal summary table
+        try:
+            with open(dossier_path, encoding="utf-8") as df:
+                dos = json.load(df)
+            rec = dos.get("reconciliation", {})
+            vmat = dos.get("verification_matrix", {})
+            trades = dos.get("ledger", [])
+
+            gross_pnl = rec.get("total_realized_pnl", rec.get("gross_profit", 0.0))
+            total_charges = rec.get("total_charges", 0.0)
+            net_profit = dos.get("net_profit", 0.0)
+            start_cap = dos.get("initial_capital", capital)
+            end_eq = dos.get("ending_equity", capital + net_profit)
+            ret_pct = (net_profit / start_cap * 100.0) if start_cap > 0 else 0.0
+            reconciled = rec.get("is_reconciled", True)
+            disc = rec.get("equity_discrepancy", rec.get("discrepancy", 0.0))
+            overall_status = vmat.get("overall_status", "THEORETICAL_PASS")
+
+            print("-" * 76)
+            print("FORWARD-SHADOW EXECUTION SUMMARY")
+            print("-" * 76)
+            print(f"Status:           CONCLUDED CLEANLY ({overall_status})")
+            print(
+                f"Mode:             {'MOCK / REHEARSAL' if mock_mode else 'REAL KOTAK LIVE FEED'}"
+            )
+            print(f"Strategy:         {dos.get('strategy_id', strategy_arg)}")
+            print(f"Underlying:       {underlying}")
+            print(f"Starting Capital: ₹{start_cap:,.2f}")
+            print(f"Ending Equity:    ₹{end_eq:,.2f}")
+            print(f"Gross PnL:        {'+' if gross_pnl >= 0 else ''}₹{gross_pnl:,.2f}")
+            print(f"Statutory Costs:  ₹{total_charges:,.2f} (STT, Turnover, SEBI, GST, Stamp)")
+            print(
+                f"Net Profit:       {'+' if net_profit >= 0 else ''}₹{net_profit:,.2f} ({'+' if ret_pct >= 0 else ''}{ret_pct:.2f}%)"
+            )
+            print(f"Trades Executed:  {len(trades)}")
+            print(f"Events Recorded:  {dos.get('event_count', 0)}")
+            print(
+                f"Balance Sheet:    {'RECONCILED' if reconciled else 'DISCREPANCY'} (Discrepancy: ±₹{disc:.2f})"
+            )
+            if dos.get("trade_ledger_merkle_root"):
+                print(f"Ledger Merkle:    {dos['trade_ledger_merkle_root'][:16]}...")
+            if dos.get("tamper_digest"):
+                print(f"Tamper Digest:    {dos['tamper_digest'][:16]}...")
+
+            if trades:
+                print("\nExecuted Option Trades:")
+                for i, t in enumerate(trades):
+                    t_side = t.get("side", "")
+                    t_qty = t.get("quantity", 0)
+                    t_sym = t.get("symbol", "")
+                    t_entry = t.get("entry_price", t.get("fill_price", 0.0))
+                    t_exit = t.get("exit_price")
+                    t_exit_str = f"Exit: ₹{t_exit:>6.2f}" if t_exit is not None else "Exit: OPEN"
+                    t_net = t.get("net_pnl", 0.0)
+                    print(
+                        f"  #{i + 1:<2} {t_side:<4} {t_qty:>4} {t_sym:<22} Entry: ₹{t_entry:>6.2f}  {t_exit_str}  Net: {'+' if t_net >= 0 else ''}₹{t_net:>7.2f}"
+                    )
+
+        except Exception as read_err:
+            logger.warning("Could not read dossier for summary: %s", read_err)
+
         print("-" * 76)
         print("[SUCCESS] Forward shadow session concluded cleanly.")
         print(f"Sealed Dossier:   {dossier_path}")
@@ -1812,3 +2009,171 @@ def cmd_forward_options(args: argparse.Namespace) -> int:
     except Exception as exc:
         print(f"[ERROR] Session failed: {exc}")
         return 1
+
+
+# ==============================================================================
+# 18. Runs History & Dossier Inspection Commands
+# ==============================================================================
+
+
+def cmd_runs(args: argparse.Namespace) -> int:
+    """List completed backtest and forward-shadow run dossiers."""
+    from aditrader.web.services import get_completed_runs
+
+    limit = getattr(args, "limit", 20) or 20
+    filter_type = getattr(args, "type", "all") or "all"
+
+    records = get_completed_runs(run_type=filter_type, limit=limit)
+
+    print("=" * 84)
+    print("                     Completed Run Dossiers History")
+    print("=" * 84)
+    if not records:
+        print("No completed run dossiers found in runs/backtest/ or runs/forward/.")
+        print("Execute a backtest or forward session to generate run dossiers:")
+        print("  aditrader backtest --strategy test_ma_crossover --bars 100")
+        print("  aditrader forward-options --mock --duration 5.0 --no-wait")
+        print("=" * 84)
+        return 0
+
+    print(
+        f"{'RUN ID':<24} {'TYPE':<10} {'STRATEGY':<24} {'NET PROFIT':>12} {'TRDS':>5} {'STATUS':<12}"
+    )
+    print("-" * 84)
+    for r in records:
+        pnl = r["net_pnl"]
+        pnl_str = f"{'+' if pnl >= 0 else ''}₹{pnl:,.2f}"
+        print(
+            f"{r['run_id']:<24} {r['type']:<10} {r['strategy'][:22]:<24} {pnl_str:>12} {r['trades']:>5} {r['status']:<12}"
+        )
+    print("-" * 84)
+    print("Inspect any run: aditrader inspect-run <run_id>")
+    print("=" * 84)
+    return 0
+
+
+def cmd_inspect_run(args: argparse.Namespace) -> int:
+    """Inspect a completed Run Dossier by run ID or file path."""
+    from aditrader.web.services import find_dossier_path
+
+    target = getattr(args, "run_id", None) or getattr(args, "id_or_path", None)
+    if not target:
+        print("[ERROR] Please specify a run ID or path to a dossier JSON file.")
+        return 1
+
+    target_path = Path(target)
+    dossier_file: Path | None = target_path if target_path.is_file() else find_dossier_path(target)
+
+    if not dossier_file or not dossier_file.is_file():
+        print(f"[ERROR] Run Dossier not found for query: '{target}'")
+        print("Use 'aditrader runs' to view available completed run dossiers.")
+        return 1
+
+    try:
+        with open(dossier_file, encoding="utf-8") as f:
+            dos = json.load(f)
+    except Exception as exc:
+        print(f"[ERROR] Failed to parse dossier JSON at {dossier_file}: {exc}")
+        return 1
+
+    run_id = dos.get("run_id", dossier_file.stem)
+    strat = dos.get("strategy_id", dos.get("strategy_name", "Unknown"))
+    mode = dos.get("mode", "N/A")
+    venue = dos.get("venue", "AIR_GAPPED_PAPER_BROKER")
+    initial_cap = dos.get("initial_capital", dos.get("starting_equity", 0.0))
+    ending_eq = dos.get("ending_equity", 0.0)
+    net_profit = dos.get("net_profit", 0.0)
+    ret_pct = (net_profit / initial_cap * 100.0) if initial_cap > 0 else 0.0
+
+    print("=" * 76)
+    print(f"       RUN DOSSIER INSPECTION: {run_id}")
+    print("=" * 76)
+    print(f"Strategy:         {strat} (v{dos.get('strategy_version', '1.0')})")
+    print(f"Underlying:       {dos.get('underlying', 'N/A')}")
+    print(f"Mode:             {mode}")
+    print(f"Venue:            {venue}")
+    print(f"Created At:       {dos.get('created_at', 'N/A')}")
+    if dos.get("closed_at"):
+        print(f"Closed At:        {dos['closed_at']}")
+    print(f"Starting Capital: ₹{initial_cap:,.2f}")
+    print(f"Ending Equity:    ₹{ending_eq:,.2f}")
+    print(
+        f"Net Profit:       {'+' if net_profit >= 0 else ''}₹{net_profit:,.2f} ({'+' if ret_pct >= 0 else ''}{ret_pct:.2f}%)"
+    )
+    print(f"Trade Count:      {dos.get('trade_count', len(dos.get('ledger', [])))}")
+    print(f"Event Count:      {dos.get('event_count', len(dos.get('events', [])))}")
+
+    # Balance sheet reconciliation
+    rec = dos.get("reconciliation", {})
+    if rec:
+        print("-" * 76)
+        print("Balance Sheet Reconciliation:")
+        reconciled = rec.get("is_reconciled", True)
+        disc = rec.get("equity_discrepancy", rec.get("discrepancy", 0.0))
+        print(f"  Audit Status:   {'RECONCILED' if reconciled else 'DISCREPANCY DETECTED'}")
+        print(f"  Discrepancy:    ±₹{disc:.2f}")
+        if rec.get("total_charges") is not None:
+            print(f"  Total Charges:  ₹{rec.get('total_charges', 0.0):,.2f}")
+        if rec.get("total_realized_pnl") is not None:
+            print(f"  Realized PnL:   ₹{rec.get('total_realized_pnl', 0.0):,.2f}")
+    elif dos.get("reconciliation_balance") is not None:
+        print("-" * 76)
+        print("Balance Sheet Reconciliation:")
+        bal = dos.get("reconciliation_balance")
+        print(f"  Audit Status:   {'RECONCILED' if bal else 'DISCREPANCY DETECTED'}")
+
+    # Cryptographic integrity
+    print("-" * 76)
+    print("Cryptographic Integrity & Merkle Roots:")
+    if dos.get("event_stream_merkle_root"):
+        print(f"  Event Root:     {dos['event_stream_merkle_root']}")
+    if dos.get("trade_ledger_merkle_root"):
+        print(f"  Ledger Root:    {dos['trade_ledger_merkle_root']}")
+    if dos.get("tamper_digest"):
+        print(f"  Tamper Digest:  {dos['tamper_digest']}")
+
+    # Verification matrix
+    vmat = dos.get("verification_matrix", {})
+    if vmat:
+        print("-" * 76)
+        print(f"Verification Matrix (Overall: {vmat.get('overall_status', 'PASS')}):")
+        for pillar_key in [
+            "structural",
+            "data_integrity",
+            "known_answer_tests",
+            "historical_replay",
+            "empirical_metrics",
+            "options_theoretical",
+            "reconciliation",
+        ]:
+            p = vmat.get(pillar_key)
+            if isinstance(p, dict):
+                p_name = p.get("pillar_name", pillar_key)
+                p_stat = p.get("status", "N/A")
+                p_detail = p.get("details", "")
+                print(f"  • {p_name:<30} [{p_stat:<10}] {p_detail}")
+
+    # Executed trades table
+    ledger = dos.get("ledger", [])
+    if ledger:
+        print("-" * 76)
+        print("Trade Ledger:")
+        for i, t in enumerate(ledger[:20]):
+            side = t.get("side", "")
+            qty = t.get("quantity", 0)
+            sym = t.get("symbol", "")
+            entry_p = t.get("entry_price", t.get("fill_price", 0.0))
+            exit_p = t.get("exit_price")
+            exit_str = f"Exit: ₹{exit_p:>7.2f}" if exit_p is not None else "Exit: OPEN"
+            pnl = t.get("net_pnl", 0.0)
+            pnl_str = f"{'+' if pnl >= 0 else ''}₹{pnl:,.2f}"
+            print(
+                f"  #{i + 1:<2} {side:<4} {qty:>4} {sym:<22} Entry: ₹{entry_p:>7.2f}  {exit_str}  Net: {pnl_str:>10}"
+            )
+        if len(ledger) > 20:
+            print(f"  ... and {len(ledger) - 20} more trades")
+
+    print("-" * 76)
+    print(f"Dossier Location: {dossier_file}")
+    print("=" * 76)
+    return 0

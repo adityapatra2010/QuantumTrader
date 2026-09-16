@@ -79,8 +79,8 @@ At the end of each session, the system computes an audit-grade balance sheet rec
 > **CRITICAL ARCHITECTURAL AIR-GAP (ADR 002)**  
 > This system does **NOT** place, modify, or cancel real live orders on your Kotak Neo trading account.
 
-1. **No Live Order Routing**: The methods `place_order()`, `modify_order()`, and `cancel_order()` in [`KotakNeoAdapter`](file:///home/aditya/Documents/coding/AdiTrader/src/aditrader/data/adapters/kotak_neo.py) and [`AbstractBrokerAdapter`](file:///home/aditya/Documents/coding/AdiTrader/src/aditrader/data/adapters/base.py) are physically blocked with unconditional `NotImplementedError` security vetoes.
-2. **No Real Funds at Risk**: The starting capital (default ₹1,000,000.00) is entirely virtual. Fills occur in memory inside [`PaperBroker`](file:///home/aditya/Documents/coding/AdiTrader/src/aditrader/core/broker.py).
+1. **No Live Order Routing**: The methods `place_order()`, `modify_order()`, and `cancel_order()` in [`KotakNeoAdapter`](src/aditrader/data/adapters/kotak_neo.py) and [`AbstractBrokerAdapter`](src/aditrader/data/adapters/base.py) are physically blocked with unconditional `NotImplementedError` security vetoes.
+2. **No Real Funds at Risk**: The starting capital (default ₹1,000,000.00) is entirely virtual. Fills occur in memory inside [`PaperBroker`](src/aditrader/core/broker.py).
 3. **No Synthetic Price Fabrication (ADR 011)**: While execution is simulated, market quotes are **never** invented using Black-Scholes formulas. If a contract has no live quote, the system refuses to guess prices and fails closed.
 
 ---
@@ -269,7 +269,7 @@ Inside the sealed dossier (`runs/forward/*.json`), look at the `"reconciliation"
 ## 10. Operator Checklists
 
 ### Before Starting a Live Session (Pre-Market)
-1. [ ] **Verify `.env` Credentials**: Ensure all required Kotak Neo parameters are populated in `/home/aditya/Documents/coding/AdiTrader/.env`:
+1. [ ] **Verify `.env` Credentials**: Ensure all required Kotak Neo parameters are populated in `.env`:
    ```bash
    KOTAK_CONSUMER_KEY="your_app_consumer_key"
    KOTAK_CONSUMER_SECRET="your_app_consumer_secret"

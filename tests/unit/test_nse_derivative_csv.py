@@ -19,8 +19,8 @@ from aditrader.data.feeds.nse_csv import (
     _parse_int,
 )
 
-REAL_RELIANCE_CSV = Path(
-    "/home/aditya/Downloads/Quote-Derivative-RELIANCE-07-03-2026-07-09-2026.csv"
+REAL_RELIANCE_CSV = (
+    Path.home() / "Downloads" / "Quote-Derivative-RELIANCE-07-03-2026-07-09-2026.csv"
 )
 
 DummyArgs = argparse.Namespace

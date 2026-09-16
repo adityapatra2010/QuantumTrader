@@ -10,6 +10,7 @@ Encapsulates:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import secrets
@@ -385,7 +386,7 @@ class DatasetService:
     @staticmethod
     def list_datasets() -> list[dict[str, Any]]:
         """Scan known directories (data/) for CSV market datasets and classify readiness."""
-        search_dirs = [Path("data"), Path("tests/data")]
+        search_dirs = [Path("data")]
         datasets: list[dict[str, Any]] = []
 
         seen_paths: set[str] = set()
@@ -453,6 +454,8 @@ def find_dossier_path(run_id: str) -> Path | None:
         Path("runs/backtest") / f"dossier_{cleaned}.json",
         Path("runs/backtest") / f"dossier_{cleaned.lower()}.json",
         Path("runs/backtest") / f"{cleaned}.json",
+        Path("runs/forward") / f"forward_dossier_{cleaned}.json",
+        Path("runs/forward") / f"forward_dossier_{cleaned.lower()}.json",
         Path("runs/forward") / f"session_{cleaned}.json",
         Path("runs/forward") / f"session_{cleaned.lower()}.json",
         Path("runs/forward") / f"dossier_{cleaned}.json",
@@ -467,6 +470,192 @@ def find_dossier_path(run_id: str) -> Path | None:
                 if cleaned.lower() in p.stem.lower():
                     return p
     return None
+
+
+def get_completed_runs(run_type: str = "all", limit: int | None = None) -> list[dict[str, Any]]:
+    """Return sorted list of completed historical backtest and forward session dossiers.
+
+    Parameters:
+        run_type: "all", "backtest", or "forward".
+        limit: Optional maximum number of records to return.
+
+    Returns:
+        List of run summary dictionaries sorted by mtime descending (most recent first).
+    """
+    all_runs: list[dict[str, Any]] = []
+    norm_type = (run_type or "all").lower().strip()
+
+    # 1. Backtest runs
+    if norm_type in ("all", "backtest"):
+        bt_dir = Path("runs/backtest")
+        if bt_dir.is_dir():
+            for json_file in bt_dir.glob("*.json"):
+                try:
+                    with open(json_file, encoding="utf-8") as f:
+                        data = json.load(f)
+                    run_id = str(data.get("run_id") or json_file.stem.replace("dossier_", ""))
+                    raw_ds = data.get("dataset_name") or (
+                        Path(data.get("dataset_path", "")).name if data.get("dataset_path") else "-"
+                    )
+                    ds_name = str(raw_ds)
+                    v_matrix = data.get("verification_matrix", {})
+                    overall_status = (
+                        v_matrix.get("overall_status", "PASS")
+                        if isinstance(v_matrix, dict)
+                        else "PASS"
+                    )
+                    strat_name = str(
+                        data.get("strategy_id") or data.get("strategy_name") or "Unknown Strategy"
+                    )
+                    symbol = str(data.get("symbol") or data.get("underlying") or "NIFTY")
+                    all_runs.append(
+                        {
+                            "session_id": run_id,
+                            "run_id": run_id,
+                            "start_time": data.get("created_at") or data.get("start_time"),
+                            "strategy": strat_name,
+                            "symbol": symbol,
+                            "underlying": data.get("underlying") or symbol,
+                            "status": overall_status,
+                            "run_type": "BACKTEST",
+                            "type": "BACKTEST",
+                            "execution_contract": data.get("execution_contract", "NEXT_BAR_OPEN"),
+                            "dataset_name": ds_name,
+                            "realized_pnl": float(data.get("net_profit", 0.0)),
+                            "net_profit": float(data.get("net_profit", 0.0)),
+                            "net_pnl": float(data.get("net_profit", 0.0)),
+                            "return_pct": float(data.get("return_pct", 0.0)),
+                            "expectancy": float(
+                                data.get("closed_trade_expectancy", data.get("expectancy", 0.0))
+                            ),
+                            "trades_count": int(
+                                data.get("trade_count", len(data.get("ledger", [])))
+                            ),
+                            "trades": int(data.get("trade_count", len(data.get("ledger", [])))),
+                            "bars_count": int(data.get("bar_count", 0)),
+                            "event_count": int(
+                                data.get("event_count", len(data.get("events", [])))
+                            ),
+                            "dossier_path": str(json_file),
+                            "path": str(json_file),
+                            "tamper_digest": data.get("tamper_digest"),
+                            "trade_ledger_merkle_root": data.get("trade_ledger_merkle_root"),
+                            "event_stream_merkle_root": data.get("event_stream_merkle_root"),
+                            "mtime": json_file.stat().st_mtime,
+                        }
+                    )
+                except Exception:
+                    continue
+
+    # 2. Forward runs
+    if norm_type in ("all", "forward"):
+        fwd_dir = Path("runs/forward")
+        if fwd_dir.is_dir():
+            for json_file in fwd_dir.glob("*.json"):
+                try:
+                    with open(json_file, encoding="utf-8") as f:
+                        data = json.load(f)
+
+                    sess = data.get("session") if isinstance(data.get("session"), dict) else {}
+                    if sess:
+                        trades_list = data.get("trades", [])
+                        bars_list = data.get("bars", [])
+                        trades_cnt = sess.get("trades_count")
+                        if trades_cnt is None:
+                            trades_cnt = len(trades_list)
+                        bars_cnt = sess.get("bars_count")
+                        if bars_cnt is None:
+                            bars_cnt = len(bars_list)
+                        run_id = str(sess.get("session_id", json_file.stem.replace("session_", "")))
+                        fwd_ds = str(
+                            sess.get("dataset_name")
+                            or (
+                                Path(sess.get("dataset_path", "")).name
+                                if sess.get("dataset_path")
+                                else "Forward Paper Stream"
+                            )
+                        )
+                        strat = str(
+                            sess.get("strategy_name")
+                            or sess.get("strategy_id")
+                            or f"Session {json_file.stem[-6:]}"
+                        )
+                        symbol = str(sess.get("symbol", "NIFTY"))
+                        status = str(sess.get("status", "COMPLETED"))
+                        pnl = float(sess.get("realized_pnl", 0.0))
+                        ret_pct = float(sess.get("return_pct", 0.0))
+                        exp = float(sess.get("expectancy", 0.0))
+                        start_time = sess.get("started_at") or sess.get("start_time")
+                    else:
+                        run_id = str(
+                            data.get(
+                                "run_id",
+                                json_file.stem.replace("forward_dossier_", "").replace(
+                                    "session_", ""
+                                ),
+                            )
+                        )
+                        trades_cnt = int(data.get("trade_count", len(data.get("ledger", []))))
+                        bars_cnt = int(data.get("bar_count", 0))
+                        fwd_ds = str(data.get("dataset_name", "Forward Paper Stream"))
+                        strat = str(
+                            data.get("strategy_id")
+                            or data.get("strategy_name")
+                            or "Unknown Strategy"
+                        )
+                        symbol = str(data.get("symbol") or data.get("underlying") or "NIFTY")
+                        v_matrix = data.get("verification_matrix", {})
+                        status = str(
+                            v_matrix.get("overall_status", "PASS")
+                            if isinstance(v_matrix, dict)
+                            else "PASS"
+                        )
+                        pnl = float(data.get("net_profit", 0.0))
+                        ret_pct = float(data.get("return_pct", 0.0))
+                        exp = float(
+                            data.get("closed_trade_expectancy", data.get("expectancy", 0.0))
+                        )
+                        start_time = data.get("created_at") or data.get("start_time")
+
+                    all_runs.append(
+                        {
+                            "session_id": run_id,
+                            "run_id": run_id,
+                            "start_time": start_time,
+                            "strategy": strat,
+                            "symbol": symbol,
+                            "underlying": symbol,
+                            "status": status,
+                            "run_type": "FORWARD",
+                            "type": "FORWARD",
+                            "execution_contract": "FORWARD_TICK",
+                            "dataset_name": fwd_ds,
+                            "realized_pnl": pnl,
+                            "net_profit": pnl,
+                            "net_pnl": pnl,
+                            "return_pct": ret_pct,
+                            "expectancy": exp,
+                            "trades_count": int(trades_cnt),
+                            "trades": int(trades_cnt),
+                            "bars_count": int(bars_cnt),
+                            "event_count": int(
+                                data.get("event_count", len(data.get("events", [])))
+                            ),
+                            "dossier_path": str(json_file),
+                            "path": str(json_file),
+                            "tamper_digest": data.get("tamper_digest"),
+                            "trade_ledger_merkle_root": data.get("trade_ledger_merkle_root"),
+                            "event_stream_merkle_root": data.get("event_stream_merkle_root"),
+                            "mtime": json_file.stat().st_mtime,
+                        }
+                    )
+                except Exception:
+                    continue
+
+    all_runs.sort(key=lambda r: float(r.get("mtime", 0.0)), reverse=True)
+    if limit is not None and limit > 0:
+        return all_runs[:limit]
+    return all_runs
 
 
 class ValidationServiceBridge:
@@ -1220,16 +1409,23 @@ class ValidationServiceBridge:
             if eq_curve is None:
                 run_id = params.get("run_id")
                 if run_id:
-                    d_path = Path("runs/forward") / f"session_{run_id}.json"
-                    if not d_path.is_file():
-                        d_path = Path("runs/forward") / f"session_{run_id.lower()}.json"
-                    if d_path.is_file():
+                    d_path = find_dossier_path(str(run_id))
+                    if d_path and d_path.is_file():
                         try:
                             import json
 
                             with open(d_path, encoding="utf-8") as f:
                                 d_data = json.load(f)
-                            eq_curve = [float(x) for x in d_data.get("equity_curve", [])]
+                            if d_data.get("equity_curve"):
+                                eq_curve = [float(x) for x in d_data["equity_curve"]]
+                            elif (
+                                d_data.get("initial_capital") is not None
+                                and d_data.get("ending_equity") is not None
+                            ):
+                                eq_curve = [
+                                    float(d_data["initial_capital"]),
+                                    float(d_data["ending_equity"]),
+                                ]
                         except Exception:
                             eq_curve = None
 

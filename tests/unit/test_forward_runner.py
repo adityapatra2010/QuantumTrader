@@ -31,13 +31,13 @@ from aditrader.data.forward import ForwardTestStatus
 from aditrader.data.forward_runner import (
     ForwardTestConfig,
     ForwardTestRunner,
-    _get_sample_ma_crossover,
     _parse_timeframe_seconds,
     resolve_strategy,
 )
 from aditrader.data.quality import DataQualityError
 from aditrader.data.session import EXCHANGE_TIMEZONE
 from aditrader.strategy.compiler.engine import ExecutableStrategy
+from aditrader.strategy.library.templates import create_test_ma_crossover_dsl
 
 # ==============================================================================
 # 1. Configuration & Timeframe Helpers
@@ -84,7 +84,7 @@ def test_parse_timeframe_seconds() -> None:
 
 def test_resolve_strategy_variants() -> None:
     """Verify strategy resolution across ExecutableStrategy, DSL, registry, and built-in sample."""
-    sample_dsl = _get_sample_ma_crossover(underlying="BANKNIFTY")
+    sample_dsl = create_test_ma_crossover_dsl(underlying="BANKNIFTY")
     exec_strat = ExecutableStrategy(sample_dsl)
 
     # 1. Direct ExecutableStrategy

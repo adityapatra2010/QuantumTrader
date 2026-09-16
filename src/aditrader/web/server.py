@@ -19,7 +19,6 @@ Implements:
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
 import os
@@ -44,16 +43,12 @@ from aditrader.web.services import (
     SessionManager,
     ValidationServiceBridge,
     find_dossier_path,
+    get_completed_runs,
     mask_secret,
 )
 from aditrader.web.ui import DASHBOARD_HTML
 
 logger = logging.getLogger(__name__)
-
-
-def _mask_secret(secret: str | None) -> str:
-    """Mask sensitive string for safe UI presentation."""
-    return mask_secret(secret)
 
 
 def _is_safe_file_path(path: Path) -> bool:
@@ -166,12 +161,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         path = parsed.path
 
         if path in ("/", "/index.html"):
-            html = DASHBOARD_HTML
-            static_file = Path(__file__).parent / "static" / "index.html"
-            if static_file.is_file():
-                with contextlib.suppress(Exception):
-                    html = static_file.read_text(encoding="utf-8")
-            self._send_html(html)
+            self._send_html(DASHBOARD_HTML)
             return
 
         if path == "/favicon.ico":
@@ -484,12 +474,12 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "has_sdk": HAS_NEO_SDK,
                 "feed_status": feed_status,
                 "consumer_key_configured": bool(settings.kotak_consumer_key),
-                "mobile_masked": _mask_secret(settings.kotak_mobile_number),
-                "ucc_masked": _mask_secret(settings.kotak_ucc),
+                "mobile_masked": mask_secret(settings.kotak_mobile_number),
+                "ucc_masked": mask_secret(settings.kotak_ucc),
             },
             "database": {
                 "connected": db_connected,
-                "url": _mask_secret(settings.database_url),
+                "url": mask_secret(settings.database_url),
                 "tables": tables,
             },
             "paper_portfolio": {
@@ -918,103 +908,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_get_runs(self) -> None:
         """Return list of historical backtest dossiers and forward session dossiers from runs/."""
-        all_runs: list[dict[str, Any]] = []
-
-        # 1. Backtest runs
-        bt_dir = Path("runs/backtest")
-        if bt_dir.is_dir():
-            for json_file in bt_dir.glob("*.json"):
-                try:
-                    with open(json_file, encoding="utf-8") as f:
-                        data = json.load(f)
-                    run_id = data.get("run_id", json_file.stem.replace("dossier_", ""))
-                    ds_name = data.get("dataset_name") or (
-                        Path(data.get("dataset_path", "")).name if data.get("dataset_path") else "-"
-                    )
-                    all_runs.append(
-                        {
-                            "session_id": run_id,
-                            "run_id": run_id,
-                            "start_time": data.get("created_at") or data.get("start_time"),
-                            "strategy": data.get("strategy_id") or "Unknown Strategy",
-                            "symbol": data.get("symbol", "NIFTY"),
-                            "status": "COMPLETED",
-                            "run_type": "BACKTEST",
-                            "execution_contract": data.get("execution_contract", "NEXT_BAR_OPEN"),
-                            "dataset_name": ds_name,
-                            "realized_pnl": data.get("net_profit", 0.0),
-                            "net_profit": data.get("net_profit", 0.0),
-                            "return_pct": data.get("return_pct", 0.0),
-                            "expectancy": data.get(
-                                "closed_trade_expectancy", data.get("expectancy", 0.0)
-                            ),
-                            "trades_count": data.get("trade_count", len(data.get("ledger", []))),
-                            "bars_count": data.get("bar_count", 0),
-                            "event_count": data.get("event_count", len(data.get("events", []))),
-                            "dossier_path": str(json_file),
-                            "tamper_digest": data.get("tamper_digest"),
-                            "trade_ledger_merkle_root": data.get("trade_ledger_merkle_root"),
-                            "event_stream_merkle_root": data.get("event_stream_merkle_root"),
-                            "mtime": json_file.stat().st_mtime,
-                        }
-                    )
-                except Exception:
-                    continue
-
-        # 2. Forward runs
-        fwd_dir = Path("runs/forward")
-        if fwd_dir.is_dir():
-            for json_file in fwd_dir.glob("*.json"):
-                try:
-                    with open(json_file, encoding="utf-8") as f:
-                        data = json.load(f)
-                    sess = data.get("session", {})
-                    trades_list = data.get("trades", [])
-                    bars_list = data.get("bars", [])
-                    trades_cnt = sess.get("trades_count")
-                    if trades_cnt is None:
-                        trades_cnt = len(trades_list)
-                    bars_cnt = sess.get("bars_count")
-                    if bars_cnt is None:
-                        bars_cnt = len(bars_list)
-                    run_id = sess.get("session_id", json_file.stem)
-                    fwd_ds = sess.get("dataset_name") or (
-                        Path(sess.get("dataset_path", "")).name
-                        if sess.get("dataset_path")
-                        else "Forward Paper Stream"
-                    )
-
-                    all_runs.append(
-                        {
-                            "session_id": run_id,
-                            "run_id": run_id,
-                            "start_time": sess.get("started_at") or sess.get("start_time"),
-                            "strategy": sess.get("strategy_name")
-                            or sess.get("strategy_id")
-                            or f"Session {json_file.stem[-6:]}",
-                            "symbol": sess.get("symbol", "NIFTY"),
-                            "status": sess.get("status", "UNKNOWN"),
-                            "run_type": "FORWARD",
-                            "execution_contract": "FORWARD_TICK",
-                            "dataset_name": fwd_ds,
-                            "realized_pnl": sess.get("realized_pnl", 0.0),
-                            "net_profit": sess.get("realized_pnl", 0.0),
-                            "return_pct": sess.get("return_pct", 0.0),
-                            "expectancy": sess.get("expectancy", 0.0),
-                            "trades_count": trades_cnt,
-                            "bars_count": bars_cnt,
-                            "dossier_path": str(json_file),
-                            "mtime": json_file.stat().st_mtime,
-                        }
-                    )
-                except Exception:
-                    continue
-
-        all_runs.sort(key=lambda r: float(r.get("mtime", 0.0)), reverse=True)
+        all_runs = get_completed_runs(run_type="all", limit=100)
         for r in all_runs:
             r.pop("mtime", None)
-
-        self._send_json(all_runs[:100])
+        self._send_json(all_runs)
 
     def _handle_get_run_detail(self, session_id: str) -> None:
         """Return full JSON dossier for a specific session_id with path traversal defense."""
@@ -1079,8 +976,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "intraday_max_drawdown": settings.intraday_max_drawdown,
             },
             "storage": {
-                "database_url": _mask_secret(settings.database_url),
-                "redis_url": _mask_secret(settings.redis_url)
+                "database_url": mask_secret(settings.database_url),
+                "redis_url": mask_secret(settings.redis_url)
                 if settings.redis_url
                 else "Not configured",
                 "runs_directory": "runs/forward",

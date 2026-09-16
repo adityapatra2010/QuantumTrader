@@ -1,0 +1,18 @@
+//@version=6
+strategy("4H Range Sweep v2 - MCX Gold (India)", overlay=true, initial_capital=100000, default_qty_value=1, commission_value=50)
+
+// Parameters & Session
+session_time = input.session("0915-2330", "Trading Session")
+htf_high = request.security(syminfo.tickerid, "240", high[1], lookahead = barmerge.lookahead_off)
+htf_low = request.security(syminfo.tickerid, "240", low[1], lookahead = barmerge.lookahead_off)
+
+// Liquidity sweep & reclaim logic
+sweep_high = high > htf_high and close < htf_high
+sweep_low = low < htf_low and close > htf_low
+atr_val = ta.atr(14)
+
+if sweep_low
+    strategy.entry("Long Sweep", strategy.long)
+
+if sweep_high
+    strategy.entry("Short Sweep", strategy.short)

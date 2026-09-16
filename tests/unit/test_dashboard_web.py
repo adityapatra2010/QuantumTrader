@@ -9,7 +9,8 @@ from pathlib import Path
 import pytest
 
 from aditrader.cli.commands import cmd_dashboard
-from aditrader.web.server import DashboardServer, _is_safe_file_path, _mask_secret
+from aditrader.web.server import DashboardServer, _is_safe_file_path
+from aditrader.web.services import mask_secret
 
 
 class DummyArgs:
@@ -21,10 +22,10 @@ class DummyArgs:
 
 def test_secret_masking() -> None:
     """Verify secrets are masked to prevent leakage in logs or UI."""
-    assert _mask_secret(None) == "Not configured"
-    assert _mask_secret("") == "Not configured"
-    assert _mask_secret("12345") == "***"
-    assert _mask_secret("my_secret_token") == "my***en"
+    assert mask_secret(None) == "Not configured"
+    assert mask_secret("") == "Not configured"
+    assert mask_secret("12345") == "***"
+    assert mask_secret("my_secret_token") == "my***en"
 
 
 def test_path_traversal_safety() -> None:

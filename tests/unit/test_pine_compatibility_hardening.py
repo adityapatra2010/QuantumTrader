@@ -26,7 +26,7 @@ from aditrader.strategy.inspector import (
 )
 from aditrader.strategy.translators.pine import PineScriptTranslator
 
-MYST_PINE_PATH = Path("/home/aditya/Desktop/myst.pine")
+MYST_PINE_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "pine" / "myst.pine"
 
 
 @pytest.fixture

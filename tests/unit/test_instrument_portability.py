@@ -13,8 +13,8 @@ import pytest
 from aditrader.cli.commands import cmd_inspect_strategy
 from aditrader.strategy.inspector.inspector import StrategyInspector
 
-MCX_PINE_PATH = Path("/home/aditya/Desktop/mcx.pine")
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "pine"
+MCX_PINE_PATH = FIXTURES_DIR / "mcx.pine"
 
 
 class DummyArgs(argparse.Namespace):
@@ -22,7 +22,6 @@ class DummyArgs(argparse.Namespace):
         super().__init__(**kwargs)
 
 
-@pytest.mark.skipif(not MCX_PINE_PATH.exists(), reason="Real Desktop mcx.pine not present")
 def test_mcx_gold_portability_audit() -> None:
     report = StrategyInspector.inspect_file(MCX_PINE_PATH)
     assert report.strategy_name == "4H Range Sweep v2 - MCX Gold (India)"

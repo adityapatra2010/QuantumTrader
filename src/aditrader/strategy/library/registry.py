@@ -2,6 +2,7 @@
 
 import threading
 
+from aditrader.strategy.builder.schema import StrategyDSL
 from aditrader.strategy.library.models import (
     Directionality,
     MarketRegime,
@@ -131,3 +132,41 @@ class StrategyRegistry:
                     continue
                 matches.append(record)
             return matches
+
+    def find(self, query: str) -> StrategyRecord | None:
+        """Find a registered strategy record by ID, exact name, or normalized/case-insensitive match.
+
+        Returns StrategyRecord if found, None otherwise.
+        """
+        # 1. Direct ID match
+        try:
+            return self.get(query)
+        except StrategyNotFoundError:
+            pass
+
+        # 2. Direct name match
+        try:
+            return self.get_by_name(query)
+        except StrategyNotFoundError:
+            pass
+
+        # 3. Normalized / case-insensitive search
+        q = query.lower().replace("-", " ").replace("_", " ").strip()
+        for record in self.list_all():
+            name_clean = record.name.lower().replace("-", " ").replace("_", " ").strip()
+            id_clean = record.id.lower().replace("-", " ").replace("_", " ").strip()
+            if q in (name_clean, id_clean) or q in name_clean or name_clean in q:
+                return record
+
+        return None
+
+    def resolve_dsl(self, query: str, symbol: str | None = None) -> StrategyDSL | None:
+        """Resolve query to a StrategyDSL, optionally overriding the underlying symbol."""
+        record = self.find(query)
+        if record:
+            return (
+                record.dsl_definition.model_copy(update={"underlying": symbol})
+                if symbol
+                else record.dsl_definition
+            )
+        return None

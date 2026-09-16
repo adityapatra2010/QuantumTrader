@@ -12,11 +12,13 @@ from aditrader.cli.commands import (
     cmd_forward_test,
     cmd_init_db,
     cmd_inspect_data,
+    cmd_inspect_run,
     cmd_inspect_strategy,
     cmd_kotak_auth,
     cmd_kotak_discover,
     cmd_kotak_history,
     cmd_kotak_option_chain,
+    cmd_runs,
     cmd_search,
     cmd_smoke_feed,
     cmd_status,
@@ -93,6 +95,18 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["institutional", "moderate", "research"],
         help="Validation policy threshold profile (default: institutional)",
     )
+    p_val.add_argument(
+        "--csv",
+        type=str,
+        default=None,
+        help="Path to CSV historical candle dataset for empirical statistical validation",
+    )
+    p_val.add_argument(
+        "--bars",
+        type=int,
+        default=None,
+        help="Number of synthetic historical bars to simulate for empirical validation",
+    )
     p_val.set_defaults(handler=cmd_validate)
 
     # 7. backtest
@@ -149,8 +163,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_dash.add_argument(
         "--serve",
         action="store_true",
-        default=False,
-        help="Start the live responsive HTTP research dashboard server",
+        default=True,
+        help="Start the live responsive HTTP research dashboard server (default: True)",
+    )
+    p_dash.add_argument(
+        "--no-serve",
+        dest="serve",
+        action="store_false",
+        help="Display dashboard server information without launching the server",
     )
     p_dash.set_defaults(handler=cmd_dashboard)
 
@@ -524,6 +544,38 @@ def build_parser() -> argparse.ArgumentParser:
         help="Do not wait for 09:15 IST market open if started before session hours",
     )
     p_fwd_opt.set_defaults(handler=cmd_forward_options)
+
+    # 18. runs
+    p_runs = subparsers.add_parser(
+        "runs",
+        help="List completed historical backtest and forward paper-trading run dossiers",
+    )
+    p_runs.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="Maximum number of runs to display (default: 20)",
+    )
+    p_runs.add_argument(
+        "--type",
+        type=str,
+        choices=["all", "backtest", "forward"],
+        default="all",
+        help="Filter by execution run type (default: all)",
+    )
+    p_runs.set_defaults(handler=cmd_runs)
+
+    # 19. inspect-run
+    p_insp_run = subparsers.add_parser(
+        "inspect-run",
+        help="Inspect sealed Run Dossier details, trade ledger, and verification matrix",
+    )
+    p_insp_run.add_argument(
+        "run_id",
+        type=str,
+        help="Run identifier or file path to dossier JSON",
+    )
+    p_insp_run.set_defaults(handler=cmd_inspect_run)
 
     return parser
 
