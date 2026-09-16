@@ -202,6 +202,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._handle_get_strategy_detail(strategy_id)
             return
 
+        if path == "/api/validate":
+            self._handle_get_validate_strategy(parsed.query)
+            return
+
         # 3. Datasets APIs
         if path == "/api/datasets":
             self._handle_get_datasets()
@@ -261,9 +265,27 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._handle_get_ai_catalog()
             return
 
+        if path == "/api/ai/explain":
+            qs = parse_qs(parsed.query)
+            strat = qs.get("strategy", [None])[0] or qs.get("strategy_id", [None])[0]
+            if strat:
+                self._handle_get_ai_explain(strat)
+                return
+            self._send_error_json("Missing 'strategy' parameter", status=HTTPStatus.BAD_REQUEST)
+            return
+
         if path.startswith("/api/ai/explain/"):
             strategy_id = unquote(path[len("/api/ai/explain/") :])
             self._handle_get_ai_explain(strategy_id)
+            return
+
+        if path == "/api/ai/review":
+            qs = parse_qs(parsed.query)
+            strat = qs.get("strategy", [None])[0] or qs.get("strategy_id", [None])[0]
+            if strat:
+                self._handle_get_ai_review(strat)
+                return
+            self._send_error_json("Missing 'strategy' parameter", status=HTTPStatus.BAD_REQUEST)
             return
 
         if path.startswith("/api/ai/review/"):
@@ -847,6 +869,24 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 strategy_dsl_dict=strategy_dsl,
                 policy_name=policy_name,
                 dataset_path=dataset_path,
+            )
+            self._send_json(val_res)
+        except Exception as exc:
+            self._send_error_json(f"Validation failed: {exc}", status=HTTPStatus.BAD_REQUEST)
+
+    def _handle_get_validate_strategy(self, query: str) -> None:
+        """Validate a strategy specified via query parameters."""
+        qs = parse_qs(query)
+        strategy_id = qs.get("strategy", [None])[0] or qs.get("strategy_id", [None])[0]
+        policy_name = qs.get("policy", ["InstitutionalPolicy"])[0]
+        if not strategy_id:
+            self._send_error_json("Missing 'strategy' parameter", status=HTTPStatus.BAD_REQUEST)
+            return
+        try:
+            val_res = ValidationServiceBridge.validate_strategy_definition(
+                strategy_id=strategy_id,
+                strategy_dsl_dict=None,
+                policy_name=policy_name,
             )
             self._send_json(val_res)
         except Exception as exc:
