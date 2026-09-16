@@ -142,3 +142,93 @@ def test_cli_cmd_dashboard_notice(capsys: pytest.CaptureFixture[str]) -> None:
     assert exit_code == 0
     assert "scheduled for Phase 8" in captured.out
     assert "aditrader dashboard --serve" in captured.out
+
+
+def test_dashboard_system_and_utilities_endpoints() -> None:
+    """Verify new REST endpoints for system diagnostics, db init, search, feed smoke, option chain, and audit."""
+    server = DashboardServer(host="127.0.0.1", port=0)
+    server.start(background=True)
+    base_url = server.url
+
+    try:
+        # 1. GET /api/system/diagnostics
+        with urllib.request.urlopen(f"{base_url}/api/system/diagnostics") as res:
+            assert res.status == HTTPStatus.OK
+            diag = json.loads(res.read().decode("utf-8"))
+            assert "overall_status" in diag
+            assert "checks" in diag
+
+        # 2. POST /api/system/init-db
+        req_db = urllib.request.Request(
+            f"{base_url}/api/system/init-db",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req_db) as res:
+            assert res.status == HTTPStatus.OK
+            db_res = json.loads(res.read().decode("utf-8"))
+            assert "tables" in db_res
+
+        # 3. GET /api/instruments/search?q=NIFTY
+        with urllib.request.urlopen(f"{base_url}/api/instruments/search?q=NIFTY&limit=3") as res:
+            assert res.status == HTTPStatus.OK
+            search_res = json.loads(res.read().decode("utf-8"))
+            assert isinstance(search_res, list)
+
+        # 4. POST /api/strategies/audit
+        audit_payload = json.dumps(
+            {"content": '{"name":"Audit Test","underlying":"NIFTY"}', "filename": "test.json"}
+        ).encode("utf-8")
+        req_audit = urllib.request.Request(
+            f"{base_url}/api/strategies/audit",
+            data=audit_payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req_audit) as res:
+            assert res.status == HTTPStatus.OK
+            audit_res = json.loads(res.read().decode("utf-8"))
+            assert audit_res["success"] is True
+            assert "warnings" in audit_res
+
+        # 5. POST /api/feed/smoke
+        smoke_payload = json.dumps({"symbol": "NIFTY", "ticks": 2, "mock": True}).encode("utf-8")
+        req_smoke = urllib.request.Request(
+            f"{base_url}/api/feed/smoke",
+            data=smoke_payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req_smoke) as res:
+            assert res.status == HTTPStatus.OK
+            smoke_res = json.loads(res.read().decode("utf-8"))
+            assert smoke_res["symbol"] == "NIFTY"
+            assert smoke_res["received_ticks"] == 2
+
+        # 6. GET /api/options/chain?underlying=NIFTY
+        with urllib.request.urlopen(
+            f"{base_url}/api/options/chain?underlying=NIFTY&count=4&mock=true"
+        ) as res:
+            assert res.status == HTTPStatus.OK
+            chain_res = json.loads(res.read().decode("utf-8"))
+            assert chain_res["underlying"] == "NIFTY"
+            assert "strikes" in chain_res
+            assert len(chain_res["strikes"]) > 0
+
+        # 7. POST /api/kotak/discover
+        disc_payload = json.dumps({"mock": True}).encode("utf-8")
+        req_disc = urllib.request.Request(
+            f"{base_url}/api/kotak/discover",
+            data=disc_payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req_disc) as res:
+            assert res.status == HTTPStatus.OK
+            disc_res = json.loads(res.read().decode("utf-8"))
+            assert "tests" in disc_res
+            assert disc_res["tests_total"] >= 5
+
+    finally:
+        server.stop()

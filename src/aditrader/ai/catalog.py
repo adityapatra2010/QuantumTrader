@@ -302,6 +302,108 @@ class ModelCatalog:
             ),
             overwrite=True,
         )
+        # Kronos Base Time-Series Foundation Model
+        self.register(
+            ModelMetadata(
+                provider="local",
+                model_id="kronos-base",
+                display_name="Kronos Base (Local)",
+                capabilities={
+                    AICapability.FORECASTING,
+                },
+                pricing=ModelPricing(
+                    input_cost_per_1k_tokens=0.0,
+                    output_cost_per_1k_tokens=0.0,
+                    currency="USD",
+                ),
+            ),
+            overwrite=True,
+        )
+        # Kronos Large
+        self.register(
+            ModelMetadata(
+                provider="local",
+                model_id="kronos-large",
+                display_name="Kronos Large (Local)",
+                capabilities={
+                    AICapability.FORECASTING,
+                },
+                pricing=ModelPricing(
+                    input_cost_per_1k_tokens=0.0,
+                    output_cost_per_1k_tokens=0.0,
+                    currency="USD",
+                ),
+            ),
+            overwrite=True,
+        )
+        # Chronos T5 Base
+        self.register(
+            ModelMetadata(
+                provider="amazon",
+                model_id="chronos-t5-base",
+                display_name="Chronos T5 Base (Amazon)",
+                capabilities={
+                    AICapability.FORECASTING,
+                },
+                pricing=ModelPricing(
+                    input_cost_per_1k_tokens=0.0,
+                    output_cost_per_1k_tokens=0.0,
+                    currency="USD",
+                ),
+            ),
+            overwrite=True,
+        )
+        # Chronos T5 Base Local
+        self.register(
+            ModelMetadata(
+                provider="local",
+                model_id="chronos-t5-base",
+                display_name="Chronos T5 Base (Local)",
+                capabilities={
+                    AICapability.FORECASTING,
+                },
+            ),
+            overwrite=True,
+        )
+        # Heuristic Drift Baseline Forecaster
+        self.register(
+            ModelMetadata(
+                provider="local",
+                model_id="heuristic-drift-v1",
+                display_name="Heuristic Drift Forecaster",
+                capabilities={
+                    AICapability.FORECASTING,
+                },
+            ),
+            overwrite=True,
+        )
+        # Rule-based Strategy Suggestor
+        self.register(
+            ModelMetadata(
+                provider="local",
+                model_id="rule-suggestor-v1",
+                display_name="Deterministic Strategy Suggestor",
+                capabilities={
+                    AICapability.STRUCTURED_OUTPUT,
+                    AICapability.REASONING,
+                },
+            ),
+            overwrite=True,
+        )
+        # Adversarial Strategy Reviewer
+        self.register(
+            ModelMetadata(
+                provider="local",
+                model_id="adversarial-reviewer-v1",
+                display_name="Hostile Institutional Reviewer",
+                capabilities={
+                    AICapability.STRUCTURED_OUTPUT,
+                    AICapability.REASONING,
+                    AICapability.TEXT_GENERATION,
+                },
+            ),
+            overwrite=True,
+        )
 
 
 def get_default_model_catalog() -> ModelCatalog:

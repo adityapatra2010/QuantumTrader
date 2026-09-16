@@ -55,6 +55,8 @@ class ForecastEngine(ABC):
         """
         ...
 
+    model_id: str = "forecast-model"
+
 
 class VisionEngine(ABC):
     """Abstract interface for multimodal chart screenshot analysis."""

@@ -2177,3 +2177,389 @@ def cmd_inspect_run(args: argparse.Namespace) -> int:
     print(f"Dossier Location: {dossier_file}")
     print("=" * 76)
     return 0
+
+
+# ==============================================================================
+# 20. AI Strategy Explainer Command
+# ==============================================================================
+
+
+def cmd_explain_strategy(args: argparse.Namespace) -> int:
+    """Explain strategy logic, entry/exit rules, and risk geometry using StrategyExplainer."""
+    from aditrader.ai.teacher.explainer import StrategyExplainer
+    from aditrader.strategy.loader import load_strategy_file
+
+    registry = StrategyRegistry()
+    dsl: StrategyDSL | None = None
+
+    if getattr(args, "strategy", None):
+        record = registry.find(args.strategy)
+        if record:
+            dsl = record.dsl_definition
+        else:
+            print(f"[ERROR] Built-in strategy '{args.strategy}' not found.")
+            return 1
+    elif getattr(args, "file", None):
+        path = Path(args.file)
+        if not path.is_file():
+            print(f"[ERROR] Strategy file not found: {path}")
+            return 1
+        try:
+            dsl = load_strategy_file(path)
+        except Exception as exc:
+            print(f"[ERROR] Failed to load strategy from '{path.name}': {exc}")
+            return 1
+    else:
+        print("[ERROR] Please specify either --strategy <name> or --file <path>")
+        return 1
+
+    model_name = getattr(args, "model", "strategy-explainer-v1")
+    explainer = StrategyExplainer(model_id=model_name)
+    section = explainer.explain(dsl)
+
+    print("=" * 76)
+    print(f" Educational Strategy Explanation: '{dsl.name}'")
+    print("=" * 76)
+    print(f"Underlying:        {dsl.underlying}")
+    print(f"Timeframe:         {dsl.timeframe}")
+    if section.provenance:
+        print(f"Provenance Hash:   {section.provenance.input_hash}")
+        print(f"Explainer Engine:  {section.provenance.model_id}")
+    print("-" * 76)
+    print(section.content)
+    print("=" * 76)
+    print("[ADR 012 ADVISORY NOTICE] This explanation is for educational and research")
+    print("purposes only. AI explanations do not constitute execution approval.")
+    print("=" * 76)
+    return 0
+
+
+# ==============================================================================
+# 21. AI Strategy Suggestor Command
+# ==============================================================================
+
+
+def cmd_suggest_strategy(args: argparse.Namespace) -> int:
+    """Suggest strategy templates conditioned on market regime and prior bias."""
+    from aditrader.ai.suggestor.engine import RuleBasedSuggestor
+
+    regime_str = getattr(args, "regime", "NORMAL_VOLATILITY")
+    symbol = getattr(args, "symbol", "NIFTY")
+
+    suggestor = RuleBasedSuggestor()
+    do_validate = getattr(args, "validate", False)
+
+    print("=" * 76)
+    print(f" Strategy Suggestion Engine (Regime: {regime_str}, Symbol: {symbol})")
+    print("=" * 76)
+    print("Prior Bias Enforced: 60% Selling / 40% Buying (Institutional Options Bias)")
+
+    try:
+        if do_validate:
+            validator = StrategyValidationService()
+            res = suggestor.suggest_and_validate(
+                regime=regime_str,
+                validator=validator,
+            )
+        else:
+            res = suggestor.suggest(
+                regime=regime_str,
+            )
+    except Exception as exc:
+        print(f"[ERROR] Suggestion generation failed: {exc}")
+        return 1
+
+    print("-" * 76)
+    print(f"Suggested Strategy: {res.strategy_dsl.name}")
+    print(
+        f"Category:           {'OPTIONS MULTI-LEG' if res.strategy_dsl.legs else 'EQUITY / LINEAR'}"
+    )
+    print(f"Leg Count:          {len(res.strategy_dsl.legs)}")
+    val_stat = "INSTITUTIONAL APPROVED" if res.is_validated else "UNVALIDATED (Advisory Only)"
+    print(f"Validation Status:  {val_stat}")
+    print(f"Rationale:          {res.rationale}")
+    print(f"Provenance Hash:    {res.provenance.input_hash}")
+    print("-" * 76)
+
+    out_path = getattr(args, "out", None)
+    if out_path:
+        p = Path(out_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(res.strategy_dsl.model_dump_json(indent=2), encoding="utf-8")
+        print(f"[INFO] Strategy JSON DSL saved to: {p}")
+
+    print("=" * 76)
+    print("[ADR 012 ADVISORY NOTICE] Proposed strategy requires formal Validation Engine")
+    print("sign-off before simulation eligibility.")
+    print("=" * 76)
+    return 0
+
+
+# ==============================================================================
+# 22. AI Strategy Reviewer Command
+# ==============================================================================
+
+
+def cmd_review_strategy(args: argparse.Namespace) -> int:
+    """Generate advisory strategy review evaluating structural, risk, and empirical performance."""
+    from aditrader.ai.reviewer.engine import DeterministicAdvisoryReviewer
+    from aditrader.strategy.compiler.engine import ExecutableStrategy
+    from aditrader.strategy.loader import load_strategy_file
+
+    registry = StrategyRegistry()
+    dsl: StrategyDSL | None = None
+
+    if getattr(args, "strategy", None):
+        record = registry.find(args.strategy)
+        if record:
+            dsl = record.dsl_definition
+        else:
+            print(f"[ERROR] Built-in strategy '{args.strategy}' not found.")
+            return 1
+    elif getattr(args, "file", None):
+        path = Path(args.file)
+        if not path.is_file():
+            print(f"[ERROR] Strategy file not found: {path}")
+            return 1
+        try:
+            dsl = load_strategy_file(path)
+        except Exception as exc:
+            print(f"[ERROR] Failed to load strategy from '{path.name}': {exc}")
+            return 1
+    else:
+        print("[ERROR] Please specify either --strategy <name> or --file <path>")
+        return 1
+
+    policy_map = {
+        "institutional": create_institutional_policy(),
+        "moderate": create_moderate_policy(),
+        "research": create_research_policy(),
+    }
+    policy_name = getattr(args, "policy", "institutional").lower()
+    policy = policy_map.get(policy_name, create_institutional_policy())
+
+    bt_result: Any = None
+    if not dsl.legs:
+        csv_path = getattr(args, "csv", None)
+        num_bars = getattr(args, "bars", None)
+        if csv_path:
+            p = Path(csv_path)
+            if p.is_file():
+                csv_feed = CSVDataFeed(file_path=p, symbol=dsl.underlying, timeframe=dsl.timeframe)
+                runner = BacktestRunner(config=BacktestConfig(initial_capital=1_000_000.0))
+                bt_result = runner.run(strategy=ExecutableStrategy(dsl), data=csv_feed)
+        elif num_bars is not None and num_bars > 0:
+            synth_feed = SyntheticDataFeed(symbol=dsl.underlying, num_bars=num_bars)
+            runner = BacktestRunner(config=BacktestConfig(initial_capital=1_000_000.0))
+            bt_result = runner.run(strategy=ExecutableStrategy(dsl), data=synth_feed)
+
+    service = StrategyValidationService()
+    val_report = service.validate(strategy=dsl, policy=policy, backtest_result=bt_result)
+
+    reviewer = DeterministicAdvisoryReviewer()
+    review_section = reviewer.review(strategy=dsl, validation_result=val_report)
+
+    print("=" * 76)
+    print(f" Strategy Advisory Review: '{dsl.name}'")
+    print("=" * 76)
+    print(f"Deterministic Validation: {val_report.status.value}")
+    if review_section.provenance:
+        print(f"Provenance Hash:          {review_section.provenance.input_hash}")
+        print(f"Reviewer Engine:          {review_section.provenance.model_id}")
+    print("-" * 76)
+    print(review_section.content)
+    print("=" * 76)
+    print("[ADR 012 ADVISORY NOTICE] Advisory reviewer output is strictly educational.")
+    print(
+        "The deterministic ValidationEngine remains the sole authority for strategy gate approval."
+    )
+    print("=" * 76)
+    return 0
+
+
+# ==============================================================================
+# 23. AI Forecast Command
+# ==============================================================================
+
+
+def cmd_forecast(args: argparse.Namespace) -> int:
+    """Execute time-series foundation model or heuristic forecasting on market data."""
+    from aditrader.ai.base import ForecastEngine
+    from aditrader.ai.forecasting.mock import HeuristicForecastEngine
+    from aditrader.ai.registry import get_default_provider_registry
+
+    symbol = getattr(args, "symbol", "NIFTY")
+    timeframe = getattr(args, "timeframe", "5m")
+    horizon = getattr(args, "horizon", 5)
+    model_name = getattr(args, "model", "heuristic-drift-v1")
+
+    if horizon <= 0:
+        print(f"[ERROR] Forecast horizon must be a positive integer, got {horizon}")
+        return 1
+
+    bars: list[Bar] = []
+    csv_path = getattr(args, "csv", None)
+    if csv_path:
+        p = Path(csv_path)
+        if not p.is_file():
+            print(f"[ERROR] CSV file not found: {p}")
+            return 1
+        feed = CSVDataFeed(file_path=p, symbol=symbol, timeframe=timeframe)
+        bars = list(feed.stream())
+    else:
+        num_bars = getattr(args, "bars", 60)
+        feed_synth = SyntheticDataFeed(symbol=symbol, num_bars=num_bars)
+        bars = list(feed_synth.stream())
+
+    if len(bars) < 10:
+        print(f"[ERROR] Insufficient bars for forecasting: {len(bars)} (minimum 10 required)")
+        return 1
+
+    registry = get_default_provider_registry()
+    engine: ForecastEngine
+    try:
+        engine = registry.get_forecast_engine(model_name)
+    except Exception:
+        print(f"[WARN] Model '{model_name}' not available; using heuristic engine.")
+        engine = HeuristicForecastEngine()
+
+    from aditrader.ai.errors import AIMalformedOutputError, AIUnavailableError
+
+    try:
+        result = engine.forecast(bars, horizon_bars=horizon)
+    except AIMalformedOutputError as exc:
+        print(f"[ERROR] Forecasting validation failed: {exc}")
+        return 1
+    except AIUnavailableError as exc:
+        print(f"[ERROR] Forecast engine unavailable: {exc}")
+        return 1
+    except Exception as exc:
+        print(f"[ERROR] Forecasting failed: {exc}")
+        return 1
+
+    print("=" * 76)
+    print(
+        f" Time-Series Market Forecast: {symbol} (Horizon: {horizon} bars, Model: {engine.model_id})"
+    )
+    print("=" * 76)
+    last_close = bars[-1].close
+    target_close = result.predicted_close[-1]
+    diff = target_close - last_close
+    diff_pct = (diff / last_close) * 100.0 if last_close > 0 else 0.0
+    direction = "BULLISH" if diff > 0 else ("BEARISH" if diff < 0 else "NEUTRAL")
+
+    print(
+        f"Current Close:     ₹{last_close:,.2f} (Bar: {bars[-1].timestamp.strftime('%Y-%m-%d %H:%M')})"
+    )
+    print(f"Target Close:      ₹{target_close:,.2f} (Horizon: +{horizon} bars)")
+    print(
+        f"Expected Move:     {'+' if diff >= 0 else ''}₹{diff:,.2f} ({'+' if diff_pct >= 0 else ''}{diff_pct:.2f}%) [{direction}]"
+    )
+    print(f"Confidence Spread: {result.confidence_spread:.2%}")
+    if result.provenance:
+        print(f"Provenance Hash:   {result.provenance.input_hash}")
+    print("-" * 76)
+    print("Step-by-Step Trajectory:")
+    print(
+        f"  {'Step':<6} {'Timestamp (UTC)':<20} {'Low (₹)':<12} {'Expected (₹)':<14} {'High (₹)':<12}"
+    )
+    print(f"  {'-' * 6} {'-' * 20} {'-' * 12} {'-' * 14} {'-' * 12}")
+    for i in range(result.horizon_bars):
+        ts_str = result.timestamps[i].strftime("%Y-%m-%d %H:%M")
+        print(
+            f"  +{i + 1:<5} {ts_str:<20} {result.predicted_low[i]:>10.2f}  {result.predicted_close[i]:>12.2f}  {result.predicted_high[i]:>10.2f}"
+        )
+
+    print("-" * 76)
+    print("Point-in-Time Assurance:")
+    print("  • All inputs closed at or before current bar timestamp.")
+    print("  • Advisory signal only; PaperBroker execution remains strictly isolated.")
+    print("=" * 76)
+    return 0
+
+
+# ==============================================================================
+# 24. Research Dossier Command
+# ==============================================================================
+
+
+def cmd_research_dossier(args: argparse.Namespace) -> int:
+    """Compile comprehensive institutional Research Dossier with ADR 012 multi-source provenance."""
+    from aditrader.ai.dossier import ResearchDossierCompiler
+    from aditrader.strategy.compiler.engine import ExecutableStrategy
+    from aditrader.strategy.loader import load_strategy_file
+
+    registry = StrategyRegistry()
+    dsl: StrategyDSL | None = None
+
+    if getattr(args, "strategy", None):
+        record = registry.find(args.strategy)
+        if record:
+            dsl = record.dsl_definition
+        else:
+            print(f"[ERROR] Built-in strategy '{args.strategy}' not found.")
+            return 1
+    elif getattr(args, "file", None):
+        path = Path(args.file)
+        if not path.is_file():
+            print(f"[ERROR] Strategy file not found: {path}")
+            return 1
+        try:
+            dsl = load_strategy_file(path)
+        except Exception as exc:
+            print(f"[ERROR] Failed to load strategy from '{path.name}': {exc}")
+            return 1
+    else:
+        print("[ERROR] Please specify either --strategy <name> or --file <path>")
+        return 1
+
+    policy = create_institutional_policy()
+    bt_result: Any = None
+    if not dsl.legs:
+        csv_path = getattr(args, "csv", None)
+        num_bars = getattr(args, "bars", None)
+        if csv_path:
+            p = Path(csv_path)
+            if p.is_file():
+                csv_feed = CSVDataFeed(file_path=p, symbol=dsl.underlying, timeframe=dsl.timeframe)
+                runner = BacktestRunner(config=BacktestConfig(initial_capital=1_000_000.0))
+                bt_result = runner.run(strategy=ExecutableStrategy(dsl), data=csv_feed)
+        elif num_bars is not None and num_bars > 0:
+            synth_feed = SyntheticDataFeed(symbol=dsl.underlying, num_bars=num_bars)
+            runner = BacktestRunner(config=BacktestConfig(initial_capital=1_000_000.0))
+            bt_result = runner.run(strategy=ExecutableStrategy(dsl), data=synth_feed)
+
+    service = StrategyValidationService()
+    val_report = service.validate(strategy=dsl, policy=policy, backtest_result=bt_result)
+
+    compiler = ResearchDossierCompiler()
+    dossier = compiler.compile(
+        strategy=dsl,
+        validation_result=val_report,
+        backtest_result=bt_result,
+    )
+
+    md_content = dossier.to_markdown()
+
+    out_file = getattr(args, "output", None)
+    if out_file:
+        p = Path(out_file)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(md_content, encoding="utf-8")
+        print(f"[INFO] Research Dossier written to: {p}")
+    else:
+        print(md_content)
+
+    return 0
+
+
+# ==============================================================================
+# 25. Terminal User Interface (TUI) Workstation Command
+# ==============================================================================
+
+
+def cmd_tui(args: argparse.Namespace) -> int:
+    """Launch the interactive curses-based Terminal User Interface (TUI) Workstation."""
+    from aditrader.cli.tui import run_tui
+
+    return run_tui(args)

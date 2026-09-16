@@ -435,3 +435,26 @@ class ResearchDossier(BaseModel):
         if v.tzinfo is None or v.tzinfo.utcoffset(v) is None:
             raise ValueError("generated_at must be a timezone-aware datetime")
         return v.astimezone(UTC)
+
+    def to_markdown(self) -> str:
+        """Render complete dossier to clean, publication-grade Markdown text."""
+        blocks: list[str] = []
+        blocks.append(f"# Institutional Quantitative Research Dossier: {self.strategy_name}")
+        blocks.append(
+            f"**Dossier ID**: `{self.dossier_id}` | **Generated**: `{self.generated_at.isoformat()}`\n"
+        )
+        blocks.append(f"> 🛡️ **Institutional Disclaimer**: {self.disclaimer}\n")
+        blocks.append("---\n")
+
+        for sec in self.sections:
+            type_tag = f"`[{sec.source_type.value}]`"
+            blocks.append(f"## {sec.title} {type_tag}\n")
+            if sec.provenance is not None:
+                p = sec.provenance
+                blocks.append(
+                    f"*AI Model*: `{p.model_id}` (`{p.provider}`) | *Input Hash*: `{p.input_hash[:16]}...` | *Deterministic*: `{p.is_deterministic}`\n"
+                )
+            blocks.append(sec.content)
+            blocks.append("\n---\n")
+
+        return "\n".join(blocks)

@@ -162,3 +162,30 @@ class AIProviderRegistry:
     def count(self) -> int:
         """Return total number of registered providers."""
         return len(self._providers)
+
+    def get_forecast_engine(self, model_id: str, provider_id: str = "local") -> ForecastEngine:
+        """Retrieve forecast engine by model_id from registered provider."""
+        pid = provider_id.lower().strip()
+        if pid in self._providers:
+            return self._providers[pid].get_forecast_engine(model_id)
+        for p in self._providers.values():
+            try:
+                return p.get_forecast_engine(model_id)
+            except Exception:
+                continue
+        raise AIProviderNotFoundError(f"No provider found capable of serving model '{model_id}'")
+
+
+def get_default_provider_registry(catalog: Any = None) -> AIProviderRegistry:
+    """Return default populated AIProviderRegistry with registered adapters."""
+    from aditrader.ai.providers.google import GoogleAIProvider
+    from aditrader.ai.providers.local import LocalAIProvider
+    from aditrader.ai.providers.ocrspace import OCRSpaceProvider
+    from aditrader.ai.providers.openrouter import OpenRouterProvider
+
+    registry = AIProviderRegistry()
+    registry.register_provider(LocalAIProvider(catalog=catalog))
+    registry.register_provider(GoogleAIProvider(catalog=catalog))
+    registry.register_provider(OCRSpaceProvider(catalog=catalog))
+    registry.register_provider(OpenRouterProvider(catalog=catalog))
+    return registry

@@ -2429,3 +2429,307 @@ class ActiveRunManager:
                 state._stop_flag = True
                 return True
             return False
+
+
+# ==============================================================================
+# 9. Phase 7 AI Research Bridge Subsystem
+# ==============================================================================
+
+
+class AIServiceBridge:
+    """Bridge for Controlled AI Research Runtime (Explainer, Suggestor, Reviewer, Forecasting, Dossier)."""
+
+    @staticmethod
+    def _find_strategy_dsl(strategy_id: str) -> StrategyDSL | None:
+        """Find StrategyDSL from registry matching id, name, or slug safely."""
+        if not strategy_id or not strategy_id.strip():
+            return None
+        registry = StrategyRegistry()
+        rec = registry.find(strategy_id)
+        if rec:
+            return rec.dsl_definition
+        s_clean = strategy_id.lower().strip()
+
+        # Check exact and slug matches first
+        for r in registry.list_all():
+            r_id_lower = r.id.lower()
+            r_name_lower = r.name.lower()
+            r_slug = r.id.replace("tpl-", "").replace("-v1", "").replace("-", "_")
+            if s_clean in (r_id_lower, r_name_lower, r_slug):
+                return r.dsl_definition
+
+        # Substring matching only with minimum character length to avoid empty/trivial prefix collisions
+        if len(s_clean) >= 3:
+            for r in registry.list_all():
+                if s_clean in r.id.lower() or s_clean in r.name.lower():
+                    return r.dsl_definition
+
+        s_norm = (
+            s_clean.replace("nifty-", "").replace("nifty_", "").replace("nifty", "").strip("-_ ")
+        )
+        if len(s_norm) >= 3:
+            for r in registry.list_all():
+                r_id_norm = (
+                    r.id.lower()
+                    .replace("nifty-", "")
+                    .replace("nifty_", "")
+                    .replace("nifty", "")
+                    .strip("-_ ")
+                )
+                r_name_norm = r.name.lower().replace("nifty ", "").replace("nifty", "").strip("-_ ")
+                if s_norm == r_id_norm or s_norm in r_id_norm or s_norm in r_name_norm:
+                    return r.dsl_definition
+
+        return None
+
+    @classmethod
+    def explain_strategy(cls, strategy_id: str) -> dict[str, Any] | None:
+        """Generate educational explanation of strategy mechanics."""
+        dsl = cls._find_strategy_dsl(strategy_id)
+        if not dsl:
+            return None
+
+        from aditrader.ai.teacher.explainer import StrategyExplainer
+
+        explainer = StrategyExplainer()
+        section = explainer.explain(dsl)
+
+        return {
+            "strategy_id": strategy_id,
+            "strategy_name": dsl.name,
+            "underlying": dsl.underlying,
+            "timeframe": dsl.timeframe,
+            "is_options": bool(dsl.legs),
+            "title": section.title,
+            "source_type": section.source_type.value,
+            "content": section.content,
+            "provenance": section.provenance.model_dump() if section.provenance else None,
+        }
+
+    @classmethod
+    def suggest_strategy(
+        cls,
+        regime: str = "NORMAL_VOLATILITY",
+        symbol: str = "NIFTY",
+        bias_sell_pct: float = 0.60,
+        validate: bool = False,
+    ) -> dict[str, Any]:
+        """Propose strategy template matching regime and bias prior."""
+        from aditrader.ai.models import BiasCfg
+        from aditrader.ai.suggestor.engine import RuleBasedSuggestor
+
+        suggestor = RuleBasedSuggestor(
+            default_bias=BiasCfg(sell_pct=bias_sell_pct, buy_pct=round(1.0 - bias_sell_pct, 4))
+        )
+
+        if validate:
+            validator = StrategyValidationService()
+            res = suggestor.suggest_and_validate(regime=regime, validator=validator)
+        else:
+            res = suggestor.suggest(regime=regime)
+
+        return {
+            "strategy_name": res.strategy_dsl.name,
+            "underlying": res.strategy_dsl.underlying,
+            "is_options": bool(res.strategy_dsl.legs),
+            "leg_count": len(res.strategy_dsl.legs),
+            "rationale": res.rationale,
+            "regime_context": res.regime_context,
+            "is_validated": res.is_validated,
+            "bias_applied": {
+                "sell_pct": res.bias_applied.sell_pct,
+                "buy_pct": res.bias_applied.buy_pct,
+            },
+            "strategy_dsl": res.strategy_dsl.model_dump(),
+            "provenance": res.provenance.model_dump() if res.provenance else None,
+            "validation_status": res.validation_result.status.value
+            if res.validation_result
+            else "UNVALIDATED",
+        }
+
+    @classmethod
+    def review_strategy(
+        cls,
+        strategy_id: str,
+        policy_name: str = "institutional",
+        dataset_path: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Generate hostile adversarial strategy review."""
+        dsl = cls._find_strategy_dsl(strategy_id)
+        if not dsl:
+            return None
+
+        from aditrader.ai.reviewer.engine import DeterministicAdvisoryReviewer
+        from aditrader.backtesting.runner import BacktestConfig, BacktestRunner
+        from aditrader.data.feeds.csv_feed import CSVDataFeed
+        from aditrader.strategy.compiler.engine import ExecutableStrategy
+
+        policy_map = {
+            "institutional": create_institutional_policy(),
+            "moderate": create_moderate_policy(),
+            "research": create_research_policy(),
+        }
+        policy = policy_map.get(policy_name.lower(), create_institutional_policy())
+
+        bt_result = None
+        if not dsl.legs and dataset_path:
+            p = Path(dataset_path)
+            if p.is_file():
+                feed = CSVDataFeed(file_path=p, symbol=dsl.underlying, timeframe=dsl.timeframe)
+                runner = BacktestRunner(config=BacktestConfig(initial_capital=1_000_000.0))
+                bt_result = runner.run(strategy=ExecutableStrategy(dsl), data=feed)
+
+        service = StrategyValidationService()
+        val_report = service.validate(strategy=dsl, policy=policy, backtest_result=bt_result)
+
+        reviewer = DeterministicAdvisoryReviewer()
+        review_section = reviewer.review(strategy=dsl, validation_result=val_report)
+
+        return {
+            "strategy_id": strategy_id,
+            "strategy_name": dsl.name,
+            "validation_status": val_report.status.value,
+            "validation_score": val_report.validation_score,
+            "failed_gates": val_report.failed_gates,
+            "title": review_section.title,
+            "source_type": review_section.source_type.value,
+            "content": review_section.content,
+            "provenance": review_section.provenance.model_dump()
+            if review_section.provenance
+            else None,
+        }
+
+    @classmethod
+    def forecast_series(
+        cls,
+        symbol: str = "NIFTY",
+        timeframe: str = "5m",
+        horizon_bars: int = 5,
+        model_id: str = "heuristic-drift-v1",
+        dataset_path: str | None = None,
+        num_bars: int = 60,
+    ) -> dict[str, Any]:
+        """Generate point-in-time probabilistic forecast."""
+        from aditrader.ai.forecasting.mock import HeuristicForecastEngine
+        from aditrader.ai.registry import get_default_provider_registry
+        from aditrader.data.feeds.csv_feed import CSVDataFeed
+        from aditrader.data.feeds.synthetic_feed import SyntheticDataFeed
+
+        bars: list[Bar] = []
+        if dataset_path:
+            p = Path(dataset_path)
+            if p.is_file():
+                feed = CSVDataFeed(file_path=p, symbol=symbol, timeframe=timeframe)
+                bars = list(feed.stream())
+        if not bars:
+            feed_synth = SyntheticDataFeed(symbol=symbol, num_bars=num_bars)
+            bars = list(feed_synth.stream())
+
+        registry = get_default_provider_registry()
+        try:
+            engine = registry.get_forecast_engine(model_id)
+        except Exception:
+            engine = HeuristicForecastEngine()
+
+        result = engine.forecast(bars, horizon_bars=horizon_bars)
+        last_close = bars[-1].close
+        target_close = result.predicted_close[-1]
+        diff = target_close - last_close
+        diff_pct = (diff / last_close) * 100.0 if last_close > 0 else 0.0
+
+        return {
+            "symbol": symbol,
+            "model_id": engine.model_id,
+            "cutoff_timestamp": result.cutoff_timestamp.isoformat(),
+            "current_close": last_close,
+            "target_close": target_close,
+            "expected_move_amount": diff,
+            "expected_move_pct": diff_pct,
+            "direction": "BULLISH" if diff > 0 else ("BEARISH" if diff < 0 else "NEUTRAL"),
+            "confidence_spread": result.confidence_spread,
+            "horizon_bars": result.horizon_bars,
+            "trajectory": [
+                {
+                    "step": i + 1,
+                    "timestamp": result.timestamps[i].isoformat(),
+                    "predicted_low": result.predicted_low[i],
+                    "predicted_close": result.predicted_close[i],
+                    "predicted_high": result.predicted_high[i],
+                }
+                for i in range(result.horizon_bars)
+            ],
+            "provenance": result.provenance.model_dump() if result.provenance else None,
+        }
+
+    @classmethod
+    def compile_dossier(
+        cls,
+        strategy_id: str,
+        policy_name: str = "institutional",
+        dataset_path: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Compile complete multi-source Research Dossier."""
+        dsl = cls._find_strategy_dsl(strategy_id)
+        if not dsl:
+            return None
+
+        from aditrader.ai.dossier import ResearchDossierCompiler
+        from aditrader.backtesting.runner import BacktestConfig, BacktestRunner
+        from aditrader.data.feeds.csv_feed import CSVDataFeed
+        from aditrader.strategy.compiler.engine import ExecutableStrategy
+
+        policy_map = {
+            "institutional": create_institutional_policy(),
+            "moderate": create_moderate_policy(),
+            "research": create_research_policy(),
+        }
+        policy = policy_map.get(policy_name.lower(), create_institutional_policy())
+
+        bt_result = None
+        if not dsl.legs and dataset_path:
+            p = Path(dataset_path)
+            if p.is_file():
+                feed = CSVDataFeed(file_path=p, symbol=dsl.underlying, timeframe=dsl.timeframe)
+                runner = BacktestRunner(config=BacktestConfig(initial_capital=1_000_000.0))
+                bt_result = runner.run(strategy=ExecutableStrategy(dsl), data=feed)
+
+        service = StrategyValidationService()
+        val_report = service.validate(strategy=dsl, policy=policy, backtest_result=bt_result)
+
+        compiler = ResearchDossierCompiler()
+        dossier = compiler.compile(
+            strategy=dsl,
+            validation_result=val_report,
+            backtest_result=bt_result,
+        )
+
+        return {
+            "dossier_id": dossier.dossier_id,
+            "strategy_name": dossier.strategy_name,
+            "generated_at": dossier.generated_at.isoformat(),
+            "disclaimer": dossier.disclaimer,
+            "markdown": dossier.to_markdown(),
+            "sections": [
+                {
+                    "title": s.title,
+                    "source_type": s.source_type.value,
+                    "content": s.content,
+                    "provenance": s.provenance.model_dump() if s.provenance else None,
+                }
+                for s in dossier.sections
+            ],
+            "validation_status": val_report.status.value,
+        }
+
+    @classmethod
+    def get_ai_catalog(cls) -> dict[str, Any]:
+        """Return catalog of available AI models and runtime capabilities."""
+        from aditrader.ai.catalog import get_default_model_catalog
+
+        catalog = get_default_model_catalog()
+        return {
+            "models": [m.model_dump() for m in catalog.list_models()],
+            "air_gap_enforced": True,
+            "provenance_standard": "ADR 012",
+            "offline_mode": True,
+        }

@@ -8,6 +8,8 @@ from aditrader.cli.commands import (
     cmd_backtest,
     cmd_dashboard,
     cmd_doctor,
+    cmd_explain_strategy,
+    cmd_forecast,
     cmd_forward_options,
     cmd_forward_test,
     cmd_init_db,
@@ -18,11 +20,15 @@ from aditrader.cli.commands import (
     cmd_kotak_discover,
     cmd_kotak_history,
     cmd_kotak_option_chain,
+    cmd_research_dossier,
+    cmd_review_strategy,
     cmd_runs,
     cmd_search,
     cmd_smoke_feed,
     cmd_status,
     cmd_strategies,
+    cmd_suggest_strategy,
+    cmd_tui,
     cmd_validate,
 )
 
@@ -576,6 +582,168 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run identifier or file path to dossier JSON",
     )
     p_insp_run.set_defaults(handler=cmd_inspect_run)
+
+    # 20. explain-strategy
+    p_expl = subparsers.add_parser(
+        "explain-strategy",
+        help="Generate grounded educational explanation of strategy logic, rules, and geometry",
+    )
+    expl_group = p_expl.add_mutually_exclusive_group(required=True)
+    expl_group.add_argument("--strategy", type=str, help="Name of built-in strategy template")
+    expl_group.add_argument("--file", type=str, help="Path to strategy AST JSON definition")
+    p_expl.add_argument(
+        "--model",
+        type=str,
+        default="strategy-explainer-v1",
+        help="Explainer engine model identifier (default: strategy-explainer-v1)",
+    )
+    p_expl.set_defaults(handler=cmd_explain_strategy)
+
+    # 21. suggest-strategy
+    p_sugg = subparsers.add_parser(
+        "suggest-strategy",
+        help="Suggest strategy templates conditioned on market regime and 60/40 selling bias",
+    )
+    p_sugg.add_argument(
+        "--regime",
+        type=str,
+        default="NORMAL_VOLATILITY",
+        help="Identified market regime context (e.g. 'NORMAL_VOLATILITY', 'HIGH_VOLATILITY', 'BULLISH')",
+    )
+    p_sugg.add_argument(
+        "--symbol",
+        type=str,
+        default="NIFTY",
+        help="Root underlying instrument symbol (default: NIFTY)",
+    )
+    p_sugg.add_argument(
+        "--forecast",
+        type=str,
+        default=None,
+        choices=["bullish", "bearish", "neutral"],
+        help="Optional directional forecast bias",
+    )
+    p_sugg.add_argument(
+        "--validate",
+        action="store_true",
+        default=False,
+        help="Immediately validate suggestion against institutional gates",
+    )
+    p_sugg.add_argument(
+        "--out",
+        type=str,
+        default=None,
+        help="Optional path to save generated StrategyDSL JSON",
+    )
+    p_sugg.set_defaults(handler=cmd_suggest_strategy)
+
+    # 22. review-strategy
+    p_rev = subparsers.add_parser(
+        "review-strategy",
+        help="Generate hostile adversarial review evaluating structural integrity and risk exposures",
+    )
+    rev_group = p_rev.add_mutually_exclusive_group(required=True)
+    rev_group.add_argument("--strategy", type=str, help="Name of built-in strategy template")
+    rev_group.add_argument("--file", type=str, help="Path to strategy AST JSON definition")
+    p_rev.add_argument(
+        "--policy",
+        type=str,
+        default="institutional",
+        choices=["institutional", "moderate", "research"],
+        help="Validation policy threshold profile (default: institutional)",
+    )
+    p_rev.add_argument(
+        "--csv",
+        type=str,
+        default=None,
+        help="Path to CSV historical candle dataset for empirical review",
+    )
+    p_rev.add_argument(
+        "--bars",
+        type=int,
+        default=None,
+        help="Number of synthetic historical bars to simulate",
+    )
+    p_rev.set_defaults(handler=cmd_review_strategy)
+
+    # 23. forecast
+    p_fc = subparsers.add_parser(
+        "forecast",
+        help="Generate point-in-time probabilistic market price trajectory forecast",
+    )
+    p_fc.add_argument(
+        "--symbol",
+        type=str,
+        default="NIFTY",
+        help="Symbol or index to forecast (default: NIFTY)",
+    )
+    p_fc.add_argument(
+        "--timeframe",
+        type=str,
+        default="5m",
+        choices=["1m", "3m", "5m", "15m", "1d"],
+        help="Bar timeframe interval (default: 5m)",
+    )
+    p_fc.add_argument(
+        "--horizon",
+        type=int,
+        default=5,
+        help="Number of future bars to forecast (default: 5)",
+    )
+    p_fc.add_argument(
+        "--model",
+        type=str,
+        default="heuristic-drift-v1",
+        help="Forecasting foundation model or heuristic identifier (default: heuristic-drift-v1)",
+    )
+    p_fc.add_argument(
+        "--csv",
+        type=str,
+        default=None,
+        help="Path to CSV historical candle dataset",
+    )
+    p_fc.add_argument(
+        "--bars",
+        type=int,
+        default=60,
+        help="Number of synthetic historical bars if CSV not supplied (default: 60)",
+    )
+    p_fc.set_defaults(handler=cmd_forecast)
+
+    # 24. research-dossier
+    p_dos = subparsers.add_parser(
+        "research-dossier",
+        help="Compile complete multi-section institutional Research Dossier with ADR 012 provenance",
+    )
+    dos_group = p_dos.add_mutually_exclusive_group(required=True)
+    dos_group.add_argument("--strategy", type=str, help="Name of built-in strategy template")
+    dos_group.add_argument("--file", type=str, help="Path to strategy AST JSON definition")
+    p_dos.add_argument(
+        "--csv",
+        type=str,
+        default=None,
+        help="Path to CSV historical candle dataset for empirical backtest section",
+    )
+    p_dos.add_argument(
+        "--bars",
+        type=int,
+        default=None,
+        help="Number of synthetic historical bars to simulate",
+    )
+    p_dos.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="File path to save Markdown Research Dossier",
+    )
+    p_dos.set_defaults(handler=cmd_research_dossier)
+
+    # 25. tui
+    p_tui = subparsers.add_parser(
+        "tui",
+        help="Launch interactive terminal workstation (curses-based GUI/TUI)",
+    )
+    p_tui.set_defaults(handler=cmd_tui)
 
     return parser
 

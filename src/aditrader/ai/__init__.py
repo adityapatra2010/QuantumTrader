@@ -36,6 +36,7 @@ from aditrader.ai.credentials import (
     DictCredentialResolver,
     EnvCredentialResolver,
 )
+from aditrader.ai.dossier import ResearchDossierCompiler
 from aditrader.ai.errors import (
     AIConfigError,
     AICredentialError,
@@ -49,6 +50,11 @@ from aditrader.ai.errors import (
     AITimeoutError,
     AIUnavailableError,
     AIUnsupportedCapabilityError,
+)
+from aditrader.ai.forecasting import (
+    ChronosForecastEngine,
+    HeuristicForecastEngine,
+    KronosForecastEngine,
 )
 from aditrader.ai.models import (
     AISourceType,
@@ -68,6 +74,7 @@ from aditrader.ai.models import (
 from aditrader.ai.ocr import OCRSpaceEngine
 from aditrader.ai.providers import (
     GoogleAIProvider,
+    LocalAIProvider,
     OCRSpaceProvider,
     OpenRouterProvider,
 )
@@ -75,11 +82,16 @@ from aditrader.ai.registry import (
     AIProvider,
     AIProviderRegistry,
     BaseAIProvider,
+    get_default_provider_registry,
 )
+from aditrader.ai.reviewer import DeterministicAdvisoryReviewer
+from aditrader.ai.sensitivity import ParameterSensitivityEngine, SensitivityGridResult
 from aditrader.ai.service import (
     AIServiceResolver,
     SubsystemName,
 )
+from aditrader.ai.suggestor import RuleBasedSuggestor
+from aditrader.ai.teacher import StrategyExplainer
 from aditrader.ai.vision import (
     GeminiVisionEngine,
     OpenRouterVisionEngine,
@@ -109,6 +121,8 @@ __all__ = [
     "AIUnsupportedCapabilityError",
     "BaseAIProvider",
     "BiasCfg",
+    "ChronosForecastEngine",
+    "DeterministicAdvisoryReviewer",
     "DictCredentialResolver",
     "DossierSection",
     "DossierSectionSourceType",
@@ -117,6 +131,9 @@ __all__ = [
     "ForecastResult",
     "GeminiVisionEngine",
     "GoogleAIProvider",
+    "HeuristicForecastEngine",
+    "KronosForecastEngine",
+    "LocalAIProvider",
     "ModelCatalog",
     "ModelContextLimits",
     "ModelMetadata",
@@ -130,9 +147,14 @@ __all__ = [
     "OCRTextRegion",
     "OpenRouterProvider",
     "OpenRouterVisionEngine",
+    "ParameterSensitivityEngine",
     "PatternObservation",
     "ProvenanceRecord",
     "ResearchDossier",
+    "ResearchDossierCompiler",
+    "RuleBasedSuggestor",
+    "SensitivityGridResult",
+    "StrategyExplainer",
     "StrategyReviewer",
     "StrategySuggestor",
     "SubsystemModelConfig",
@@ -141,4 +163,5 @@ __all__ = [
     "VisionEngine",
     "VisionResult",
     "get_default_model_catalog",
+    "get_default_provider_registry",
 ]

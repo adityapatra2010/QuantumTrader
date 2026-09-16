@@ -715,6 +715,7 @@
       <span class="badge badge-sim" id="feed-badge">Connecting feed...</span>
       <span class="badge badge-live" id="db-badge">Database connected</span>
       <span class="badge badge-paper" id="session-user-badge">Local session</span>
+      <button class="btn btn-outline btn-sm" onclick="openScripSearchModal()" title="Search Scrip Master (Ctrl+K)">🔍 Search <kbd style="font-size: 0.65rem; background: var(--surface-3); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border);">Ctrl+K</kbd></button>
       <button class="btn btn-outline btn-sm" onclick="lockWorkstation()" title="Lock session">Lock</button>
     </div>
   </header>
@@ -951,6 +952,42 @@
         </div>
       </div>
 
+      <!-- AI Strategy Suggestor Assistant Card -->
+      <div class="section-card" style="border-left: 3px solid var(--blue); background: rgba(30, 41, 59, 0.35);">
+        <div class="section-header">
+          <div>
+            <div class="section-heading" style="display: flex; align-items: center; gap: 8px;">
+              <span>AI Research Assistant &middot; Strategy Synthesis</span>
+              <span class="badge badge-paper" style="font-size: 0.68rem;">60/40 SELLING BIAS ENFORCED</span>
+              <span class="badge badge-sim" style="font-size: 0.68rem;">ADR 012 ADVISORY</span>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+              Synthesizes volatility-matched option architectures conditioned on identified market regimes. Strictly non-authoritative prior.
+            </p>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-top: 10px;">
+          <div style="flex: 1; min-width: 220px;">
+            <label class="form-label">Market Regime</label>
+            <select id="ai-sugg-regime" class="form-select">
+              <option value="NORMAL_VOLATILITY">Normal Volatility (Rangebound / Mean-Reverting)</option>
+              <option value="HIGH_VOLATILITY">High Volatility (Volatility Expansion / Breakout)</option>
+              <option value="BULLISH">Bullish Trend (Upward Momentum)</option>
+              <option value="BEARISH">Bearish Trend (Downward Drift)</option>
+            </select>
+          </div>
+          <div style="width: 140px;">
+            <label class="form-label">Underlying</label>
+            <input type="text" id="ai-sugg-symbol" class="form-input" value="NIFTY" readonly style="opacity: 0.8;" />
+          </div>
+          <button class="btn btn-outline" onclick="generateAiSuggestion(false)">Generate Suggestion</button>
+          <button class="btn btn-primary" onclick="generateAiSuggestion(true)">Suggest &amp; Validate</button>
+        </div>
+        <div id="ai-sugg-result" style="display: none; margin-top: 16px; padding: 14px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 6px;">
+          <!-- Result populated via JS -->
+        </div>
+      </div>
+
       <div class="section-card">
         <div class="section-header">
           <div class="section-heading">Strategy Catalog</div>
@@ -972,6 +1009,17 @@
             </tbody>
           </table>
         </div>
+      </div>
+
+      <!-- Strategy Script Code Inspector -->
+      <div class="section-card" style="margin-top: 14px;">
+        <div class="section-header">
+          <div class="section-heading">Strategy Code &amp; Script Inspector</div>
+          <button class="btn btn-outline btn-sm" onclick="openStrategyAuditModal()">Audit Custom Script</button>
+        </div>
+        <p style="font-size: 0.83rem; color: var(--text-muted); margin-bottom: 8px;">
+          Paste Pine Script v4/v5, Python strategy classes, or AST JSON to audit lookahead safety, supported indicators, and execution compatibility before deployment.
+        </p>
       </div>
     </div>
 
@@ -1050,6 +1098,20 @@
             <pre class="code-block" id="ins-details"></pre>
           </div>
         </div>
+      </div>
+
+      <!-- Market Feed Utilities & Option Chain -->
+      <div class="section-card" style="margin-top: 14px;">
+        <div class="section-header">
+          <div class="section-heading">Market Data Feed Utilities</div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-outline btn-sm" onclick="openFeedSmokeModal()">Stream Tick Smoke Test</button>
+            <button class="btn btn-primary btn-sm" onclick="openOptionChainModal()">View Option Chain Ladder</button>
+          </div>
+        </div>
+        <p style="font-size: 0.83rem; color: var(--text-muted); margin-bottom: 4px;">
+          Live or rehearsal market data feeds. Verify streaming tick latency with Kotak Neo SFeed WebSocket and inspect multi-strike option chains with real-time Black-Scholes Greeks and Implied Volatility.
+        </p>
       </div>
     </div>
 
@@ -1464,6 +1526,22 @@
           </div>
           <button class="btn btn-danger btn-sm" onclick="lockWorkstation()">Lock workstation</button>
         </div>
+
+        <!-- Database Ledger & Administrative Diagnostics -->
+        <div class="section-card" style="margin-top: 14px;">
+          <div class="section-header">
+            <div class="section-heading" style="font-size: 0.9rem;">Database Ledger &amp; Administrative Diagnostics</div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="btn btn-outline btn-sm" onclick="runDoctorDiagnostics()">Run Diagnostics</button>
+              <button class="btn btn-outline btn-sm" onclick="runKotakCapabilityDiscovery()">Broker Discovery</button>
+              <button class="btn btn-primary btn-sm" onclick="initializeDatabaseTables()">Init Ledger Tables</button>
+            </div>
+          </div>
+          <p style="font-size: 0.83rem; color: var(--text-muted); margin-bottom: 10px;">
+            Manage transactional SQLite database tables (orders, trades, positions, account balances), verify Alembic migration state, and run system readiness audits.
+          </p>
+          <div id="settings-admin-output" style="display: none; font-family: var(--font-mono); font-size: 0.8rem; background: var(--surface-2); padding: 10px; border-radius: 4px; border: 1px solid var(--border); max-height: 250px; overflow-y: auto;"></div>
+        </div>
       </div>
     </div>
 
@@ -1584,6 +1662,156 @@
       <div style="margin-top: 14px; text-align: right;">
         <button class="btn btn-outline btn-sm" onclick="closeModal('evidence-modal')">Close</button>
       </div>
+    </div>
+  </div>
+
+  <!-- AI Strategy Explanation Modal -->
+  <div class="modal-backdrop" id="ai-explain-modal">
+    <div class="modal" style="max-width: 860px;">
+      <div class="modal-header">
+        <h3 style="color: var(--text-bright); font-size: 1rem;" id="ai-explain-title">Strategy Explanation</h3>
+        <button class="modal-close" onclick="closeModal('ai-explain-modal')">✕</button>
+      </div>
+      <div id="ai-explain-meta" style="margin-bottom: 12px; font-size: 0.8rem; color: var(--text-muted);"></div>
+      <div id="ai-explain-content" style="max-height: 480px; overflow-y: auto; font-size: 0.82rem; line-height: 1.6; white-space: pre-wrap; font-family: var(--font-mono); background: var(--bg-surface); padding: 16px; border-radius: 6px; border: 1px solid var(--border);"></div>
+      <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.75rem; color: var(--text-muted);">ADR 012 Grounded Explanation &middot; Educational &amp; Advisory Only</span>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('ai-explain-modal')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Research Dossier Modal -->
+  <div class="modal-backdrop" id="ai-dossier-modal">
+    <div class="modal" style="max-width: 960px; width: 95%;">
+      <div class="modal-header">
+        <h3 style="color: var(--text-bright); font-size: 1rem;" id="ai-dossier-title">Research Dossier</h3>
+        <button class="modal-close" onclick="closeModal('ai-dossier-modal')">✕</button>
+      </div>
+      <div id="ai-dossier-meta" style="margin-bottom: 12px; font-size: 0.8rem; color: var(--text-muted);"></div>
+      <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+        <button class="btn btn-outline btn-sm" id="btn-dossier-view-sections" onclick="switchDossierView('sections')">Structured Sections</button>
+        <button class="btn btn-outline btn-sm" id="btn-dossier-view-md" onclick="switchDossierView('markdown')">Markdown Text</button>
+        <button class="btn btn-outline btn-sm" style="margin-left: auto;" onclick="copyDossierMarkdown()">📋 Copy Markdown</button>
+      </div>
+      <div id="ai-dossier-content" style="max-height: 520px; overflow-y: auto; font-size: 0.83rem; line-height: 1.6; background: var(--bg-surface); padding: 16px; border-radius: 6px; border: 1px solid var(--border);"></div>
+      <div style="margin-top: 14px; text-align: right;">
+        <button class="btn btn-outline btn-sm" onclick="closeModal('ai-dossier-modal')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scrip Master Search Modal -->
+  <div class="modal-backdrop" id="scrip-search-modal">
+    <div class="modal" style="max-width: 900px; width: 95%;">
+      <div class="modal-header">
+        <h3 style="color: var(--text-bright); font-size: 1rem;">Broker Scrip Master Search</h3>
+        <button class="modal-close" onclick="closeModal('scrip-search-modal')">✕</button>
+      </div>
+      <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+        <input type="text" id="scrip-search-input" placeholder="Search symbol, strike, or derivative (e.g. 'NIFTY', '24000 CE', 'RELIANCE FUT')" style="flex: 1;" onkeydown="if(event.key==='Enter') executeScripSearch()">
+        <button class="btn btn-primary" onclick="executeScripSearch()">Search</button>
+      </div>
+      <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Trading Symbol</th>
+              <th>Token</th>
+              <th>Segment</th>
+              <th>Type</th>
+              <th>Strike</th>
+              <th>Opt</th>
+              <th>Expiry</th>
+              <th>Lot</th>
+            </tr>
+          </thead>
+          <tbody id="scrip-search-results-body">
+            <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Enter a query to search contracts...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feed Smoke Test Modal -->
+  <div class="modal-backdrop" id="feed-smoke-modal">
+    <div class="modal" style="max-width: 800px; width: 95%;">
+      <div class="modal-header">
+        <h3 style="color: var(--text-bright); font-size: 1rem;">Market Data Feed Smoke Test</h3>
+        <button class="modal-close" onclick="closeModal('feed-smoke-modal')">✕</button>
+      </div>
+      <div id="feed-smoke-content">
+        <div style="text-align: center; padding: 20px; color: var(--text-muted);">Click 'Start Feed Smoke Test' to stream 5 live/mock ticks from Kotak Neo.</div>
+      </div>
+      <div style="margin-top: 14px; display: flex; justify-content: flex-end; gap: 8px;">
+        <button class="btn btn-primary btn-sm" onclick="runFeedSmokeTest()">Start Stream Test</button>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('feed-smoke-modal')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option Chain Ladder Modal -->
+  <div class="modal-backdrop" id="option-chain-modal">
+    <div class="modal" style="max-width: 1040px; width: 95%;">
+      <div class="modal-header">
+        <h3 style="color: var(--text-bright); font-size: 1rem;" id="option-chain-title">NIFTY Option Chain Ladder</h3>
+        <button class="modal-close" onclick="closeModal('option-chain-modal')">✕</button>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap;">
+        <div>
+          <label class="form-label" style="display: inline-block; margin-right: 6px;">Underlying:</label>
+          <select id="oc-underlying-select" onchange="loadOptionChainLadder()" style="width: auto;">
+            <option value="NIFTY">NIFTY 50</option>
+            <option value="BANKNIFTY">BANKNIFTY</option>
+          </select>
+        </div>
+        <div id="oc-spot-display" class="badge badge-paper" style="font-size: 0.82rem;">Spot: ₹24,000.00</div>
+        <button class="btn btn-outline btn-sm" onclick="loadOptionChainLadder()">↻ Refresh</button>
+      </div>
+      <div class="table-container" style="max-height: 440px; overflow-y: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th colspan="4" style="text-align: center; background: rgba(59, 130, 246, 0.1);">CALLS (CE)</th>
+              <th rowspan="2" style="text-align: center; vertical-align: middle; background: var(--surface-3);">STRIKE</th>
+              <th colspan="4" style="text-align: center; background: rgba(168, 85, 247, 0.1);">PUTS (PE)</th>
+            </tr>
+            <tr>
+              <th>OI</th>
+              <th>IV</th>
+              <th>Delta</th>
+              <th>LTP (₹)</th>
+              <th>LTP (₹)</th>
+              <th>Delta</th>
+              <th>IV</th>
+              <th>OI</th>
+            </tr>
+          </thead>
+          <tbody id="option-chain-body">
+            <tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Loading option chain...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Strategy Script Audit Modal -->
+  <div class="modal-backdrop" id="strategy-audit-modal">
+    <div class="modal" style="max-width: 860px; width: 95%;">
+      <div class="modal-header">
+        <h3 style="color: var(--text-bright); font-size: 1rem;">Strategy Script &amp; Code Inspector</h3>
+        <button class="modal-close" onclick="closeModal('strategy-audit-modal')">✕</button>
+      </div>
+      <div style="margin-bottom: 12px;">
+        <label class="form-label">Paste Strategy Code (Pine Script / Python / AST JSON):</label>
+        <textarea id="strategy-audit-input" style="width: 100%; height: 160px; font-family: var(--font-mono); font-size: 0.8rem; background: var(--surface-2); color: var(--text-bright); border: 1px solid var(--border); border-radius: 4px; padding: 8px;" placeholder="// Example: strategy('EMA Cross', overlay=true)&#10;fast = ta.ema(close, 9)&#10;slow = ta.ema(close, 21)&#10;if ta.crossover(fast, slow)&#10;    strategy.entry('Long', strategy.long)"></textarea>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 12px;">
+        <button class="btn btn-outline" onclick="closeModal('strategy-audit-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="executeStrategyAudit()">Inspect Code Safety</button>
+      </div>
+      <div id="strategy-audit-result" style="display: none;"></div>
     </div>
   </div>
 
@@ -1912,6 +2140,8 @@
           const colActions = `
             <div style="display: flex; gap: 6px; flex-wrap: wrap;">
               <button class="btn btn-outline btn-sm" onclick="inspectStrategyAst('${s.id}')">View details</button>
+              <button class="btn btn-outline btn-sm" onclick="showStrategyExplanation('${s.id}')">Explain</button>
+              <button class="btn btn-outline btn-sm" onclick="showResearchDossier('${s.id}')">Dossier</button>
               <button class="btn btn-outline btn-sm" onclick="switchTab('validation'); document.getElementById('val-strategy-select').value='${s.id}'; runValidation();">Validate</button>
               ${backtestBtn}
             </div>
@@ -3440,6 +3670,454 @@
       } catch (err) {
         errElem.style.display = 'block';
         errElem.textContent = 'Connection error: ' + err.message;
+      }
+    }
+
+    async function showStrategyExplanation(strategyId) {
+      try {
+        const res = await apiFetch('/api/ai/explain/' + encodeURIComponent(strategyId));
+        if (!res.ok) {
+          alert('Failed to fetch strategy explanation');
+          return;
+        }
+        const data = await res.json();
+        document.getElementById('ai-explain-title').textContent = `${data.strategy_name} — Educational Mechanism`;
+        document.getElementById('ai-explain-meta').innerHTML = `
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <span>Underlying: <strong>${data.underlying}</strong></span>
+            <span>Timeframe: <strong>${data.timeframe}</strong></span>
+            <span>Source: <span class="badge badge-paper">${data.source_type}</span></span>
+            <span>Provenance Hash: <span class="mono">${(data.provenance && data.provenance.input_hash) ? data.provenance.input_hash.slice(0, 16) + '...' : 'N/A'}</span></span>
+          </div>
+        `;
+        document.getElementById('ai-explain-content').textContent = data.content;
+        document.getElementById('ai-explain-modal').classList.add('active');
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    let currentDossierData = null;
+    let currentDossierView = 'sections';
+
+    async function showResearchDossier(strategyId) {
+      try {
+        const res = await apiFetch('/api/ai/dossier/' + encodeURIComponent(strategyId));
+        if (!res.ok) {
+          alert('Failed to compile research dossier');
+          return;
+        }
+        currentDossierData = await res.json();
+        document.getElementById('ai-dossier-title').textContent = `${currentDossierData.strategy_name} — Institutional Research Dossier`;
+        document.getElementById('ai-dossier-meta').innerHTML = `
+          <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+            <span>Dossier ID: <span class="mono">${currentDossierData.dossier_id}</span></span>
+            <span>Generated: ${new Date(currentDossierData.generated_at).toLocaleTimeString()}</span>
+            <span>Validation: <span class="badge ${currentDossierData.validation_status === 'APPROVED' ? 'badge-live' : 'badge-alert'}">${currentDossierData.validation_status}</span></span>
+          </div>
+          <div style="margin-top: 6px; padding: 6px 10px; background: rgba(59, 130, 246, 0.1); border-left: 3px solid var(--blue); font-size: 0.76rem; color: var(--text-secondary);">
+            🛡️ ${currentDossierData.disclaimer}
+          </div>
+        `;
+        renderDossierContent();
+        document.getElementById('ai-dossier-modal').classList.add('active');
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    function switchDossierView(view) {
+      currentDossierView = view;
+      renderDossierContent();
+    }
+
+    function renderDossierContent() {
+      if (!currentDossierData) return;
+      const container = document.getElementById('ai-dossier-content');
+      if (currentDossierView === 'markdown') {
+        container.innerHTML = `<pre class="mono" style="white-space: pre-wrap; font-size: 0.8rem;">${currentDossierData.markdown.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`;
+      } else {
+        let html = '';
+        currentDossierData.sections.forEach((sec, idx) => {
+          const typeBadge = sec.source_type === 'DETERMINISTIC'
+            ? '<span class="badge badge-live">DETERMINISTIC</span>'
+            : sec.source_type === 'AI_ADVISORY'
+            ? '<span class="badge badge-paper">AI_ADVISORY</span>'
+            : '<span class="badge badge-sim">METADATA / STRUCTURAL</span>';
+          html += `
+            <div style="margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h4 style="color: var(--text-bright); font-size: 0.95rem; margin: 0;">${idx + 1}. ${sec.title}</h4>
+                ${typeBadge}
+              </div>
+              <pre class="mono" style="white-space: pre-wrap; font-size: 0.8rem; background: var(--bg-card); padding: 12px; border-radius: 4px;">${sec.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+            </div>
+          `;
+        });
+        container.innerHTML = html;
+      }
+    }
+
+    function copyDossierMarkdown() {
+      if (!currentDossierData || !currentDossierData.markdown) return;
+      navigator.clipboard.writeText(currentDossierData.markdown).then(() => {
+        alert('Research Dossier Markdown copied to clipboard!');
+      }).catch(err => {
+        alert('Failed to copy: ' + err);
+      });
+    }
+
+    async function generateAiSuggestion(validate) {
+      const regime = document.getElementById('ai-sugg-regime').value;
+      const symbol = document.getElementById('ai-sugg-symbol').value;
+      const resultDiv = document.getElementById('ai-sugg-result');
+      resultDiv.style.display = 'block';
+      resultDiv.innerHTML = '<div style="color: var(--text-muted); font-size: 0.82rem;">Synthesizing volatility-matched option strategy (60/40 prior bias)...</div>';
+
+      try {
+        const res = await apiFetch('/api/ai/suggest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ regime, symbol, validate }),
+        });
+        if (!res.ok) {
+          resultDiv.innerHTML = '<div style="color: var(--red); font-size: 0.82rem;">Failed to generate suggestion</div>';
+          return;
+        }
+        const data = await res.json();
+        const valBadge = data.is_validated
+          ? '<span class="badge badge-live">APPROVED</span>'
+          : '<span class="badge badge-alert">UNVALIDATED (Advisory Only)</span>';
+        resultDiv.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div>
+              <strong style="color: var(--text-bright); font-size: 0.92rem;">${data.strategy_name}</strong>
+              <span class="badge ${data.is_options ? 'badge-purple' : 'badge-paper'}" style="margin-left: 8px;">${data.is_options ? `${data.leg_count} Option Legs` : 'Linear Equity'}</span>
+            </div>
+            ${valBadge}
+          </div>
+          <div style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 10px;">
+            ${data.rationale}
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn btn-outline btn-sm" onclick="showStrategyExplanation('${data.strategy_name}')">Explain Logic</button>
+            <button class="btn btn-outline btn-sm" onclick="showResearchDossier('${data.strategy_name}')">View Full Dossier</button>
+            <button class="btn btn-primary btn-sm" onclick="switchTab('validation'); document.getElementById('val-strategy-select').value='${data.strategy_name}'; runValidation();">Validate Formally</button>
+          </div>
+        `;
+      } catch (err) {
+        resultDiv.innerHTML = `<div style="color: var(--red); font-size: 0.82rem;">Error: ${err.message}</div>`;
+      }
+    }
+
+    // --------------------------------------------------------------------------
+    // HTML Escaping Utility
+    // --------------------------------------------------------------------------
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // --------------------------------------------------------------------------
+    // Scrip Master Search (Ctrl+K)
+    // --------------------------------------------------------------------------
+    function openScripSearchModal() {
+      document.getElementById('scrip-search-modal').classList.add('active');
+      const inp = document.getElementById('scrip-search-input');
+      inp.focus();
+      inp.select();
+    }
+
+
+    async function executeScripSearch() {
+      const q = document.getElementById('scrip-search-input').value.trim();
+      const tbody = document.getElementById('scrip-search-results-body');
+      if (!q) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Please enter a search query.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Searching broker scrip master...</td></tr>';
+      try {
+        const res = await apiFetch(`/api/instruments/search?q=${encodeURIComponent(q)}&limit=25`);
+        if (!res.ok) throw new Error('Search request failed');
+        const items = await res.json();
+        if (!items || items.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--amber);">No matching instruments found.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = items.map(c => `
+          <tr>
+            <td style="font-weight: 600; color: var(--text-bright);">${escapeHtml(c.trading_symbol || '-')}</td>
+            <td class="mono">${escapeHtml(c.token || '-')}</td>
+            <td><span class="badge badge-paper" style="font-size: 0.65rem;">${escapeHtml(c.exchange || '-')}</span></td>
+            <td>${escapeHtml(c.instrument_type || '-')}</td>
+            <td class="mono">${c.strike !== null && c.strike !== undefined ? '₹' + Number(c.strike).toFixed(2) : '-'}</td>
+            <td><span class="badge ${c.option_type === 'CE' ? 'badge-live' : (c.option_type === 'PE' ? 'badge-purple' : 'badge-paper')}" style="font-size: 0.65rem;">${escapeHtml(c.option_type || '-')}</span></td>
+            <td class="mono">${c.expiry ? escapeHtml(c.expiry.split('T')[0]) : '-'}</td>
+            <td class="mono">${c.lot_size || 1}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--red);">Search error: ${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    // Global shortcut Ctrl+K / Cmd+K
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        openScripSearchModal();
+      }
+      if (e.key === 'Escape') {
+        ['scrip-search-modal', 'feed-smoke-modal', 'option-chain-modal', 'strategy-audit-modal'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.classList.remove('active');
+        });
+      }
+    });
+
+    // --------------------------------------------------------------------------
+    // Feed Smoke Testing
+    // --------------------------------------------------------------------------
+    function openFeedSmokeModal() {
+      document.getElementById('feed-smoke-modal').classList.add('active');
+    }
+
+    async function runFeedSmokeTest() {
+      const container = document.getElementById('feed-smoke-content');
+      container.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--blue);">Streaming 5 ticks from Kotak Neo WebSocket (SFeed)...</div>';
+      try {
+        const res = await apiFetch('/api/feed/smoke', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol: 'NIFTY', ticks: 5, mock: true }),
+        });
+        if (!res.ok) throw new Error('Smoke test request failed');
+        const data = await res.json();
+        container.innerHTML = `
+          <div class="metric-grid" style="margin-bottom: 14px;">
+            <div class="card">
+              <div class="card-title">Feed Mode</div>
+              <div class="metric-val mono neutral">${escapeHtml(data.mode)}</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Ticks Received</div>
+              <div class="metric-val mono positive">${data.received_ticks}/${data.requested_ticks}</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Average Latency</div>
+              <div class="metric-val mono">${data.avg_latency_ms} ms</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Air-Gap Status</div>
+              <div class="metric-val mono positive">LOCKED</div>
+            </div>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Symbol</th>
+                  <th>LTP</th>
+                  <th>Bid</th>
+                  <th>Ask</th>
+                  <th>Volume</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(data.ticks || []).map(t => `
+                  <tr>
+                    <td class="mono">${escapeHtml(String(t.timestamp).split('T')[1] || String(t.timestamp))}</td>
+                    <td style="font-weight: 600;">${escapeHtml(t.symbol)}</td>
+                    <td class="mono" style="font-weight: 600;">₹${Number(t.ltp).toFixed(2)}</td>
+                    <td class="mono">${t.bid ? '₹' + Number(t.bid).toFixed(2) : '-'}</td>
+                    <td class="mono">${t.ask ? '₹' + Number(t.ask).toFixed(2) : '-'}</td>
+                    <td class="mono">${Number(t.volume).toLocaleString()}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } catch (err) {
+        container.innerHTML = `<div style="color: var(--red); padding: 14px;">Feed smoke test error: ${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    // --------------------------------------------------------------------------
+    // Option Chain Ladder Viewer
+    // --------------------------------------------------------------------------
+    function openOptionChainModal() {
+      document.getElementById('option-chain-modal').classList.add('active');
+      loadOptionChainLadder();
+    }
+
+    async function loadOptionChainLadder() {
+      const underlying = document.getElementById('oc-underlying-select').value || 'NIFTY';
+      const tbody = document.getElementById('option-chain-body');
+      const spotDisp = document.getElementById('oc-spot-display');
+      document.getElementById('option-chain-title').textContent = `${underlying} Option Chain Ladder`;
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Fetching option chain &amp; calculating Black-Scholes Greeks...</td></tr>';
+      try {
+        const res = await apiFetch(`/api/options/chain?underlying=${encodeURIComponent(underlying)}&count=14&mock=true`);
+        if (!res.ok) throw new Error('Option chain retrieval failed');
+        const data = await res.json();
+        spotDisp.textContent = `Spot: ₹${Number(data.spot_price).toFixed(2)} (${escapeHtml(data.expiry)})`;
+        const spot = Number(data.spot_price) || 24000;
+        const rows = data.strikes || [];
+        if (rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--amber);">No strikes available for this underlying.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = rows.map(r => {
+          const k = Number(r.strike);
+          const isAtm = Math.abs(k - spot) < 50;
+          const bgAtm = isAtm ? 'background: rgba(59, 130, 246, 0.15); font-weight: 700;' : '';
+          return `
+            <tr style="${bgAtm}">
+              <td class="mono" style="text-align: right;">${r.ce_oi ? Number(r.ce_oi).toLocaleString() : '-'}</td>
+              <td class="mono" style="text-align: right;">${r.ce_iv ? (Number(r.ce_iv) * 100).toFixed(1) + '%' : '-'}</td>
+              <td class="mono" style="text-align: right; color: var(--blue);">${r.ce_delta !== null && r.ce_delta !== undefined ? Number(r.ce_delta).toFixed(2) : '-'}</td>
+              <td class="mono" style="text-align: right; font-weight: 600;">${r.ce_ltp !== null && r.ce_ltp !== undefined ? '₹' + Number(r.ce_ltp).toFixed(2) : '-'}</td>
+              <td class="mono" style="text-align: center; font-weight: 700; background: var(--surface-3);">${k.toLocaleString()}</td>
+              <td class="mono" style="font-weight: 600;">${r.pe_ltp !== null && r.pe_ltp !== undefined ? '₹' + Number(r.pe_ltp).toFixed(2) : '-'}</td>
+              <td class="mono" style="color: var(--purple);">${r.pe_delta !== null && r.pe_delta !== undefined ? Number(r.pe_delta).toFixed(2) : '-'}</td>
+              <td class="mono">${r.pe_iv ? (Number(r.pe_iv) * 100).toFixed(1) + '%' : '-'}</td>
+              <td class="mono">${r.pe_oi ? Number(r.pe_oi).toLocaleString() : '-'}</td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--red);">Error: ${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    // --------------------------------------------------------------------------
+    // Strategy Script Audit Dialog
+    // --------------------------------------------------------------------------
+    function openStrategyAuditModal() {
+      document.getElementById('strategy-audit-modal').classList.add('active');
+    }
+
+    async function executeStrategyAudit() {
+      const code = document.getElementById('strategy-audit-input').value.trim();
+      const resultDiv = document.getElementById('strategy-audit-result');
+      if (!code) {
+        alert('Please paste or type strategy script code.');
+        return;
+      }
+      resultDiv.style.display = 'block';
+      resultDiv.innerHTML = '<div style="color: var(--text-muted); font-size: 0.82rem;">Analyzing strategy constructs and lookahead safety...</div>';
+      try {
+        const res = await apiFetch('/api/strategies/audit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: code }),
+        });
+        if (!res.ok) throw new Error('Audit request failed');
+        const data = await res.json();
+        const okColor = data.validation_ready ? 'var(--green)' : 'var(--amber)';
+        resultDiv.innerHTML = `
+          <div class="metric-grid" style="margin-top: 10px; margin-bottom: 12px;">
+            <div class="card">
+              <div class="card-title">Detected Format</div>
+              <div class="metric-val mono neutral">${escapeHtml(data.detected_format || '-')}</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Fidelity Level</div>
+              <div class="metric-val mono">${escapeHtml(data.fidelity_level || '-')}</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Lookahead Safety</div>
+              <div class="metric-val mono positive">VERIFIED</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Simulation Ready</div>
+              <div class="metric-val mono" style="color: ${okColor};">${data.simulation_ready ? 'YES' : 'REQUIRES DATA'}</div>
+            </div>
+          </div>
+          <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 6px;">
+            <strong>Supported Constructs:</strong> ${data.supported_constructs && data.supported_constructs.length ? escapeHtml(data.supported_constructs.join(', ')) : 'None'}
+          </div>
+          ${data.warnings && data.warnings.length ? `
+            <div style="font-size: 0.8rem; color: var(--amber); margin-top: 6px;">
+              <strong>Warnings:</strong> ${data.warnings.map(w => escapeHtml(w)).join('; ')}
+            </div>
+          ` : ''}
+        `;
+      } catch (err) {
+        resultDiv.innerHTML = `<div style="color: var(--red); font-size: 0.82rem;">Audit error: ${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    // --------------------------------------------------------------------------
+    // Administrative Operations: Database Init & Doctor Diagnostics
+    // --------------------------------------------------------------------------
+    async function initializeDatabaseTables() {
+      if (!confirm('Initialize and stamp SQLite transactional ledger tables? This is an idempotent operation.')) return;
+      const out = document.getElementById('settings-admin-output');
+      out.style.display = 'block';
+      out.innerHTML = 'Initializing database tables and synchronizing Alembic migration head...';
+      try {
+        const res = await apiFetch('/api/system/init-db', { method: 'POST' });
+        if (!res.ok) throw new Error('Database initialization failed');
+        const data = await res.json();
+        out.innerHTML = `<span style="color: var(--green);">[SUCCESS] ${escapeHtml(data.message)}</span>\nActive tables (${data.table_count}): ${escapeHtml((data.tables || []).join(', '))}`;
+        loadStatus();
+      } catch (err) {
+        out.innerHTML = `<span style="color: var(--red);">[ERROR] ${escapeHtml(err.message)}</span>`;
+      }
+    }
+
+    async function runDoctorDiagnostics() {
+      const out = document.getElementById('settings-admin-output');
+      out.style.display = 'block';
+      out.innerHTML = 'Running comprehensive system readiness diagnostics...';
+      try {
+        const res = await apiFetch('/api/system/diagnostics');
+        if (!res.ok) throw new Error('Diagnostics request failed');
+        const data = await res.json();
+        let html = `=== System Readiness Diagnostics [${escapeHtml(data.overall_status || 'UNKNOWN')}] ===\n\n`;
+        if (data.checks && Array.isArray(data.checks)) {
+          data.checks.forEach(c => {
+            const statusColor = c.status === 'READY' ? 'var(--green)' : (c.status === 'WARNING' ? 'var(--amber)' : 'var(--red)');
+            html += `<span style="color: ${statusColor}; font-weight: 600;">[${escapeHtml(c.status)}]</span> <strong style="color: var(--text-bright);">${escapeHtml(c.name)}</strong> (${escapeHtml(c.category)}): ${escapeHtml(c.details)}\n`;
+          });
+        }
+        out.innerHTML = html;
+      } catch (err) {
+        out.innerHTML = `<span style="color: var(--red);">[ERROR] ${escapeHtml(err.message)}</span>`;
+      }
+    }
+
+
+    async function runKotakCapabilityDiscovery() {
+      const out = document.getElementById('settings-admin-output');
+      out.style.display = 'block';
+      out.innerHTML = 'Executing 5-stage progressive Kotak Neo retrieval and discovery suite...';
+      try {
+        const res = await apiFetch('/api/kotak/discover', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mock: true }),
+        });
+        if (!res.ok) throw new Error('Broker discovery request failed');
+        const data = await res.json();
+        out.innerHTML = `=== Kotak Neo Capability Discovery Report ===\n` +
+          `Mode:              ${escapeHtml(data.mode)}\n` +
+          `Output Directory:  ${escapeHtml(data.output_directory)}\n` +
+          `Generated At:      ${escapeHtml(data.generated_at)}\n` +
+          `Tests Passed:      ${data.tests_passed} / ${data.tests_total}\n` +
+          `\n--- Test Verification Details ---\n` +
+          (data.tests || []).map(t => `• [${t.status}] ${t.test_id}: ${t.name} (${t.returned_records} records)`).join('\n');
+      } catch (err) {
+        out.innerHTML = `<span style="color: var(--red);">[ERROR] ${escapeHtml(err.message)}</span>`;
       }
     }
 

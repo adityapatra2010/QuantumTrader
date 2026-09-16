@@ -36,8 +36,10 @@ from aditrader.data.adapters.kotak_neo import HAS_NEO_SDK
 from aditrader.data.feeds.nse_csv import NSECSVInspector
 from aditrader.data.session import EXCHANGE_TIMEZONE
 from aditrader.strategy.library.registry import StrategyRegistry
+from aditrader.system.operations import SystemOperationsService
 from aditrader.web.services import (
     ActiveRunManager,
+    AIServiceBridge,
     DatasetService,
     ProviderSettingsManager,
     SessionManager,
@@ -46,7 +48,7 @@ from aditrader.web.services import (
     get_completed_runs,
     mask_secret,
 )
-from aditrader.web.ui import DASHBOARD_HTML
+from aditrader.web.ui import get_dashboard_html
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +163,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         path = parsed.path
 
         if path in ("/", "/index.html"):
-            self._send_html(DASHBOARD_HTML)
+            self._send_html(get_dashboard_html())
             return
 
         if path == "/favicon.ico":
@@ -172,6 +174,18 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         # 1. System & Session APIs
         if path == "/api/status":
             self._handle_get_status()
+            return
+
+        if path == "/api/system/diagnostics":
+            self._handle_get_system_diagnostics()
+            return
+
+        if path == "/api/instruments/search":
+            self._handle_get_instruments_search(parsed.query)
+            return
+
+        if path == "/api/options/chain":
+            self._handle_get_option_chain(parsed.query)
             return
 
         if path == "/api/auth/session":
@@ -242,6 +256,26 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._handle_get_settings()
             return
 
+        # 7. AI Research APIs (Phase 7)
+        if path == "/api/ai/catalog":
+            self._handle_get_ai_catalog()
+            return
+
+        if path.startswith("/api/ai/explain/"):
+            strategy_id = unquote(path[len("/api/ai/explain/") :])
+            self._handle_get_ai_explain(strategy_id)
+            return
+
+        if path.startswith("/api/ai/review/"):
+            strategy_id = unquote(path[len("/api/ai/review/") :])
+            self._handle_get_ai_review(strategy_id)
+            return
+
+        if path.startswith("/api/ai/dossier/"):
+            strategy_id = unquote(path[len("/api/ai/dossier/") :])
+            self._handle_get_ai_dossier(strategy_id)
+            return
+
         self._send_error_json("Resource not found", status=HTTPStatus.NOT_FOUND)
 
     def do_POST(self) -> None:
@@ -249,7 +283,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
-        # 1. Session APIs
+        # 1. Session & System APIs
+        if path == "/api/system/init-db":
+            self._handle_post_system_init_db()
+            return
+
         if path == "/api/auth/session":
             self._handle_post_session_unlock()
             return
@@ -258,12 +296,24 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._handle_post_session_logout()
             return
 
-        # 2. Datasets & Inspection
+        # 2. Datasets & Feeds
         if path == "/api/inspect-data":
             self._handle_post_inspect()
             return
 
+        if path == "/api/feed/smoke":
+            self._handle_post_feed_smoke()
+            return
+
+        if path == "/api/kotak/discover":
+            self._handle_post_kotak_discover()
+            return
+
         # 3. Strategy Validation & Compatibility
+        if path == "/api/strategies/audit":
+            self._handle_post_strategy_audit()
+            return
+
         if path == "/api/validate-strategy":
             self._handle_post_validate_strategy()
             return
@@ -300,6 +350,27 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         if path in ("/api/settings/providers", "/api/settings/providers/update"):
             self._handle_post_update_provider()
+            return
+
+        # 6. AI Research APIs (Phase 7)
+        if path == "/api/ai/suggest":
+            self._handle_post_ai_suggest()
+            return
+
+        if path == "/api/ai/forecast":
+            self._handle_post_ai_forecast()
+            return
+
+        if path == "/api/ai/explain":
+            self._handle_post_ai_explain()
+            return
+
+        if path == "/api/ai/review":
+            self._handle_post_ai_review()
+            return
+
+        if path == "/api/ai/dossier":
+            self._handle_post_ai_dossier()
             return
 
         self._send_error_json("Endpoint not supported", status=HTTPStatus.NOT_FOUND)
@@ -499,6 +570,133 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             "recent_orders": recent_orders,
         }
         self._send_json(payload)
+
+    def _handle_get_system_diagnostics(self) -> None:
+        """Handle GET /api/system/diagnostics."""
+        res = SystemOperationsService.run_diagnostics()
+        self._send_json(res)
+
+    def _handle_get_instruments_search(self, query: str) -> None:
+        """Handle GET /api/instruments/search."""
+        qs = parse_qs(query)
+        q = qs.get("q", [""])[0]
+        try:
+            limit = int(qs.get("limit", [20])[0])
+        except (ValueError, TypeError):
+            limit = 20
+        res = SystemOperationsService.search_instruments(query=q, limit=limit)
+        self._send_json(res)
+
+    def _handle_get_option_chain(self, query: str) -> None:
+        """Handle GET /api/options/chain."""
+        qs = parse_qs(query)
+        underlying = qs.get("underlying", ["NIFTY"])[0]
+        expiry = qs.get("expiry", [None])[0]
+        try:
+            count = int(qs.get("count", [20])[0])
+        except (ValueError, TypeError):
+            count = 20
+        mock_val = qs.get("mock", ["true"])[0].lower()
+        mock = mock_val in ("true", "1", "yes")
+        try:
+            res = SystemOperationsService.get_option_chain_snapshot(
+                underlying=underlying,
+                expiry=expiry,
+                count=count,
+                mock=mock,
+            )
+            self._send_json(res)
+        except Exception as exc:
+            self._send_error_json(
+                f"Option chain retrieval failed: {exc}", status=HTTPStatus.BAD_REQUEST
+            )
+
+    def _handle_post_system_init_db(self) -> None:
+        """Handle POST /api/system/init-db."""
+        try:
+            res = SystemOperationsService.initialize_database()
+            self._send_json(res)
+        except Exception as exc:
+            self._send_error_json(
+                f"Database initialization failed: {exc}",
+                status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    def _handle_post_strategy_audit(self) -> None:
+        """Handle POST /api/strategies/audit."""
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+        content = payload.get("content")
+        file_path_str = payload.get("path")
+        filename: str | None = None
+
+        if file_path_str:
+            p = Path(file_path_str)
+            if not _is_safe_file_path(p):
+                self._send_error_json(
+                    "Access to specified file path is prohibited", status=HTTPStatus.FORBIDDEN
+                )
+                return
+            if not p.exists() or not p.is_file():
+                self._send_error_json(
+                    f"File not found: {file_path_str}", status=HTTPStatus.NOT_FOUND
+                )
+                return
+            try:
+                content = p.read_text(encoding="utf-8", errors="replace")
+                filename = p.name
+            except Exception as exc:
+                self._send_error_json(
+                    f"Cannot read strategy file: {exc}", status=HTTPStatus.BAD_REQUEST
+                )
+                return
+
+        if not content:
+            self._send_error_json(
+                "Missing 'content' or 'path' in payload", status=HTTPStatus.BAD_REQUEST
+            )
+            return
+
+        res = SystemOperationsService.inspect_strategy_content(content=content, filename=filename)
+        self._send_json(res)
+
+    def _handle_post_feed_smoke(self) -> None:
+        """Handle POST /api/feed/smoke."""
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+        symbol = str(payload.get("symbol", "NIFTY"))
+        try:
+            ticks = int(payload.get("ticks", 5))
+        except (ValueError, TypeError):
+            ticks = 5
+        mock = bool(payload.get("mock", True))
+        try:
+            res = SystemOperationsService.run_feed_smoke_test(
+                symbol=symbol,
+                ticks=ticks,
+                mock=mock,
+            )
+            self._send_json(res)
+        except Exception as exc:
+            self._send_error_json(f"Feed smoke test failed: {exc}", status=HTTPStatus.BAD_REQUEST)
+
+    def _handle_post_kotak_discover(self) -> None:
+        """Handle POST /api/kotak/discover."""
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+        output_dir = payload.get("output_dir")
+        mock = bool(payload.get("mock", True))
+        try:
+            res = SystemOperationsService.run_broker_discovery(
+                output_dir=output_dir,
+                mock=mock,
+            )
+            self._send_json(res)
+        except Exception as exc:
+            self._send_error_json(f"Broker discovery failed: {exc}", status=HTTPStatus.BAD_REQUEST)
 
     def _handle_get_session(self) -> None:
         """Return active session information."""
@@ -1096,7 +1294,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if dataset_path:
             norm_path = Path(dataset_path).resolve()
             project_root = Path.cwd().resolve()
-            if not str(norm_path).startswith(str(project_root)):
+            if not norm_path.is_relative_to(project_root):
                 self._send_error_json("Access denied: 'dataset_path' must reside within workspace")
                 return
 
@@ -1109,6 +1307,166 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._send_json(result)
         except Exception as exc:
             self._send_error_json(f"Recalculation failed: {exc}")
+
+    # --------------------------------------------------------------------------
+    # Handlers: AI Research Runtime (Phase 7)
+    # --------------------------------------------------------------------------
+
+    def _handle_get_ai_catalog(self) -> None:
+        """Return registered AI forecasting, teacher, and review models."""
+        catalog = AIServiceBridge.get_ai_catalog()
+        self._send_json(catalog)
+
+    def _handle_get_ai_explain(self, strategy_id: str) -> None:
+        """Generate educational explanation for a registered strategy."""
+        result = AIServiceBridge.explain_strategy(strategy_id)
+        if not result:
+            self._send_error_json(
+                f"Strategy '{strategy_id}' not found", status=HTTPStatus.NOT_FOUND
+            )
+            return
+        self._send_json(result)
+
+    def _handle_get_ai_review(self, strategy_id: str) -> None:
+        """Generate hostile adversarial review for a registered strategy."""
+        result = AIServiceBridge.review_strategy(strategy_id)
+        if not result:
+            self._send_error_json(
+                f"Strategy '{strategy_id}' not found", status=HTTPStatus.NOT_FOUND
+            )
+            return
+        self._send_json(result)
+
+    def _handle_get_ai_dossier(self, strategy_id: str) -> None:
+        """Compile and return comprehensive research dossier."""
+        result = AIServiceBridge.compile_dossier(strategy_id)
+        if not result:
+            self._send_error_json(
+                f"Strategy '{strategy_id}' not found", status=HTTPStatus.NOT_FOUND
+            )
+            return
+        self._send_json(result)
+
+    def _handle_post_ai_suggest(self) -> None:
+        """Propose strategy template matching regime and 60/40 prior bias."""
+        payload = self._read_json_payload() or {}
+        regime = payload.get("regime", "NORMAL_VOLATILITY")
+        symbol = payload.get("symbol", "NIFTY")
+        bias_sell_pct = float(payload.get("bias_sell_pct", 0.60))
+        validate = bool(payload.get("validate", False))
+
+        try:
+            result = AIServiceBridge.suggest_strategy(
+                regime=regime,
+                symbol=symbol,
+                bias_sell_pct=bias_sell_pct,
+                validate=validate,
+            )
+            self._send_json(result)
+        except Exception as exc:
+            self._send_error_json(f"Failed to generate strategy suggestion: {exc}")
+
+    def _handle_post_ai_forecast(self) -> None:
+        """Generate point-in-time probabilistic forecast."""
+        payload = self._read_json_payload() or {}
+        symbol = payload.get("symbol", "NIFTY")
+        timeframe = payload.get("timeframe", "5m")
+        horizon_bars = int(payload.get("horizon", 5))
+        model_id = payload.get("model", "heuristic-drift-v1")
+        dataset_path = payload.get("dataset_path")
+
+        if dataset_path:
+            norm_path = Path(dataset_path).resolve()
+            project_root = Path.cwd().resolve()
+            if not norm_path.is_relative_to(project_root) or not _is_safe_file_path(norm_path):
+                self._send_error_json(
+                    "Access denied: 'dataset_path' must reside within workspace",
+                    status=HTTPStatus.FORBIDDEN,
+                )
+                return
+
+        try:
+            result = AIServiceBridge.forecast_series(
+                symbol=symbol,
+                timeframe=timeframe,
+                horizon_bars=horizon_bars,
+                model_id=model_id,
+                dataset_path=dataset_path,
+            )
+            self._send_json(result)
+        except Exception as exc:
+            self._send_error_json(f"Forecasting engine error: {exc}")
+
+    def _handle_post_ai_explain(self) -> None:
+        """Generate educational explanation from POST payload."""
+        payload = self._read_json_payload() or {}
+        strategy_id = payload.get("strategy_id")
+        if not strategy_id:
+            self._send_error_json("Missing required field 'strategy_id'")
+            return
+        self._handle_get_ai_explain(strategy_id)
+
+    def _handle_post_ai_review(self) -> None:
+        """Generate advisory review from POST payload."""
+        payload = self._read_json_payload() or {}
+        strategy_id = payload.get("strategy_id")
+        if not strategy_id:
+            self._send_error_json("Missing required field 'strategy_id'")
+            return
+        policy_name = payload.get("policy", "institutional")
+        dataset_path = payload.get("dataset_path")
+        if dataset_path:
+            norm_path = Path(dataset_path).resolve()
+            project_root = Path.cwd().resolve()
+            if not norm_path.is_relative_to(project_root) or not _is_safe_file_path(norm_path):
+                self._send_error_json(
+                    "Access denied: 'dataset_path' must reside within workspace",
+                    status=HTTPStatus.FORBIDDEN,
+                )
+                return
+
+        result = AIServiceBridge.review_strategy(
+            strategy_id=strategy_id,
+            policy_name=policy_name,
+            dataset_path=dataset_path,
+        )
+        if not result:
+            self._send_error_json(
+                f"Strategy '{strategy_id}' not found", status=HTTPStatus.NOT_FOUND
+            )
+            return
+        self._send_json(result)
+
+    def _handle_post_ai_dossier(self) -> None:
+        """Compile research dossier from POST payload."""
+        payload = self._read_json_payload() or {}
+        strategy_id = payload.get("strategy_id")
+        if not strategy_id:
+            self._send_error_json("Missing required field 'strategy_id'")
+            return
+        policy_name = payload.get("policy", "institutional")
+        dataset_path = payload.get("dataset_path")
+        if dataset_path:
+            norm_path = Path(dataset_path).resolve()
+            project_root = Path.cwd().resolve()
+            if not norm_path.is_relative_to(project_root) or not _is_safe_file_path(norm_path):
+                self._send_error_json(
+                    "Access denied: 'dataset_path' must reside within workspace",
+                    status=HTTPStatus.FORBIDDEN,
+                )
+                return
+
+        result = AIServiceBridge.compile_dossier(
+            strategy_id=strategy_id,
+            policy_name=policy_name,
+            dataset_path=dataset_path,
+        )
+        if not result:
+            self._send_error_json(
+                f"Strategy '{strategy_id}' not found", status=HTTPStatus.NOT_FOUND
+            )
+            return
+        self._send_json(result)
 
 
 class DashboardServer:

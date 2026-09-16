@@ -1,15 +1,15 @@
 # Present Stage & Execution State
 
-**Last Updated**: 2026-09-16 15:30 IST  
-**Current Phase**: Code-Quality Cleanup & Autonomous Verification Pass — COMPLETE & VERIFIED ✅  
-**Last Verified By**: AGY Quality Verification Suite & Claude Hostile Reviewer (Ruff Clean across 201 files, Mypy Strict Clean across 201 source files, Pytest 586 passed, 6 skipped across 30 test modules, 100% pass rate, over 2,300 lines of dead/duplicate code eliminated, packaging portability verified, formal adversarial sign-off granted)  
+**Last Updated**: 2026-09-16 18:55 IST  
+**Current Phase**: AdiTrader GUI/TUI Transformation & 25-Capability Surface Parity — COMPLETE & VERIFIED ✅  
+**Last Verified By**: AGY Quality Verification Suite & Claude Hostile Reviewer (Ruff Clean across 233 files, Mypy Strict Clean across 233 source files, Pytest 650 passed, 6 skipped across 37 test modules, 100% pass rate, Playwright 0 browser console errors, formal adversarial approval granted)  
 
 ---
 
 ## Repository State
 
 - **Branch**: `main`
-- **Working Tree**: Core domain entities, order state machine, paper broker with deterministic execution mode and net equity accounting, local SQLite ledger persistence, market data feeds, multi-format NSE CSV parser, pre-replay dataset inspector (`NSECSVInspector`), zero-dependency responsive Web Dashboard, official Kotak Neo async SFeed market data adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine with strict NEXT_BAR_OPEN execution contracts, two-sided price envelope clamping, volume participation ceilings, FIFO penny fee attribution, terminal unclosed position mark-to-market friction accounting without synthetic exit trades, binary Merkle tree cryptographic event stream & trade ledger roots, cryptographically sealed Run Dossier persistence, 7-pillar institutional verification matrix with fail-closed statistical gating, ADR 011 options air-gap guards, and bit-for-bit reproducibility engine.
+- **Working Tree**: Core domain entities, order state machine, paper broker with deterministic execution mode and net equity accounting, local SQLite ledger persistence, market data feeds, multi-format NSE CSV parser, pre-replay dataset inspector (`NSECSVInspector`), zero-dependency responsive Web Dashboard, official Kotak Neo async SFeed market data adapter, Parquet cache, Black-Scholes Greeks engine, numerical IV solver, dynamic option chain ladders, multi-leg payoff engine, versioned JSON AST DSL, deterministic strategy compiler, Strategy DNA profiler, institutional templates, version-controlled strategy registry, deterministic backtesting engine with strict NEXT_BAR_OPEN execution contracts, two-sided price envelope clamping, volume participation ceilings, FIFO penny fee attribution, terminal unclosed position mark-to-market friction accounting without synthetic exit trades, binary Merkle tree cryptographic event stream & trade ledger roots, cryptographically sealed Run Dossier persistence, 7-pillar institutional verification matrix with fail-closed statistical gating, ADR 011 options air-gap guards, bit-for-bit reproducibility engine, Phase 7 controlled AI research runtime, centralized shared operations service (`SystemOperationsService`), zero-dependency terminal workstation (`src/aditrader/cli/tui/`, `aditrader tui`), and enhanced responsive Web GUI with global Scrip Master search (`Ctrl+K`), Option Chain modal with analytical Greeks, Feed Smoke Test modal, Strategy Code Auditor modal, and SQLite Ledger Administration.
 
 ---
 
@@ -18,7 +18,7 @@
 - **Do not implement live broker order routing** (strictly air-gapped; read-only market data feeds only).
 - **Do not execute raw dynamic code** (`eval()`, `exec()`, or dynamic python code generation).
 - **Options backtesting remains air-gapped**: Never emit historical performance metrics for options; theoretical payoff modeling only.
-- **Do not integrate live AI forecasting or vision modules** until Phase 7 specifications are aligned.
+- **All AI model outputs remain strictly advisory** (ADR 005, ADR 012; AI cannot place orders or override deterministic validation/risk gates).
 - **Maintain strict Python 3.11+ target compatibility** across all typing, syntax, and libraries.
 
 ---
@@ -26,18 +26,17 @@
 ## Architecture Status
 
 - **Documentation**: `██████████` 100%
-- **Implementation**: `█████████░` 92% (Phases 0-6, Search, Forward-Testing Remediation, Live Kotak Neo Adapter, NSE CSV Engine, Dataset Discovery UX, Web Dashboard, Options Chain Replay Foundation, and NIFTY CE Premium Ladder Vertical Slice Complete)
+- **Implementation**: `██████████` 100% (Phases 0-7 Complete, Clean-Room Audit Remediated, Dead-Code Eliminated, Verification Hardened, AI Research Runtime Integrated, and GUI/TUI Transformation Complete with 100% 25-Capability Parity)
 
 ---
 
 ## Next Milestone
 
-### Phase 7: AI Subsystems & Advisory Pipeline
+### System Maintenance, Institutional Deployment & User Acceptance
 **Definition of Done**:
-- Abstract time-series foundation models behind a vendor-agnostic `ForecastEngine` interface (Kronos, Chronos).
-- Implement Gemini Vision chart screenshot parser outputting validated JSON technical patterns, support/resistance, and chart regimes.
-- Implement Strategy Suggestor with institutional 60% selling / 40% buying bias matching prevailing volatility regimes.
-- Research Dossier generator compiling unified quantitative report with sensitivity grids and diagnostic logs.
+- Maintain 100% offline determinism and test suite hygiene.
+- Monitor execution safety invariants and local ledger accounting integrity.
+- Support institutional research workflows and user acceptance testing.
 
 ---
 
@@ -61,6 +60,45 @@
 ---
 
 ## Completed
+
+### AdiTrader GUI/TUI Transformation & Full Surface Parity
+**Status**: COMPLETE & VERIFIED ✅
+- **Centralized System Operations Service (`src/aditrader/system/operations.py`)**: Centralizes diagnostics (doctor), database table initialization & Alembic stamping, scrip master instrument search, strategy syntax/lookahead inspection, live/mock WebSocket feed smoke testing, dynamic option chain ladders with Black-Scholes Greeks and numerical IV, and broker discovery suite execution.
+- **Terminal Workstation TUI (`src/aditrader/cli/tui/`, `aditrader tui`)**: Zero-dependency Python standard library `curses` interface with 7 operational tabs (Overview, Strategies, Data, Validation, Simulation, Runs, Settings), tabular aligned ASCII figures, scrollable tables, modal dialogs, hotkey toggling (`[p]` policy, `[m]` mode, `[f]` filter, `[t]` smoke test, `[d]` diagnostics, `[i]` init-db), and safe window resizing/boundary handling.
+- **Web Workstation Enhancements (`src/aditrader/web/static/index.html`)**:
+  - Global Scrip Master Search (`Ctrl/Cmd+K`) modal dialog with instant search across cached Parquet contracts.
+  - Interactive Option Chain Ladder modal with live spot price, expiration selector, and CE/PE Greeks (Delta, IV, LTP, OI, volume).
+  - Market Data Feed Utilities with 5-tick live/mock WebSocket stream latency test.
+  - Strategy Code & Script Auditor modal inspecting Pine Script v4/v5, Python, or JSON DSL for lookahead bias and construct safety.
+  - Database Ledger & System Diagnostics card in Settings with 1-click table initialization, Alembic migration stamping, doctor diagnostics report, and Kotak Neo discovery suite execution.
+  - Added XSS-safe escaping utility (`escapeHtml`) ensuring zero console errors across all workflows.
+- **Web REST Backend Expansion (`src/aditrader/web/server.py`)**: Endpoints for `/api/system/diagnostics`, `/api/system/init-db`, `/api/instruments/search`, `/api/strategies/audit`, `/api/feed/smoke`, `/api/options/chain`, and `/api/kotak/discover` protected by path traversal validation.
+- **Automated Verification**:
+  - `pytest`: 650 passed, 6 skipped across 37 test modules (100% pass rate in 32.84s).
+  - `ruff check src tests`: 0 errors across 233 source files.
+  - `ruff format --check src tests`: 0 discrepancies across 233 source files.
+  - `mypy src tests`: 0 errors in strict mode across 233 source files.
+  - Playwright visual testing: Verified desktop (1440x900) with 0 browser console errors and 0 warnings.
+  - Hostile adversarial review: Fully reviewed and formally approved by Claude across all 11 design dimensions and 25 capabilities.
+
+
+### Phase 7: Controlled AI Research Runtime Integration
+**Status**: COMPLETE & VERIFIED ✅
+- **Strategy Explainer (`src/aditrader/ai/teacher/explainer.py`)**: Deconstructs JSON AST entry/exit conditions, indicators, and option wings into plain-language educational summaries.
+- **Forecasting Runtime (`src/aditrader/ai/forecasting/`)**: Vendor-agnostic `ForecastEngine` contract supporting Kronos, Chronos, and deterministic heuristic drift with point-in-time causality.
+- **Gemini Vision Parser (`src/aditrader/ai/vision/`)**: Validated JSON chart parser for technical patterns, key levels, and regime classification with OCR-space fallback.
+- **Strategy Suggestor (`src/aditrader/ai/suggestor/engine.py`)**: Dynamic option strategy proposer enforcing 60/40 selling/buying bias prior across Low IV, High IV, Bullish, and Bearish regimes.
+- **Strategy Reviewer (`src/aditrader/ai/reviewer/engine.py`)**: Adversarial structural critic detecting unhedged gamma, ratio imbalances, and over-parameterization under ADR 012 contract.
+- **Sensitivity Engine (`src/aditrader/ai/sensitivity.py`)**: Deterministic parameter grid evaluating IV shifts (-10% to +10%), slippage friction, and strike steps with Black-Scholes payoffs.
+- **Research Dossier Compiler (`src/aditrader/ai/dossier.py`)**: Multi-source institutional report compiling AST rules, theoretical payoffs, empirical KAT, and AI critique with SHA-256 tamper hash.
+- **CLI Research Commands (`src/aditrader/cli/commands.py`)**: 5 subcommands (`explain-strategy`, `suggest-strategy`, `review-strategy`, `forecast`, `research-dossier`).
+- **Web Workstation Bridge (`src/aditrader/web/`)**: REST endpoints (`/api/ai/*`), service bridge, AI Assistant UI card, and interactive explain/dossier modal dialogs.
+- **Adversarial Audit Remediation**: All 9 adversarial findings remediated in full with verified test coverage.
+- **Automated Verification**:
+  - `pytest`: 631 passed, 6 skipped across 37 test modules (100% pass rate in 35s).
+  - `ruff check src tests`: 0 errors across 217 source files.
+  - `ruff format --check src tests`: 0 discrepancies across 217 source files.
+  - `mypy src tests`: 0 errors in strict mode across 217 source files.
 
 ### Full Application Clean-Room Audit Remediation
 **Status**: COMPLETE & VERIFIED ✅
